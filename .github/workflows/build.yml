@@ -1,0 +1,66 @@
+name: Build Santara
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      signed:
+        description: Require Windows certificate signing
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: Install optional integration engines
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg poppler-utils qpdf
+      - run: npm run typecheck
+      - run: npm run test
+      - run: npm run build
+      - run: npx --no-install playwright install --with-deps chromium
+      - run: npm run icons
+      - run: npx --no-install playwright test
+      - name: Package Windows unsigned
+        if: runner.os == 'Windows' && inputs.signed != true
+        run: npm run dist -- --win --x64 --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Package Windows signed
+        if: runner.os == 'Windows' && inputs.signed == true
+        run: npm run dist -- --win --x64 --publish never --config.forceCodeSigning=true
+        env:
+          CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+      - name: Package Linux
+        if: runner.os == 'Linux'
+        run: npm run dist -- --linux --x64 --publish never --config.extraMetadata.homepage="${{ github.server_url }}/${{ github.repository }}"
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: Santara-${{ runner.os }}-x64-${{ github.run_number }}
+          if-no-files-found: error
+          path: |
+            release/*.exe
+            release/*.deb
+            release/*.AppImage
+      - name: Upload browser diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-diagnostics-${{ runner.os }}
+          if-no-files-found: ignore
+          path: |
+            playwright-report/
+            test-results/
