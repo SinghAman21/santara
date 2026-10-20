@@ -33,6 +33,7 @@ test.beforeEach(async ({ page }) => {
         { id: 'image:edit-image', operation: 'edit-image', label: 'Edit photo', category: 'image', inputs: ['png'], outputs: ['png', 'jpg'], backend: 'sharp', available: true, batch: true, preservesMetadata: true },
         { id: 'image:background', operation: 'background', label: 'Add background', category: 'image', inputs: ['png'], outputs: ['png', 'jpg'], backend: 'sharp', available: true, batch: true, preservesMetadata: true },
         { id: 'audio:visualize', operation: 'visualize', label: 'Audio wave visualizer', category: 'audio', inputs: ['wav'], outputs: ['mp4'], backend: 'ffmpeg', available: true, batch: true, preservesMetadata: true },
+        { id: 'archive:create', operation: 'create-archive', label: 'Create archive', category: 'archive', inputs: ['*'], outputs: ['zip'], backend: 'javascript', available: true, batch: false, preservesMetadata: false },
         { id: 'pdf:render', operation: 'render', label: 'Render PDF pages', category: 'pdf', inputs: ['pdf'], outputs: ['png', 'jpg'], backend: 'poppler', available: true, batch: true, preservesMetadata: false, options: { page: { min: 1, max: 100000 }, dpi: { min: 36, max: 600, default: 300 } } },
         { id: 'office:convert', label: 'Unavailable office conversion', category: 'document', inputs: ['png'], outputs: ['pdf'], backend: 'libreoffice', available: false, batch: true, preservesMetadata: false },
       ],
@@ -218,7 +219,7 @@ test('global citrus overlay accepts and queues a drop directly on a wheel slice'
     await expect(slice).toHaveClass(/chosen/);
     await slice.dispatchEvent('drop', { dataTransfer: transfer });
     await expect.poll(() => page.evaluate(() => window.__santaraTest.calls.find(call => call.method === 'enqueue')?.value)).toMatchObject({ operation: 'convert', format: 'jpg' });
-    expect(await page.evaluate(() => window.__santaraTest.calls.find(call => call.method === 'finishGlobalWheel')?.value)).toBe('activity');
+    expect(await page.evaluate(() => window.__santaraTest.calls.find(call => call.method === 'finishGlobalWheel')?.value)).toBe('background');
     await page.evaluate(() => window.__santaraTest.emitWheelMode('convert', true));
     const nextTransfer = await page.evaluateHandle(() => {
       const value = new DataTransfer();
@@ -231,6 +232,29 @@ test('global citrus overlay accepts and queues a drop directly on a wheel slice'
       await expect(page.getByRole('menuitem', { name: /^JPG/ })).toHaveCount(0);
     } finally { await nextTransfer.dispose(); }
   } finally { await transfer.dispose(); }
+});
+
+test('global image tools wheel shows image tools and hides generic archive creation', async ({ page }) => {
+  await page.goto('/?santara-wheel=1&mode=tools');
+  const transfer = await page.evaluateHandle(() => {
+    const value = new DataTransfer();
+    value.items.add(new File(['synthetic image fixture'], 'pixel.png', { type: 'image/png' }));
+    return value;
+  });
+  try {
+    const shell = page.locator('.global-wheel-shell');
+    await shell.dispatchEvent('dragenter', { dataTransfer: transfer });
+    await expect(page.getByRole('menuitem', { name: /^Edit photo/ })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: /^Add background/ })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: /^Create archive/ })).toHaveCount(0);
+  } finally { await transfer.dispose(); }
+});
+
+test('global wheel shows provisional image routes before native file metadata arrives', async ({ page }) => {
+  await page.goto('/?santara-wheel=1&mode=tools');
+  await expect(page.getByRole('menuitem', { name: /^Edit photo/ })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: /^Add background/ })).toBeVisible();
+  await expect(page.getByText(/Image routes are shown provisionally/)).toBeVisible();
 });
 
 test('keyboard wheel switches groups and highlights partial selection coverage', async ({ page }) => {

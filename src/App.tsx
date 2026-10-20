@@ -6,6 +6,7 @@ import type { Capability, Job, LocalFile, Settings, Snapshot } from './types';
 import OperationFields from './OperationFields';
 import RadialWheel, { type WheelItem } from './RadialWheel';
 import PdfWorkspace from './PdfWorkspace';
+import ImageToolWindow from './ImageToolWindow';
 import { Crop, RotateCw, FlipHorizontal, Scissors, VolumeX, Gauge, Camera, Paintbrush, Palette, Merge, Split, type LucideIcon } from 'lucide-react';
 
 type Page = 'converter' | 'activity' | 'formats' | 'settings';
@@ -75,6 +76,7 @@ export default function App() {
   const [dragSource, setDragSource] = useState<LocalFile[]>([]);
   const [wheelAnchor, setWheelAnchor] = useState({ x: 300, y: 200 });
   const [pdfEditor, setPdfEditor] = useState<{ capability: Capability; files: LocalFile[]; format: string; options: Record<string, string> } | null>(null);
+  const [imageEditor, setImageEditor] = useState<{ capability: Capability; files: LocalFile[]; format: string; options: Record<string, string> } | null>(null);
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const [query, setQuery] = useState('');
@@ -145,6 +147,11 @@ export default function App() {
     const normalized = { ...cap, id, operation: id, warning: skipped ? `${skipped} selected ${skipped === 1 ? 'file does' : 'files do'} not support this operation and will be recorded as skipped. ${cap.warning || ''}` : cap.warning };
     setOperation(normalized); setOutputFormat(target); setPicker(null); setOptions(nextOptions); setPage('converter');
     if (cap.category === 'pdf') setPdfEditor({ capability: normalized, files: source, format: target, options: nextOptions });
+    else if (cap.category === 'image' && ['edit-image', 'background', 'crop', 'resize', 'rotate', 'flip', 'compress', 'strip-metadata'].includes(id)) {
+      const compatibleFiles = source.filter(file => compatible(cap, file));
+      if (isDesktop && api.openImageTool) void runSafe(() => api.openImageTool!({ capabilityId: cap.id, files: compatibleFiles.map(file => file.path), format: target, options: nextOptions }));
+      else setImageEditor({ capability: normalized, files: compatibleFiles, format: target, options: nextOptions });
+    }
   }
   useEffect(() => {
     const removeOperation = api.onGlobalOperation?.(({ capabilityId, format, files: incoming }) => {
@@ -274,6 +281,7 @@ export default function App() {
       <footer className="picker-footer"><span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span><span><kbd>Enter</kbd> Choose</span><span><kbd>Esc</kbd> Close</span></footer>
     </Modal>}
     {pdfEditor && <PdfWorkspace files={pdfEditor.files.filter(file => compatible(pdfEditor.capability, file))} capability={pdfEditor.capability} format={pdfEditor.format} initialOptions={pdfEditor.options} onClose={() => setPdfEditor(null)} loadPreview={file => api.preview ? api.preview(file.path) : Promise.reject(new Error('PDF preview needs the desktop app and Poppler.'))} onApply={async (format, values) => { await queueOperation(pdfEditor.capability, format, values, pdfEditor.files); setPdfEditor(null); }}/ >}
+    {imageEditor && imageEditor.files[0] && <ImageToolWindow capability={imageEditor.capability} file={imageEditor.files[0]} format={imageEditor.format} initialOptions={imageEditor.options} onClose={() => setImageEditor(null)} onApply={async values => { await runSafe(async () => { await queueOperation(imageEditor.capability, imageEditor.format, values, imageEditor.files); setImageEditor(null); }); }}/ >}
     {guide && <Modal title={t.guide} onClose={() => setGuide(false)}><div className="guide-content"><Orange sliced/><p>{t.guideIntro}</p><div className="guide-keys">{([{ key: 'convert', label: t.convertKey }, { key: 'tools', label: t.toolsKey }, { key: 'actions', label: t.actionsKey }] as const).map(item => <div key={item.key}><kbd>{settings.shortcuts[item.key]}</kbd><span>{item.label}</span></div>)}</div><p>{t.keyboardHelp}</p><div className="privacy-callout"><ShieldCheck size={21}/><span>{t.noUploads}</span></div>{!isDesktop && <p className="inline-warning">{t.previewNotice}</p>}<button className="button primary full" onClick={() => setGuide(false)}>Let’s make something fresh<ArrowRight size={16}/></button></div></Modal>}
     {privacy && <Modal title="Private by nature." onClose={() => setPrivacy(false)}><div className="guide-content"><span className="privacy-big-icon"><ShieldCheck size={35}/></span><h3>{t.noUploads}</h3><p>{t.privacyText}</p><button className="button full" onClick={() => { setPrivacy(false); setSettingsTab('privacy'); setPage('settings'); }}>More about your local data<ArrowRight size={16}/></button></div></Modal>}
     {dragging && <div className="drag-overlay wheel-overlay" aria-label="File drop target">

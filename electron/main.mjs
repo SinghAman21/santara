@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, protocol, screen, session, Tray } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Notification, protocol, screen, session, Tray } from 'electron';
 import { spawn } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
@@ -35,6 +35,8 @@ if (process.platform === 'linux') {
 
 let window;
 let globalWheelWindow;
+let imageToolWindow;
+let imageToolContext;
 let globalWheelPosition;
 let globalWheelMode;
 let globalWheelRequestedVisible = false;
@@ -61,6 +63,7 @@ const pendingPaths = [];
 const allowed = new Set();
 const trustedContents = new Set();
 const persistenceErrors = [];
+const jobNotificationState = new Map();
 const store = createStore(app.getPath('userData'), (message) => {
   console.error(message);
   persistenceErrors.push(message);
@@ -93,10 +96,23 @@ function persistJobs() {
   persistenceTimer = setTimeout(() => { void store.write('jobs', jobs()); }, 200);
 }
 
-function updateFromEngine() {
+function updateFromEngine(changedJob) {
   registerPaths();
   send({ jobs: jobs() });
   persistJobs();
+  if (changedJob && ['completed', 'failed', 'cancelled'].includes(changedJob.status) && jobNotificationState.get(changedJob.id) !== changedJob.status) {
+    jobNotificationState.set(changedJob.id, changedJob.status);
+    if (Notification.isSupported()) {
+      const complete = changedJob.status === 'completed';
+      const imageJob = /\.(?:jpg|jpeg|png|webp|tif|tiff|avif|bmp|heic)$/i.test(changedJob.input || '');
+      const notification = new Notification({
+        title: complete ? (imageJob ? 'Image ready' : 'File ready') : changedJob.status === 'failed' ? 'Conversion failed' : 'Conversion cancelled',
+        body: complete ? path.basename(changedJob.output || changedJob.name || 'Your file') : `${changedJob.name || 'File job'} · ${changedJob.error || changedJob.status}`,
+      });
+      if (complete && changedJob.output) notification.on('click', () => { void openOutput(changedJob.output, outputs()); });
+      notification.show();
+    }
+  }
 }
 
 function validateSettings(patch) {
@@ -191,10 +207,7 @@ async function drainOpenQueue() {
 }
 
 function focusWindow() {
-  if (!window || window.isDestroyed()) createWindow();
-  if (window.isMinimized()) window.restore();
-  window.show();
-  window.focus();
+  if (!window || window.isDestroyed()) createWindow({ showOnReady: false });
 }
 
 function wheelRequest(argv) {
@@ -279,15 +292,49 @@ function showGlobalWheel(mode, x, y) {
   if (!globalWheelWindow.isVisible()) globalWheelWindow.showInactive();
 }
 
-function hideGlobalWheel() {
+function hideGlobalWheel({ restoreMain = true } = {}) {
   globalWheelRequestedVisible = false;
   if (globalWheelWindow && !globalWheelWindow.isDestroyed()) globalWheelWindow.hide();
   globalWheelPosition = undefined;
   globalWheelMode = undefined;
-  if (mainWindowHiddenForWheel) {
+  if (mainWindowHiddenForWheel && restoreMain) {
     mainWindowHiddenForWheel = false;
     focusWindow();
+  } else if (mainWindowHiddenForWheel) {
+    mainWindowHiddenForWheel = false;
   }
+}
+
+function openImageToolWindow(context) {
+  if (imageToolWindow && !imageToolWindow.isDestroyed()) imageToolWindow.close();
+  imageToolContext = context;
+  const editor = new BrowserWindow({
+    width: 900, height: 700, minWidth: 680, minHeight: 540, show: false,
+    title: `Santara · ${context.capability.label}`, backgroundColor: '#f6f5f1',
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: path.join(directory, 'preload.cjs'), contextIsolation: true, sandbox: true,
+      nodeIntegration: false, webSecurity: true, allowRunningInsecureContent: false,
+      webviewTag: false, partition: 'santara', navigateOnDragDrop: false,
+    },
+  });
+  imageToolWindow = editor;
+  const contents = editor.webContents;
+  trustedContents.add(contents);
+  contents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  contents.on('will-navigate', (event) => event.preventDefault());
+  contents.on('will-redirect', (event) => event.preventDefault());
+  editor.once('ready-to-show', () => { if (!editor.isDestroyed()) editor.show(); });
+  editor.on('closed', () => {
+    trustedContents.delete(contents);
+    if (imageToolWindow === editor) {
+      imageToolWindow = undefined;
+      imageToolContext = undefined;
+    }
+  });
+  const query = { 'santara-image-tool': '1' };
+  const loading = developmentURL ? editor.loadURL(`${developmentURL}/?${new URLSearchParams(query)}`) : editor.loadFile(indexPath, { query });
+  loading.catch((error) => console.error('Cannot load image editor:', error.message));
 }
 
 function startWindowsWatcher() {
@@ -311,18 +358,12 @@ function startWindowsWatcher() {
 }
 
 function syncTray() {
-  if (!settings.tray) {
-    tray?.destroy();
-    tray = undefined;
-    return;
-  }
   if (tray) return;
   try {
     const icon = nativeImage.createFromDataURL('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAGUlEQVQ4T2P8z8Dwn4ECwESJ5lEDRg0YNQAAX+0CHvQjZJAAAAAASUVORK5CYII=');
     tray = new Tray(icon);
     tray.setToolTip('Santara — offline converter');
-    tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Open Santara', click: focusWindow }, { type: 'separator' }, { label: 'Quit', click: () => app.quit() }]));
-    tray.on('click', focusWindow);
+    tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Santara is running', enabled: false }, { type: 'separator' }, { label: 'Quit', click: () => app.quit() }]));
   } catch (error) {
     tray = undefined;
     send({ error: `Tray unavailable: ${error.message}` });
@@ -377,6 +418,14 @@ function handle(name, handler) {
     validateSender(event);
     if (!initialized || quitting) throw new Error(quitting ? 'Santara is shutting down' : 'Santara is starting');
     return handler(...args);
+  });
+}
+
+function handleFromSender(name, handler) {
+  ipcMain.handle(`santara:${name}`, async (event, ...args) => {
+    validateSender(event);
+    if (!initialized || quitting) throw new Error(quitting ? 'Santara is shutting down' : 'Santara is starting');
+    return handler(event, ...args);
   });
 }
 
@@ -481,10 +530,53 @@ function registerIPC() {
     catch (error) { return { ok: false, reason: error.message }; }
   });
   handle('finishGlobalWheel', async (page = 'converter') => {
-    if (!['converter', 'activity'].includes(page)) throw new Error('Invalid destination page');
-    hideGlobalWheel();
-    focusWindow();
+    if (!['converter', 'activity', 'background'].includes(page)) throw new Error('Invalid destination page');
+    hideGlobalWheel({ restoreMain: false });
     if (page === 'activity' && window && !window.isDestroyed()) window.webContents.send('santara:global-page', page);
+  });
+  handle('openImageTool', async (request) => {
+    plainObject(request);
+    if (typeof request.capabilityId !== 'string' || typeof request.format !== 'string') throw new TypeError('Invalid image operation');
+    const selected = pathList(request.files);
+    const inspected = selected.map((input) => files.find((file) => file.path === input)).filter(Boolean);
+    if (!inspected.length || inspected.length !== selected.length || inspected.some((file) => file.isDirectory || file.category !== 'image')) throw new Error('Select inspected image files first');
+    const capability = (await capabilities()).find((entry) => entry.id === request.capabilityId && entry.available && entry.category === 'image');
+    const operation = capability?.operation || capability?.id.split(':').pop();
+    if (!capability || !['compress', 'crop', 'resize', 'rotate', 'flip', 'background', 'edit-image', 'strip-metadata'].includes(operation)) throw new Error('Image tool is unavailable');
+    if (!inspected.every((file) => capability.inputs.includes(file.ext))) throw new Error('The selected tool does not support every image');
+    const format = request.format || capability.outputs.find((output) => output === inspected[0].ext) || capability.outputs[0];
+    if (!capability.outputs.includes(format)) throw new Error('Unsupported image output format');
+    const images = await import('./images.mjs');
+    const options = Object.fromEntries(Object.entries(normalizeImageOptions(safeData(request.options || {}), images.imageOptionNames)).map(([key, value]) => [key, String(value)]));
+    openImageToolWindow({ capability, files: inspected, format, options });
+    return { opened: true };
+  });
+  handleFromSender('imageToolContext', (event) => {
+    if (!imageToolWindow || imageToolWindow.isDestroyed() || event.sender !== imageToolWindow.webContents || !imageToolContext) throw new Error('Image editor is no longer available');
+    return imageToolContext;
+  });
+  handleFromSender('applyImageTool', async (event, request) => {
+    if (!imageToolWindow || imageToolWindow.isDestroyed() || event.sender !== imageToolWindow.webContents || !imageToolContext) throw new Error('Image editor is no longer available');
+    plainObject(request);
+    const images = await import('./images.mjs');
+    const recipe = normalizeImageOptions(safeData(request.options || {}), images.imageOptionNames);
+    const options = {
+      quality: settings.quality, stripMetadata: settings.stripMetadata,
+      outputFolder: settings.outputFolder, collision: settings.collision,
+      ...imageToolContext.options, ...recipe,
+    };
+    const result = await engine.enqueue({
+      files: imageToolContext.files, operation: imageToolContext.capability.operation,
+      format: imageToolContext.format, options,
+    });
+    updateFromEngine();
+    imageToolWindow.close();
+    return result;
+  });
+  handleFromSender('closeImageTool', (event) => {
+    if (!imageToolWindow || imageToolWindow.isDestroyed() || event.sender !== imageToolWindow.webContents) return false;
+    imageToolWindow.close();
+    return true;
   });
   handle('selectGlobalOperation', async (request) => {
     plainObject(request);
@@ -495,9 +587,17 @@ function registerIPC() {
     const available = (await capabilities()).find((entry) => entry.id === request.capabilityId && entry.available);
     if (!available || !available.inputs.some((input) => input === '*' || inspected.some((file) => input === (file.isDirectory ? 'directory' : file.ext.toLowerCase())))) throw new Error('Operation is not available for this selection');
     if ((available.outputs.length && !available.outputs.includes(request.format)) || (!available.outputs.length && request.format !== '')) throw new Error('Invalid output for this operation');
-    hideGlobalWheel();
-    focusWindow();
-    window.webContents.send('santara:global-operation', { capabilityId: request.capabilityId, format: request.format, files: inspected });
+    if (available.category === 'image' && available.operation !== 'convert') {
+      const images = await import('./images.mjs');
+      const operationOptions = normalizeImageOptions({}, images.imageOptionNames);
+      const target = request.format || inspected[0].ext;
+      if (!available.outputs.includes(target)) throw new Error('Unsupported image output format');
+      openImageToolWindow({ capability: available, files: inspected.filter((file) => available.inputs.includes(file.ext)), format: target, options: operationOptions });
+      hideGlobalWheel({ restoreMain: false });
+      return { opened: true };
+    }
+    hideGlobalWheel({ restoreMain: false });
+    if (Notification.isSupported()) new Notification({ title: 'Operation unavailable in wheel mode', body: 'This operation is not implemented in the citrus wheel yet.' }).show();
   });
   handle('preview', async (value) => {
     registerPaths();
@@ -551,10 +651,10 @@ if (!app.requestSingleInstanceLock()) {
       return;
     }
     queueOpen(argv, cwd);
-    if (initialized) focusWindow();
+    if (initialized) void drainOpenQueue();
   });
   app.on('window-all-closed', () => { if (!tray) app.quit(); });
-  app.on('activate', () => { if (initialized) focusWindow(); });
+  app.on('activate', () => {});
   app.on('before-quit', (event) => {
     nativeWatcher?.kill();
     quitting = true;
@@ -598,7 +698,7 @@ if (!app.requestSingleInstanceLock()) {
     const initialWheel = wheelRequest(process.argv);
     const opensWheel = initialWheel && initialWheel.mode !== 'hide';
     mainWindowHiddenForWheel = Boolean(opensWheel);
-    createWindow({ showOnReady: !opensWheel });
+    createWindow({ showOnReady: false });
     if (opensWheel) showGlobalWheel(initialWheel.mode, initialWheel.x, initialWheel.y);
     startWindowsWatcher();
     syncTray();

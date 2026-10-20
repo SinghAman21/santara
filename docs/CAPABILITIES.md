@@ -42,7 +42,7 @@ The requirement table is an acceptance checklist, not a list of absent features.
 | Family | Implemented adapter behavior | Limits |
 | --- | --- | --- |
 | Subtitles | Built-in SRT/VTT conversion and TXT output | Styling/settings may be lost; TXT omits timing |
-| Images | Bundled Sharp JPG/PNG/WebP/TIFF/AVIF and image operations; optional ImageMagick for additional detected routes | Native loading and detected formats gate availability; first animation frame; SVG disabled; HEIC backend-dependent |
+| Images | Bundled Sharp JPG/PNG/WebP/TIFF/AVIF and image operations; separate local-preview tool window exposes draggable crop bounds/handles and presets, resize/fit, rotate/flip, solid/gradient/transparent backgrounds, brightness/contrast/saturation, compression presets, and metadata stripping; optional ImageMagick for additional detected routes | Metadata inspection/editing, annotation, redaction, collage, local-image backgrounds, and advanced photo controls are not implemented; native loading and detected formats gate availability; first animation frame; SVG disabled; HEIC backend-dependent |
 | Audio/video | FFmpeg conversion, compression, trim, metadata stripping; video resize, rotate, flip, audio extraction, GIF | Detected decoders/encoders/muxers/filters gate routes; first streams only; no guaranteed size reduction |
 | PDF | qpdf structural compression, extraction, merge, rotation; Poppler rendering | One rendered page per job; PDF-to-office/OCR not claimed |
 | Documents | Pandoc conversion when sandbox and readers/writers are detected | Input/resource limits, fidelity loss, no PDF/filter support; inspect registry warnings |

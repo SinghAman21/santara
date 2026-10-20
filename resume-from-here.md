@@ -2,7 +2,7 @@
 
 ## Interaction refactor, 2026-10-20
 
-The current source is being refactored around the actual segmented-wheel references in `reference-tools/`. See `docs/INTERACTION_REFACTOR.md` for the implementation map, preview security model, and limits. The first session's installer artifacts and validation counts in `docs/HANDOFF.md` describe the earlier build; rebuild artifacts before distributing this refactor.
+The current source is being refactored around the segmented citrus wheel. See `docs/IMAGE_WHEEL_ARCHITECTURE.md` for the active image-flow implementation map and limits. Rebuild artifacts before distributing this refactor.
 
 The in-window interaction remains available for fallback/accessibility. The new global prototype watches device-wide drags, opens a separate citrus overlay with Shift (convert), Alt (tools), or Ctrl (actions), keeps it visible after key release, then hides it when the drag ends. Conversion drops queue directly; tool choices return to the main app's existing operation panel. Photo/media editors remain on hold.
 
@@ -12,13 +12,13 @@ Backend additions include photo editing recipes/backgrounds, waveform previews a
 
 ## Current state
 
-Santara is an Electron + React/Vite local-first converter for Windows and Linux. It has a working converter UI, local job queue, settings, native file actions, a packaged Linux `.deb` and AppImage, and documented release work. Start with `docs/HANDOFF.md` for the complete verification and packaging record.
+Santara is an Electron + React/Vite local-first converter for Windows and Linux. It has a working converter UI, local job queue, settings, native file actions, a packaged Linux `.deb` and AppImage, and documented release work. Start with `README.md`, `docs/ROADMAP.md`, and `docs/IMAGE_WHEEL_ARCHITECTURE.md`.
 
 ## Global Citrus Wheel — current focused work
 
 The application now has a separate transparent Electron wheel overlay and platform trigger prototypes. Windows uses a low-level user-mode mouse/keyboard hook (`native/windows/`) to observe drag threshold, modifiers, and pointer coordinates; the overlay receives dropped files. Ubuntu GNOME Wayland uses the optional GNOME Shell extension (`linux/gnome-extension/`) to observe XDND motion/modifiers and invoke Santara's single-instance CLI; Electron is forced onto XWayland so it can position an always-on-top drop overlay. The extension never reads file payloads. Shift opens conversion, Alt opens tools, and Ctrl opens file actions; modifier bindings are configurable in the extension settings and the application settings.
 
-The overlay is wired to local capabilities, conversion queueing, file actions, and forwarding a selected tool to the main app. It is a prototype, not yet verified on real external drag/drop: this checkout was only typechecked/built on Linux. Windows hook compilation requires MSVC and the real Windows OLE drop handoff is untested. GNOME Shell uses private interfaces; install/enable the extension, log out/in if needed, and manually test across GNOME 50 Wayland, including a live external file drag. See `native/windows/README.md` and `linux/gnome-extension/README.md` for platform instructions. Do not describe this as verified global support until those manual tests pass.
+The overlay is wired to local capabilities, conversion queueing, file actions, and a separate compact image-tool window. Image conversions can queue without focusing the main workspace. This remains unverified on real external drag/drop: Windows hook compilation requires MSVC and the OLE handoff is untested; GNOME Shell uses private interfaces and needs a live Ubuntu Wayland file drag. See `native/windows/README.md` and `linux/gnome-extension/README.md` for platform instructions. Do not describe global drag support as verified until those manual tests pass.
 
 ### Reliability investigation — 2026-10-20
 
@@ -34,6 +34,10 @@ Fixed multiple concrete failures behind the report that the installed GNOME whee
 Validation after the fixes: `npm run build`, all 124 unit tests (134 pass, 4 skipped), all 11 Playwright tests, `npm run test:desktop`, GNOME extension syntax/schema checks, and Linux `.deb`/`.AppImage` packaging passed. The packaged Debian desktop entry is confirmed to contain `Exec=/opt/Santara/santara --ozone-platform=x11 %U`.
 
 Still not verified in software tests: a live Nautilus drag under the user's GNOME Wayland session reaching the XWayland BrowserWindow as a drop destination. The extension cannot transfer file contents; the compositor must route the active XDND drop to Santara's overlay. The user should reinstall the newly built `.deb`, run `./linux/gnome-extension/install.sh`, log out/in to reload GNOME Shell, launch Santara from the application menu, then test dragging a JPG from Files, holding Shift, hovering a format slice, and releasing over that slice. If the wheel appears but no drop lands, use the main app's drop zone as fallback; diagnose the compositor's XDND retargeting next rather than claiming the feature is fixed end-to-end.
+
+### New image-only flow direction
+
+The product direction has changed from opening the full Electron workspace for every operation to a hidden desktop host with temporary wheel and tool surfaces. The dashboard is no longer opened by normal startup or wheel completion; the tray provides only running status and quit. Image conversion executes directly beside the source, while image tools open compact floating windows with local previews and Apply/Save-copy behavior. The complete image scope, tool behavior, output naming, backend rules, and acceptance criteria are documented in `docs/IMAGE_WHEEL_ARCHITECTURE.md`. Do not begin audio, video, PDF, or other extension UI refactors until the image flow is implemented and manually validated.
 
 Key next steps: test a real drag while Santara is already running; confirm the overlay receives the external file payload while the drag is in progress; verify that dropping onto a slice actually queues or dispatches the selected operation; test multi-monitor scaling/negative coordinates; build and exercise the Windows helper and installer on Windows 10/11; verify Ubuntu LTS GNOME compatibility and extension permission/update behavior. If the platform does not retarget an in-progress drag to the newly created overlay, replace the overlay handoff with a native OLE/XDND drop target or redesign around a shell/file-manager launch path rather than claiming universal desktop dragging.
 
@@ -64,7 +68,7 @@ Santara must reproduce the interaction model using original citrus artwork, lang
 2. Holding Shift opens the conversion wheel, Alt or Ctrl+Shift opens the tools wheel, and Ctrl opens the file-actions wheel. All bindings are configurable.
 3. The wheel appears near the pointer as an original orange-slice radial menu. It shows available operations that match at least one selected file; partial operations state how many files apply and that other files will be skipped.
 4. Releasing the modifier leaves the wheel open. Hovering or arrow navigation selects a segment; dropping or Enter confirms it. Escape closes it.
-5. Conversions chosen during a drag queue directly. Tool selections open the operation settings panel; users confirm there before a local queue job starts. PDF tools use a separate PDF workspace.
+5. Image conversions chosen during a drag queue without opening the main workspace. Image tools open a separate compact editor and Save copy queues locally. Other tool families still use their existing workspace surfaces.
 
 The refactor adds both the in-window wheel and an experimental system-wide overlay. External MIME hints permit provisional options before drop; filenames and signatures are validated after drop. Unknown file types use the inspect-after-drop flow. Platform drag hooks are prototypes until tested on real Ubuntu/Windows systems; see the global-wheel section above for known handoff caveats.
 
@@ -99,7 +103,7 @@ Open a dedicated photo editor when an image is selected. It needs a large previe
 
 ## Remaining delivery work
 
-High-priority release and scope gaps: Windows build/signing/install validation; true global drag and file-manager integration; native share providers; advanced audio/video split/merge/frame extraction; all-page PDF and editable PDF/Office conversion; robust document/spreadsheet/slide conversion; SVG/HEIC handling; RAR/password archive support; full localization/accessibility audit; and dependency attribution/source-compliance review. See `docs/ROADMAP.md` and `docs/HANDOFF.md` for the authoritative detailed list and test evidence.
+High-priority release and scope gaps: Windows build/signing/install validation; true global drag and file-manager integration; native share providers; advanced audio/video split/merge/frame extraction; all-page PDF and editable PDF/Office conversion; robust document/spreadsheet/slide conversion; SVG/HEIC handling; RAR/password archive support; full localization/accessibility audit; and dependency attribution/source-compliance review. See `docs/ROADMAP.md` for the current list.
 
 ## Suggested commit message
 

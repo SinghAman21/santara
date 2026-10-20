@@ -21,8 +21,12 @@ export interface Bridge {
   fileAction(request: { action: string; files: LocalFile[]; destination?: string }): Promise<unknown>;
   preview?(path: string): Promise<{ url: string; width?: number; height?: number; duration?: number; waveform?: number[]; waveformDuration?: number }>;
   imagePreview?(path: string, operation: string, options: Record<string, string>): Promise<{ url: string; width?: number; height?: number }>;
+  openImageTool?(request: { capabilityId: string; files: string[]; format: string; options: Record<string, string> }): Promise<unknown>;
+  imageToolContext?(): Promise<{ capability: Capability; files: LocalFile[]; format: string; options: Record<string, string> }>;
+  applyImageTool?(request: { options: Record<string, string> }): Promise<unknown>;
+  closeImageTool?(): Promise<unknown>;
   onWheelMode?(callback: (mode: string, newDrag?: boolean) => void): () => void;
-  finishGlobalWheel?(page?: 'converter' | 'activity'): Promise<void>;
+  finishGlobalWheel?(page?: 'converter' | 'activity' | 'background'): Promise<void>;
   selectGlobalOperation?(request: { capabilityId: string; format: string; files: LocalFile[] }): Promise<void>;
   onGlobalOperation?(callback: (request: { capabilityId: string; format: string; files: LocalFile[] }) => void): () => void;
   onGlobalPage?(callback: (page: 'converter' | 'activity') => void): () => void;

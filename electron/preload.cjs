@@ -21,6 +21,10 @@ contextBridge.exposeInMainWorld('santara', Object.freeze({
   fileAction: (request) => invoke('fileAction', request),
   preview: (path) => invoke('preview', path),
   imagePreview: (path, operation, options) => invoke('imagePreview', { path, operation, options }),
+  openImageTool: (request) => invoke('openImageTool', request),
+  imageToolContext: () => invoke('imageToolContext'),
+  applyImageTool: (request) => invoke('applyImageTool', request),
+  closeImageTool: () => invoke('closeImageTool'),
   finishGlobalWheel: (page = 'converter') => invoke('finishGlobalWheel', page),
   selectGlobalOperation: (request) => invoke('selectGlobalOperation', request),
   onWheelMode: (callback) => {

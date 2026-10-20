@@ -124,8 +124,8 @@ async function editPipeline(pipeline, width, height, operation, options, signal)
   const padding = integer(options.padding ?? 0, 'padding', 0, 16384);
   const backgroundRequested = operation === 'background' || ['backgroundType', 'backgroundColor', 'backgroundColor2'].some(key => options[key] !== undefined);
   const backgroundType = options.backgroundType ?? 'solid';
-  if (!['solid', 'gradient'].includes(backgroundType)) throw new Error('Invalid backgroundType');
-  const first = color(options.backgroundColor ?? '#ffffff', 'backgroundColor');
+  if (!['solid', 'gradient', 'transparent'].includes(backgroundType)) throw new Error('Invalid backgroundType');
+  const first = color(backgroundType === 'transparent' ? '#00000000' : options.backgroundColor ?? '#ffffff', 'backgroundColor');
   const second = color(options.backgroundColor2 ?? '#000000', 'backgroundColor2');
   if (angle !== 0) {
     const rotated = rotatedDimensions(width, height, angle);
@@ -221,10 +221,12 @@ async function imagePipeline(loaded, operation, options, signal) {
     const targetHeight = options.height === undefined ? undefined : integer(options.height, 'height', 1, 16384);
     if (!targetWidth && !targetHeight) throw new Error('Resize requires width or height');
     if (targetWidth && targetHeight && targetWidth * targetHeight > pixelLimit) throw new Error('Resize exceeds 40 megapixel limit');
-    pipeline.resize({ width: targetWidth, height: targetHeight, fit: 'inside', withoutEnlargement: true });
+    const fit = options.fit ?? 'inside';
+    if (!['inside', 'cover', 'fill'].includes(fit)) throw new Error('Invalid fit');
+    pipeline.resize({ width: targetWidth, height: targetHeight, fit, withoutEnlargement: true });
   }
   if (operation === 'crop') {
-    const rectangle = { left: integer(options.x ?? 0, 'x', 0, width - 1), top: integer(options.y ?? 0, 'y', 0, height - 1), width: integer(options.width, 'width', 1, width), height: integer(options.height, 'height', 1, height) };
+    const rectangle = { left: integer(options.x ?? 0, 'x', 0, width - 1), top: integer(options.y ?? 0, 'y', 0, height - 1), width: integer(options.width ?? width, 'width', 1, width), height: integer(options.height ?? height, 'height', 1, height) };
     if (rectangle.left + rectangle.width > width || rectangle.top + rectangle.height > height) throw new Error('Crop bounds exceed oriented image dimensions');
     pipeline.extract(rectangle);
   }

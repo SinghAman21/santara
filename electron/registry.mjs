@@ -202,7 +202,7 @@ export function getCapabilities(backends = {}, files = []) {
       operation, available: source.available,
       options: {
         stripMetadata: { default: false }, autoOrient: { default: true },
-        ...(['resize', 'crop'].includes(operation) ? { width: { min: 1, max: 16384 }, height: { min: 1, max: 16384 }, ...(operation === 'crop' ? { x: { min: 0, max: 16384 }, y: { min: 0, max: 16384 } } : {}) }
+        ...(['resize', 'crop'].includes(operation) ? { width: { min: 1, max: 16384 }, height: { min: 1, max: 16384 }, ...(operation === 'crop' ? { x: { min: 0, max: 16384 }, y: { min: 0, max: 16384 } } : operation === 'resize' ? { fit: ['inside', 'cover', 'fill'] } : {}) }
           : operation === 'rotate' ? { angle: { min: -360, max: 360 } }
             : operation === 'flip' ? { direction: ['horizontal', 'vertical'] }
               : ['convert', 'compress'].includes(operation) ? { quality: { min: 1, max: 100 } } : {}),
@@ -212,7 +212,7 @@ export function getCapabilities(backends = {}, files = []) {
   }
   for (const operation of ['edit-image', 'background']) add(`image:${operation}`, operation === 'edit-image' ? 'Edit photo' : 'Add background', 'image', sharpInputs, sharpOutputs, 'sharp', {
     operation, available: useSharp, preservesMetadata: true,
-    options: { quality: { min: 1, max: 100 }, width: { min: 1, max: 16384 }, height: { min: 1, max: 16384 }, padding: { min: 0, max: 16384 }, backgroundType: ['solid', 'gradient'], backgroundColor: '#fff4e8', backgroundColor2: '#e69b73', fit: ['inside', 'contain', 'cover', 'fill'], brightness: { min: 0, max: 4 }, saturation: { min: 0, max: 4 }, contrast: { min: 0, max: 4 } },
+    options: { quality: { min: 1, max: 100 }, width: { min: 1, max: 16384 }, height: { min: 1, max: 16384 }, padding: { min: 0, max: 16384 }, backgroundType: ['solid', 'gradient', 'transparent'], backgroundColor: '#fff4e8', backgroundColor2: '#e69b73', fit: ['inside', 'contain', 'cover', 'fill'], brightness: { min: 0, max: 4 }, saturation: { min: 0, max: 4 }, contrast: { min: 0, max: 4 } },
     warning: 'Edits create a new file. Preview is reduced in size; exports use source pixels. Cropping uses oriented source coordinates. Solid and horizontal gradient backgrounds are supported. JPEG flattens transparency. First image frame only; 40 megapixel canvas limit.'
   });
   add('image:svg', 'SVG input', 'image', ['svg', 'svgz'], [], 'imagemagick', { operation: 'convert', available: false, warning: 'SVG input is disabled: external resource isolation is not implemented.' });

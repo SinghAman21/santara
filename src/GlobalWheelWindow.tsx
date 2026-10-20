@@ -18,7 +18,8 @@ const mimeFormats: Record<string, string> = {
   'video/quicktime': 'mov', 'application/pdf': 'pdf', 'application/zip': 'zip', 'text/vtt': 'vtt',
 };
 const operationName = (capability: Capability) => capability.operation || capability.id.split(':').pop()!;
-const supports = (capability: Capability, file: LocalFile) => capability.inputs.includes('*') || capability.inputs.includes(file.isDirectory ? 'directory' : file.ext.toLowerCase());
+const supports = (capability: Capability, file: LocalFile) => capability.inputs.includes('*') || (file.ext ? capability.inputs.includes(file.isDirectory ? 'directory' : file.ext.toLowerCase()) : capability.category === file.category);
+const knownCategory = (file: LocalFile) => file.category !== 'other' ? file.category : '';
 
 function hintedFiles(transfer: DataTransfer): LocalFile[] {
   const dropped = Array.from(transfer.items).filter(item => item.kind === 'file').map(item => item.getAsFile()).filter((file): file is File => file !== null);
@@ -42,7 +43,7 @@ export default function GlobalWheelWindow() {
   const [working, setWorking] = useState(false);
   const choiceRef = useRef('');
   const seenDrag = useRef(false);
-  const externalFiles = hints.length ? hints : [{ id: 'unknown', name: 'Dragged files', path: '', size: 0, ext: '', category: 'other' as const }];
+  const externalFiles = hints.length ? hints : [{ id: 'provisional-image', name: 'Dragged image', path: '', size: 0, ext: '', category: 'image' as const }];
 
   useEffect(() => {
     void api.bootstrap().then(setSnapshot);
@@ -72,10 +73,13 @@ export default function GlobalWheelWindow() {
     });
   }, []);
 
+  const selectedCategories: Set<string> = new Set(externalFiles.map(knownCategory).filter(Boolean));
   const items: WheelItem[] = mode === 'actions'
     ? actions.map(action => ({ ...action, detail: 'Local file action' }))
     : [...new Map(snapshot.capabilities
       .filter(capability => capability.available && capability.outputs.length)
+      .filter(capability => mode !== 'tools' || operationName(capability) !== 'create-archive')
+      .filter(capability => mode !== 'tools' || !selectedCategories.size || selectedCategories.has(capability.category))
       .filter(capability => mode === 'convert'
         ? ['convert', 'render'].includes(operationName(capability))
         : !['convert', 'render'].includes(operationName(capability)))
@@ -131,7 +135,7 @@ export default function GlobalWheelWindow() {
           format,
           options: { quality: settings.quality, stripMetadata: settings.stripMetadata, outputFolder: settings.outputFolder, collision: settings.collision, recursive: settings.recursive, preserveStructure: settings.preserveStructure },
         });
-        await api.finishGlobalWheel?.('activity');
+        await api.finishGlobalWheel?.('background');
       } else {
         await api.selectGlobalOperation?.({ capabilityId, format: format || capability.outputs[0] || '', files: incoming });
       }
@@ -158,7 +162,7 @@ export default function GlobalWheelWindow() {
       <div className="global-wheel-drag-label">{working ? 'Adding to your local queue…' : 'Drop on a slice'}</div>
       <RadialWheel
         label={mode === 'convert' ? 'Convert' : mode === 'tools' ? 'Tools' : 'File actions'}
-        subtitle={externalFiles.some(file => !file.ext) ? 'Drop to inspect this file, then choose an operation' : 'Hold the drag · hover a slice · release to apply'}
+        subtitle={externalFiles.some(file => !file.ext) ? 'Image routes are shown provisionally · drop to verify' : 'Hold the drag · hover a slice · release to apply'}
         items={items.length ? items : [{ id: 'unknown', label: 'Inspect on drop', detail: 'We will show supported choices after inspection' }]}
         selected={choice}
         preview={<span className="wheel-file-badge">{hints.length > 1 ? `${hints.length} files` : hints[0]?.ext.toUpperCase() || 'FILE'}</span>}

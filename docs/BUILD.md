@@ -2,7 +2,7 @@
 
 ## Package contract
 
-The package declares `main: electron/main.mjs` and scripts listed in [HANDOFF.md](HANDOFF.md). Vite outputs `dist/` with relative asset URLs (`base: './'`) so Electron can load the production page from disk. The preload is `electron/preload.cjs`; both files are packaged by `electron/**`. Linux explicitly sets `maintainer: Santara contributors`, which the installed Electron Builder accepts without an author email. Use a real maintainer contact before public Debian distribution. A project homepage or repository is separately required; no contact address or project URL is invented here.
+The package declares `main: electron/main.mjs` and scripts listed in `package.json`. Vite outputs `dist/` with relative asset URLs (`base: './'`) so Electron can load the production page from disk. The preload is `electron/preload.cjs`; both files are packaged by `electron/**`. Linux explicitly sets `maintainer: Santara contributors`, which the installed Electron Builder accepts without an author email. Use a real maintainer contact before public Debian distribution. A project homepage or repository is separately required; no contact address or project URL is invented here.
 
 `electron-builder.yml` sets `io.santara.app`, product name Santara, ASAR, and application files `dist/**`, `electron/**`, `package.json`, `LICENSE`, and `THIRD_PARTY_NOTICES.md`. Electron Builder may additionally include production npm dependencies and Electron runtime resources. Keep build-only tools in devDependencies and audit the final archive. Optional engines must resolve from the user's system, never `extraResources` or an embedded download.
 
