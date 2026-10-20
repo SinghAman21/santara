@@ -37,6 +37,8 @@ let window;
 let globalWheelWindow;
 let imageToolWindow;
 let imageToolContext;
+let videoToolWindow;
+let videoToolContext;
 let globalWheelPosition;
 let globalWheelMode;
 let globalWheelRequestedVisible = false;
@@ -337,6 +339,38 @@ function openImageToolWindow(context) {
   loading.catch((error) => console.error('Cannot load image editor:', error.message));
 }
 
+function openVideoToolWindow(context) {
+  if (videoToolWindow && !videoToolWindow.isDestroyed()) videoToolWindow.close();
+  videoToolContext = context;
+  const editor = new BrowserWindow({
+    width: 1040, height: 760, minWidth: 720, minHeight: 540, show: false,
+    title: `Santara · ${context.capability.label}`, backgroundColor: '#f6f5f1',
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: path.join(directory, 'preload.cjs'), contextIsolation: true, sandbox: true,
+      nodeIntegration: false, webSecurity: true, allowRunningInsecureContent: false,
+      webviewTag: false, partition: 'santara', navigateOnDragDrop: false,
+    },
+  });
+  videoToolWindow = editor;
+  const contents = editor.webContents;
+  trustedContents.add(contents);
+  contents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  contents.on('will-navigate', (event) => event.preventDefault());
+  contents.on('will-redirect', (event) => event.preventDefault());
+  editor.once('ready-to-show', () => { if (!editor.isDestroyed()) editor.show(); });
+  editor.on('closed', () => {
+    trustedContents.delete(contents);
+    if (videoToolWindow === editor) {
+      videoToolWindow = undefined;
+      videoToolContext = undefined;
+    }
+  });
+  const query = { 'santara-video-tool': '1' };
+  const loading = developmentURL ? editor.loadURL(`${developmentURL}/?${new URLSearchParams(query)}`) : editor.loadFile(indexPath, { query });
+  loading.catch((error) => console.error('Cannot load video editor:', error.message));
+}
+
 function startWindowsWatcher() {
   if (process.platform !== 'win32' || nativeWatcher) return;
   const executable = app.isPackaged
@@ -578,6 +612,43 @@ function registerIPC() {
     imageToolWindow.close();
     return true;
   });
+  handleFromSender('videoToolContext', (event) => {
+    if (!videoToolWindow || videoToolWindow.isDestroyed() || event.sender !== videoToolWindow.webContents || !videoToolContext) throw new Error('Video editor is no longer available');
+    return videoToolContext;
+  });
+  handleFromSender('applyVideoTool', async (event, request) => {
+    if (!videoToolWindow || videoToolWindow.isDestroyed() || event.sender !== videoToolWindow.webContents || !videoToolContext) throw new Error('Video editor is no longer available');
+    plainObject(request);
+    const operation = videoToolContext.capability.operation;
+    const currentCapability = (await capabilities()).find((entry) => entry.id === videoToolContext.capability.id && entry.available);
+    if (!currentCapability || currentCapability.category !== 'video' || currentCapability.operation !== operation) throw new Error('This video operation is no longer available');
+    const format = typeof request.format === 'string' ? request.format : videoToolContext.format;
+    if (!currentCapability.outputs.includes(format)) throw new Error('Unsupported video output format');
+    const orderedPaths = request.files === undefined ? videoToolContext.files.map((file) => file.path) : pathList(request.files);
+    const knownPaths = new Set(videoToolContext.files.map((file) => file.path));
+    if (orderedPaths.length !== knownPaths.size || orderedPaths.some((filename) => !knownPaths.has(filename)) || new Set(orderedPaths).size !== orderedPaths.length) throw new Error('Invalid video clip order');
+    const inputs = orderedPaths.map((filename) => videoToolContext.files.find((file) => file.path === filename));
+    const options = safeData(request.options || {});
+    plainObject(options);
+    const result = await engine.enqueue({
+      files: inputs,
+      operation,
+      format,
+      options: {
+        quality: settings.quality, stripMetadata: settings.stripMetadata,
+        outputFolder: settings.outputFolder, collision: settings.collision,
+        ...videoToolContext.options, ...options,
+      },
+    });
+    updateFromEngine({});
+    videoToolWindow.close();
+    return result;
+  });
+  handleFromSender('closeVideoTool', (event) => {
+    if (!videoToolWindow || videoToolWindow.isDestroyed() || event.sender !== videoToolWindow.webContents) return false;
+    videoToolWindow.close();
+    return true;
+  });
   handle('selectGlobalOperation', async (request) => {
     plainObject(request);
     if (typeof request.capabilityId !== 'string' || typeof request.format !== 'string') throw new TypeError('Invalid operation');
@@ -593,6 +664,18 @@ function registerIPC() {
       const target = request.format || inspected[0].ext;
       if (!available.outputs.includes(target)) throw new Error('Unsupported image output format');
       openImageToolWindow({ capability: available, files: inspected.filter((file) => available.inputs.includes(file.ext)), format: target, options: operationOptions });
+      hideGlobalWheel({ restoreMain: false });
+      return { opened: true };
+    }
+    if (available.category === 'video' && available.operation !== 'convert') {
+      const operation = available.operation || available.id.split(':').pop();
+      const videoFiles = inspected.filter((file) => !file.isDirectory && file.category === 'video' && available.inputs.includes(file.ext));
+      if (!videoFiles.length || (videoFiles.length !== inspected.length && operation !== 'merge')) throw new Error('This tool only supports selected video files');
+      if (operation === 'merge' && videoFiles.length < 2) throw new Error('Join videos requires at least two selected clips');
+      const target = request.format || (available.outputs.includes(videoFiles[0].ext) ? videoFiles[0].ext : available.outputs[0]);
+      if (!available.outputs.includes(target)) throw new Error('Unsupported video output format');
+      const defaults = { quality: String(settings.quality), stripMetadata: String(settings.stripMetadata) };
+      openVideoToolWindow({ capability: available, files: videoFiles, format: target, options: defaults });
       hideGlobalWheel({ restoreMain: false });
       return { opened: true };
     }

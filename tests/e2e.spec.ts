@@ -17,6 +17,8 @@ test.beforeEach(async ({ page }) => {
       { id: 'audio', path: '/fixtures/tone.wav', name: 'tone.wav', ext: 'wav', size: 2048, category: 'audio' },
       { id: 'subtitle', path: '/fixtures/captions.srt', name: 'captions.srt', ext: 'srt', size: 64, category: 'subtitle' },
     ];
+    const droppedVideo: Snapshot['files'] = [{ id: 'video', path: '/fixtures/clip.mp4', name: 'clip.mp4', ext: 'mp4', size: 4096, category: 'video' }];
+    const mergeVideos: Snapshot['files'] = [...droppedVideo, { id: 'video-2', path: '/fixtures/clip-2.mp4', name: 'clip-2.mp4', ext: 'mp4', size: 2048, category: 'video' }];
     const state: Snapshot = {
       platform: 'linux', files: [], jobs: [],
       settings: {
@@ -34,6 +36,12 @@ test.beforeEach(async ({ page }) => {
         { id: 'image:background', operation: 'background', label: 'Add background', category: 'image', inputs: ['png'], outputs: ['png', 'jpg'], backend: 'sharp', available: true, batch: true, preservesMetadata: true },
         { id: 'image:compress', operation: 'compress', label: 'Compress', category: 'image', inputs: ['png'], outputs: ['png'], backend: 'sharp', available: true, batch: true, preservesMetadata: true },
         { id: 'image:metadata', operation: 'metadata', label: 'Edit metadata', category: 'image', inputs: ['png'], outputs: ['png'], backend: 'sharp', available: true, batch: true, preservesMetadata: true },
+        { id: 'video:convert', operation: 'convert', label: 'Convert video', category: 'video', inputs: ['mp4'], outputs: ['mp4', 'webm'], backend: 'ffmpeg', available: true, batch: true, preservesMetadata: true },
+        { id: 'video:compress', operation: 'compress', label: 'Compress video', category: 'video', inputs: ['mp4'], outputs: ['mp4', 'webm'], backend: 'ffmpeg', available: true, batch: true, preservesMetadata: true },
+        { id: 'video:trim', operation: 'trim', label: 'Trim video', category: 'video', inputs: ['mp4'], outputs: ['mp4'], backend: 'ffmpeg', available: true, batch: true, preservesMetadata: true },
+        { id: 'video:split', operation: 'split', label: 'Split video', category: 'video', inputs: ['mp4'], outputs: ['mp4'], backend: 'ffmpeg', available: true, batch: true, preservesMetadata: true },
+        { id: 'video:merge', operation: 'merge', label: 'Merge video', category: 'video', inputs: ['mp4'], outputs: ['mp4'], backend: 'ffmpeg', available: true, batch: true, preservesMetadata: true },
+        { id: 'video:redact', operation: 'redact', label: 'Redact video', category: 'video', inputs: ['mp4'], outputs: ['mp4'], backend: 'ffmpeg', available: true, batch: true, preservesMetadata: false },
         { id: 'audio:visualize', operation: 'visualize', label: 'Audio wave visualizer', category: 'audio', inputs: ['wav'], outputs: ['mp4'], backend: 'ffmpeg', available: true, batch: true, preservesMetadata: true },
         { id: 'archive:create', operation: 'create-archive', label: 'Create archive', category: 'archive', inputs: ['*'], outputs: ['zip'], backend: 'javascript', available: true, batch: false, preservesMetadata: false },
         { id: 'pdf:render', operation: 'render', label: 'Render PDF pages', category: 'pdf', inputs: ['pdf'], outputs: ['png', 'jpg'], backend: 'poppler', available: true, batch: true, preservesMetadata: false, options: { page: { min: 1, max: 100000 }, dpi: { min: 36, max: 600, default: 300 } } },
@@ -52,7 +60,7 @@ test.beforeEach(async ({ page }) => {
       bootstrap: async () => structuredClone(state),
       addFiles: async () => { record('addFiles', null); return structuredClone(incoming); },
       addFolder: async () => [], inspectPaths: async () => [],
-      droppedFiles: async files => { record('droppedFiles', files.map(file => file.name)); return structuredClone(incoming); },
+      droppedFiles: async files => { record('droppedFiles', files.map(file => file.name)); return structuredClone(files.some(file => file.name.toLowerCase().endsWith('.mp4')) ? droppedVideo : incoming); },
       enqueue: async request => {
         record('enqueue', request);
         const jobs: Job[] = request.files.map(file => ({ id: `job-${file.id}`, input: file.path, name: file.name, operation: request.operation, format: request.format, status: 'queued', progress: 0, createdAt: '2026-10-19T00:00:00Z' }));
@@ -80,6 +88,12 @@ test.beforeEach(async ({ page }) => {
         return { url: `data:image/svg+xml,${encodeURIComponent(artwork)}`, width: 800, height: 600, duration: 4, waveform };
       },
       imagePreview: async () => ({ url: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="800" height="600" fill="#ee8844"/></svg>')}`, width: 800, height: 600, sourceWidth: 800, sourceHeight: 600 }),
+      videoToolContext: async () => {
+        const merge = new URLSearchParams(location.search).get('operation') === 'merge';
+        return { capability: structuredClone(state.capabilities.find(capability => capability.id === (merge ? 'video:merge' : 'video:trim'))!), files: structuredClone(merge ? mergeVideos : droppedVideo), format: 'mp4', options: { quality: '85', stripMetadata: 'false' } };
+      },
+      applyVideoTool: async request => { record('applyVideoTool', request); return { queued: true }; },
+      closeVideoTool: async () => { record('closeVideoTool', null); },
       onWheelMode: callback => { wheelModeListeners.add(callback); return () => { wheelModeListeners.delete(callback); }; },
       onUpdate: callback => { listeners.add(callback); return () => { listeners.delete(callback); }; },
     };
@@ -255,6 +269,54 @@ test('global image tools wheel shows image tools and hides generic archive creat
     await expect(shell.getByText('Drop on a slice')).toHaveCount(0);
     await expect(shell.locator('.wheel-description')).toHaveCount(0);
   } finally { await transfer.dispose(); }
+});
+
+test('global video tools wheel shows supported video operations and dispatches the selected tool', async ({ page }) => {
+  await page.goto('/?santara-wheel=1&mode=tools');
+  const transfer = await page.evaluateHandle(() => {
+    const value = new DataTransfer();
+    value.items.add(new File(['synthetic video fixture'], 'clip.mp4', { type: 'video/mp4' }));
+    return value;
+  });
+  try {
+    const shell = page.locator('.global-wheel-shell');
+    await shell.dispatchEvent('dragenter', { dataTransfer: transfer });
+    const wheel = page.getByRole('menu', { name: 'Tools', exact: true });
+    await expect(wheel.getByRole('menuitem', { name: /^Compress/ })).toBeVisible();
+    const trim = wheel.getByRole('menuitem', { name: /^Trim/ });
+    await expect(trim.locator('svg')).toBeVisible();
+    await expect(wheel.getByRole('menuitem', { name: /^Redact/ })).toBeVisible();
+    await expect(wheel.getByRole('menuitem', { name: /^Edit photo/ })).toHaveCount(0);
+    await expect(wheel.getByRole('menuitem', { name: /^Merge/ })).toHaveCount(0);
+    await trim.dispatchEvent('dragenter', { dataTransfer: transfer });
+    await trim.dispatchEvent('drop', { dataTransfer: transfer });
+    await expect.poll(() => page.evaluate(() => window.__santaraTest.calls.find(call => call.method === 'selectGlobalOperation')?.value)).toMatchObject({ capabilityId: 'video:trim', format: 'mp4' });
+  } finally { await transfer.dispose(); }
+});
+
+test('compact video editor provides exact trim values and submits a non-destructive queue recipe', async ({ page }) => {
+  await page.goto('/?santara-video-tool=1');
+  const editor = page.getByRole('dialog', { name: 'Trim video' });
+  await expect(editor).toBeVisible();
+  await expect(editor.getByText('clip.mp4')).toBeVisible();
+  await expect(editor.getByRole('slider', { name: 'Video timeline' })).toBeVisible();
+  await editor.getByLabel('Start time (seconds)').fill('0.5');
+  await editor.getByLabel('End time (seconds)').fill('2.5');
+  await editor.getByRole('button', { name: 'Save new copy' }).click();
+  await expect.poll(() => page.evaluate(() => window.__santaraTest.calls.find(call => call.method === 'applyVideoTool')?.value)).toMatchObject({
+    format: 'mp4', files: ['/fixtures/clip.mp4'], options: { start: 0.5, duration: 2 },
+  });
+});
+
+test('video merge editor sends the selected clip order to the local job queue', async ({ page }) => {
+  await page.goto('/?santara-video-tool=1&operation=merge');
+  const editor = page.getByRole('dialog', { name: 'Join videos' });
+  await expect(editor).toBeVisible();
+  await editor.getByRole('button', { name: 'Move clip.mp4 down' }).click();
+  await editor.getByRole('button', { name: 'Save new copy' }).click();
+  await expect.poll(() => page.evaluate(() => window.__santaraTest.calls.find(call => call.method === 'applyVideoTool')?.value)).toMatchObject({
+    format: 'mp4', files: ['/fixtures/clip-2.mp4', '/fixtures/clip.mp4'], options: { reencode: true },
+  });
 });
 
 test('global wheel shows provisional image routes without extra helper captions', async ({ page }) => {

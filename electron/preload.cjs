@@ -25,6 +25,9 @@ contextBridge.exposeInMainWorld('santara', Object.freeze({
   imageToolContext: () => invoke('imageToolContext'),
   applyImageTool: (request) => invoke('applyImageTool', request),
   closeImageTool: () => invoke('closeImageTool'),
+  videoToolContext: () => invoke('videoToolContext'),
+  applyVideoTool: (request) => invoke('applyVideoTool', request),
+  closeVideoTool: () => invoke('closeVideoTool'),
   finishGlobalWheel: (page = 'converter') => invoke('finishGlobalWheel', page),
   selectGlobalOperation: (request) => invoke('selectGlobalOperation', request),
   onWheelMode: (callback) => {

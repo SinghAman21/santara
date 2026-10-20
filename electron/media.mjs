@@ -7,6 +7,7 @@ export const requiredFilters = Object.freeze(Object.fromEntries(Object.entries({
   mute: [],
   speed: ['setpts', 'atempo'],
   snapshot: [],
+  redact: ['drawbox'],
   channels: ['aresample'],
   split: [],
   merge: [],
@@ -122,6 +123,23 @@ export function mediaOperationArgs(job, input, output, dimensions) {
       args.push('-map', '0:a:0?', '-c:a', audioEncoderFor(format), '-b:a', `${bitrate}k`);
     }
     args.push(...videoEncodingArgs(encoder, quality));
+  }
+  if (operation === 'redact') {
+    if (!dimensions) throw new Error('Cannot inspect video dimensions for redaction');
+    if (!Array.isArray(options.masks) || options.masks.length < 1 || options.masks.length > 16) throw new Error('Redaction requires 1–16 masks');
+    const masks = options.masks.map((mask, index) => {
+      if (!mask || typeof mask !== 'object' || Array.isArray(mask)) throw new Error(`Invalid redaction mask ${index + 1}`);
+      const x = number(mask.x, undefined, `mask ${index + 1} x`, 0, dimensions.width, true);
+      const y = number(mask.y, undefined, `mask ${index + 1} y`, 0, dimensions.height, true);
+      const width = number(mask.width, undefined, `mask ${index + 1} width`, 2, dimensions.width, true);
+      const height = number(mask.height, undefined, `mask ${index + 1} height`, 2, dimensions.height, true);
+      const start = number(mask.start, 0, `mask ${index + 1} start`, 0, 604800);
+      const end = number(mask.end, 604800, `mask ${index + 1} end`, 0, 604800);
+      const fill = mask.color === undefined ? '#000000' : mask.color;
+      if (x + width > dimensions.width || y + height > dimensions.height || end <= start || typeof fill !== 'string' || !/^#[\da-f]{6}$/i.test(fill)) throw new Error(`Invalid redaction mask ${index + 1} bounds, time range, or color`);
+      return `drawbox=x=${x}:y=${y}:w=${width}:h=${height}:color=0x${fill.slice(1).toLowerCase()}:t=fill:enable='between(t,${start},${end})'`;
+    });
+    args.push('-vf', masks.join(','));
   }
   args.push(...metadataArgs(options.stripMetadata));
   args.push('-progress', 'pipe:1', '-f', operation === 'snapshot' ? 'image2pipe' : mediaFormats[format][1], output);

@@ -226,7 +226,7 @@ export function createPreviewService({ backends = {}, allowed } = {}) {
         if (demuxer === 'mov') restrictions.push('-enable_drefs', '0', '-use_absolute_path', '0');
         let hasAudio = media[extension][0].startsWith('audio/');
         if (backend('ffprobe')) {
-          const bytes = await run('ffprobe', ['-v', 'error', ...restrictions, '-probesize', '5000000', '-analyzeduration', '5000000', '-show_entries', 'format=duration:stream=codec_type,width,height,duration:stream_side_data=rotation', '-of', 'json', input], { cwd: temporary, timeout: 10000 });
+          const bytes = await run('ffprobe', ['-v', 'error', ...restrictions, '-probesize', '5000000', '-analyzeduration', '5000000', '-show_entries', 'format=format_name,duration,size,bit_rate:format_tags=title,artist,album,comment:stream=codec_type,codec_name,width,height,duration,bit_rate,avg_frame_rate,sample_rate,channels,channel_layout:stream_tags=language,title:stream_side_data=rotation', '-of', 'json', input], { cwd: temporary, timeout: 10000 });
           let metadata;
           try { metadata = JSON.parse(bytes.toString('utf8')); } catch { throw new Error('ffprobe returned invalid metadata. Check the local backend.'); }
           const tracks = Array.isArray(metadata?.streams) ? metadata.streams : [];
@@ -234,6 +234,21 @@ export function createPreviewService({ backends = {}, allowed } = {}) {
           hasAudio = tracks.some(track => track.codec_type === 'audio');
           const duration = Number(metadata?.format?.duration ?? tracks.find(track => track.duration)?.duration);
           if (Number.isFinite(duration) && duration >= 0) details.duration = duration;
+          const displayMetadata = {};
+          const formatMetadata = metadata?.format || {};
+          for (const field of ['format_name', 'duration', 'size', 'bit_rate']) {
+            if (formatMetadata[field] !== undefined && String(formatMetadata[field]).length <= 128) displayMetadata[field.replaceAll('_', ' ')] = String(formatMetadata[field]);
+          }
+          for (const [index, stream] of tracks.entries()) {
+            const label = `${stream.codec_type || 'stream'} ${index + 1}`;
+            const fields = ['codec_name', 'width', 'height', 'bit_rate', 'avg_frame_rate', 'sample_rate', 'channels', 'channel_layout'];
+            const values = fields.filter(field => stream[field] !== undefined).map(field => `${field.replaceAll('_', ' ')} ${String(stream[field]).slice(0, 64)}`);
+            if (values.length) displayMetadata[label] = values.join(' · ').slice(0, 512);
+          }
+          for (const [key, value] of Object.entries(formatMetadata.tags || {})) {
+            if (['title', 'artist', 'album', 'comment'].includes(key.toLowerCase()) && typeof value === 'string') displayMetadata[key.toLowerCase()] = value.slice(0, 256);
+          }
+          if (Object.keys(displayMetadata).length) details.metadata = displayMetadata;
           if (Number.isSafeInteger(video?.width) && Number.isSafeInteger(video?.height) && video.width > 0 && video.height > 0 && video.width <= 65536 && video.height <= 65536) {
             const rotation = Number(video.side_data_list?.find(item => item.rotation !== undefined)?.rotation ?? 0);
             const swapped = Math.abs(rotation % 180) === 90;

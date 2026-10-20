@@ -223,6 +223,18 @@ test('speed chains safe atempo stages and permits a video without audio', () => 
   }
 });
 
+test('video redaction uses bounded solid masks with precise time windows', () => {
+  const job = { operation: 'redact', input: videoInput, format: 'mp4', options: { masks: [{ x: 4, y: 6, width: 20, height: 12, start: 1.25, end: 3, color: '#12aBcD' }] } };
+  const args = mediaOperationArgs(job, videoInput, output, { width: 64, height: 48 });
+  assert.equal(valueOf(args, '-vf'), "drawbox=x=4:y=6:w=20:h=12:color=0x12abcd:t=fill:enable='between(t,1.25,3)'");
+  assert.equal(valueOf(args, '-c:v'), 'libx264');
+  assert.ok(args.includes('0:a:0?'));
+  for (const masks of [[], Array(17).fill({ x: 0, y: 0, width: 2, height: 2, start: 0, end: 1 }), [{ x: -1, y: 0, width: 2, height: 2, start: 0, end: 1 }], [{ x: 0, y: 0, width: 2, height: 2, start: 2, end: 1 }], [{ x: 0, y: 0, width: 2, height: 2, start: 0, end: 1, color: 'black:drawbox=1' }]]) {
+    assert.throws(() => mediaOperationArgs({ ...job, options: { masks } }, videoInput, output, { width: 64, height: 48 }));
+  }
+  assert.deepEqual(requiredFilters.redact, ['drawbox']);
+});
+
 test('normalize bounds EBU targets and explicitly returns to a supported sample rate', () => {
   const args = argsFor('normalize', { loudness: '-18', truePeak: '-2', loudnessRange: '7' });
   assert.equal(valueOf(args, '-af'), 'loudnorm=I=-18:TP=-2:LRA=7,aresample=48000');
@@ -494,6 +506,18 @@ test('installed FFmpeg executes media operations with verifiable outputs', { tim
     assert.equal(info.streams[0].height, 48);
     assert.deepEqual((await readFile(target)).subarray(0, 8), Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
     assert.deepEqual((await readdir(root)).filter(filename => !before.includes(filename)), [path.basename(target)]);
+  });
+
+  await context.test('redaction writes solid masks only during the selected time range', async child => {
+    if (!hasFilters('redact')) return child.skip('drawbox filter unavailable');
+    const target = path.join(root, 'redacted.mp4');
+    const args = mediaOperationArgs({ operation: 'redact', input: movie, format: 'mp4', options: { masks: [{ x: 16, y: 12, width: 20, height: 20, start: 0.5, end: 1.25, color: '#000000' }] } }, movie, target, { width: 64, height: 48 });
+    await run(ffmpeg, args);
+    const sample = async time => (await run(ffmpeg, ['-v', 'error', '-ss', String(time), '-i', target, '-vf', 'crop=2:2:24:20', '-frames:v', '1', '-pix_fmt', 'rgb24', '-f', 'rawvideo', 'pipe:1'], { encoding: 'buffer' })).stdout.subarray(0, 3);
+    const before = await sample(0.25), inside = await sample(0.75), after = await sample(1.5);
+    assert.ok(before[2] > 150 && before[0] < 80, `Expected original blue before mask: ${[...before]}`);
+    assert.ok(inside.every(channel => channel < 35), `Expected black mask during range: ${[...inside]}`);
+    assert.ok(after[2] > 150 && after[0] < 80, `Expected original blue after mask: ${[...after]}`);
   });
 
   await context.test('FFmpeg refuses an existing output without replacing its contents', async () => {

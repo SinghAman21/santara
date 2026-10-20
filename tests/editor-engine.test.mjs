@@ -4,7 +4,7 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import sharp from 'sharp';
-import { createEngine, parseSegments } from '../electron/engine.mjs';
+import { createEngine, parseSegments, parseSnapshotTimes, validateSignature } from '../electron/engine.mjs';
 import { detectBackends, getCapabilities } from '../electron/registry.mjs';
 
 async function workspace(callback) {
@@ -36,6 +36,20 @@ test('time ranges validate order, syntax and bounded job expansion', () => {
   assert.deepEqual(parseSegments('0-0.5, 1.25-3'), [{ start: 0, duration: 0.5 }, { start: 1.25, duration: 1.75 }]);
   for (const value of ['', '1-0', '0-0', '-1-2', '0-4;touch', '0-999999', Array(101).fill('0-1').join(',')]) assert.throws(() => parseSegments(value));
 });
+
+test('frame timestamps are bounded, deduplicated, sorted, and expanded into safe PNG outputs', () => {
+  assert.deepEqual(parseSnapshotTimes(['2.5', 0, 1, 1]), [{ time: 0 }, { time: 1 }, { time: 2.5 }]);
+  for (const value of [[], Array(101).fill(0), ['1,drawbox'], [''], [' '], [true], [null], [{}], [-1], [604801], [NaN]]) assert.throws(() => parseSnapshotTimes(value));
+});
+
+test('video signature validation rejects misleading extensions before codec processing', async () => workspace(async directory => {
+  const mp4 = path.join(directory, 'sample.mp4');
+  await writeFile(mp4, Buffer.from([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 6, 0, 0, 0, 1]));
+  await validateSignature(mp4);
+  const misleading = path.join(directory, 'renamed.mp4');
+  await writeFile(misleading, Buffer.from('not a video'));
+  await assert.rejects(validateSignature(misleading), /signature does not match/);
+}));
 
 test('photo editor recipes pass through the queue without changing originals', () => workspace(async directory => {
   const input = path.join(directory, 'source.png');

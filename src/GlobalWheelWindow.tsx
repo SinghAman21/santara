@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type DragEvent } from 'react';
+import { Camera, Crop, EyeOff, Film, FlipHorizontal2, Gauge, Layers, Minimize2, Music2, RotateCw, Scaling, Scissors, Split, Tag, VolumeX, type LucideIcon } from 'lucide-react';
 import { api, defaultSettings } from './bridge';
 import RadialWheel, { type WheelItem } from './RadialWheel';
 import type { Capability, LocalFile, Snapshot } from './types';
@@ -20,6 +21,16 @@ const mimeFormats: Record<string, string> = {
 const operationName = (capability: Capability) => capability.operation || capability.id.split(':').pop()!;
 const supports = (capability: Capability, file: LocalFile) => capability.inputs.includes('*') || (file.ext ? capability.inputs.includes(file.isDirectory ? 'directory' : file.ext.toLowerCase()) : capability.category === file.category);
 const knownCategory = (file: LocalFile) => file.category !== 'other' ? file.category : '';
+const videoToolLabels: Record<string, string> = {
+  compress: 'Compress', trim: 'Trim', split: 'Split', merge: 'Merge', crop: 'Crop', speed: 'Speed',
+  snapshot: 'Frames', mute: 'Mute', redact: 'Redact', 'strip-metadata': 'Delete metadata', resize: 'Resize',
+  rotate: 'Rotate', flip: 'Flip', gif: 'GIF', 'extract-audio': 'Extract audio',
+};
+const videoToolIcons: Record<string, LucideIcon> = {
+  compress: Minimize2, trim: Scissors, split: Split, merge: Layers, crop: Crop, speed: Gauge,
+  snapshot: Camera, mute: VolumeX, redact: EyeOff, 'strip-metadata': Tag, resize: Scaling,
+  rotate: RotateCw, flip: FlipHorizontal2, gif: Film, 'extract-audio': Music2,
+};
 
 function hintedFiles(transfer: DataTransfer): LocalFile[] {
   const dropped = Array.from(transfer.items).filter(item => item.kind === 'file').map(item => item.getAsFile()).filter((file): file is File => file !== null);
@@ -88,10 +99,12 @@ export default function GlobalWheelWindow() {
       .filter(capability => !['merge', 'pdf-merge'].includes(operationName(capability)) || externalFiles.filter(file => supports(capability, file)).length > 1)
       .flatMap(capability => (mode === 'convert' ? capability.outputs : ['']).map(format => {
         const coverage = externalFiles.filter(file => supports(capability, file)).length;
-        const label = mode === 'convert' ? format.toUpperCase() : capability.label;
-        return [{ id: `${capability.id}|${format}`, label, detail: coverage === externalFiles.length ? `${coverage} ${coverage === 1 ? 'file' : 'files'} · Processed locally` : `${coverage} of ${externalFiles.length} files · Others will be skipped` }];
+        const operation = operationName(capability);
+        const label = mode === 'convert' ? format.toUpperCase() : capability.category === 'video' ? videoToolLabels[operation] || capability.label : capability.label;
+        const Icon = capability.category === 'video' ? videoToolIcons[operation] : undefined;
+        return [{ id: `${capability.id}|${format}`, label, icon: Icon ? <Icon size={17} aria-hidden="true"/> : undefined, detail: coverage === externalFiles.length ? `${coverage} ${coverage === 1 ? 'file' : 'files'} · Local` : `${coverage} of ${externalFiles.length} files · Others will be skipped` }];
       }))
-      .flat().map(item => [item.label, item])).values()];
+      .flat().map(item => [item.id, item])).values()];
 
   function highlight(id: string) {
     choiceRef.current = id;
@@ -138,7 +151,8 @@ export default function GlobalWheelWindow() {
         });
         await api.finishGlobalWheel?.('background');
       } else {
-        await api.selectGlobalOperation?.({ capabilityId, format: format || capability.outputs[0] || '', files: incoming });
+        const compatibleDefault = capability.outputs.includes(incoming[0]?.ext) ? incoming[0].ext : capability.outputs[0] || '';
+        await api.selectGlobalOperation?.({ capabilityId, format: format || compatibleDefault, files: incoming });
       }
     } catch (error) {
       console.error('Global wheel drop failed:', error);

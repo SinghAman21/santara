@@ -11,7 +11,7 @@ import { mediaOperationArgs, mediaMergeArgs } from './media.mjs';
 export { detectBackends, getCapabilities } from './registry.mjs';
 
 export async function validateSignature(filename, ext = path.extname(filename).slice(1).toLowerCase()) {
-  if (!['png', 'jpg', 'jpeg', 'pdf', 'wav', 'zip'].includes(ext)) return;
+  if (!['png', 'jpg', 'jpeg', 'pdf', 'wav', 'zip', 'mp4', 'mov', 'm4v', 'm4a', 'mkv', 'webm', 'avi', 'wmv', 'mp3', 'flac', 'ogg', 'opus', 'aac', 'aiff', 'aif', 'wma'].includes(ext)) return;
   const handle = await open(filename, constants.O_RDONLY | (constants.O_NOFOLLOW || 0));
   try {
     if (!(await handle.stat()).isFile()) throw new Error('Input must be a regular file');
@@ -22,7 +22,16 @@ export async function validateSignature(filename, ext = path.extname(filename).s
       : ['jpg', 'jpeg'].includes(ext) ? bytes.length >= 3 && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255
       : ext === 'pdf' ? bytes.subarray(0, 5).toString() === '%PDF-'
       : ext === 'wav' ? ['RIFF', 'RF64'].includes(bytes.subarray(0, 4).toString()) && bytes.subarray(8, 12).toString() === 'WAVE'
-      : bytes.length >= 4 && bytes[0] === 80 && bytes[1] === 75 && [[3, 4], [5, 6], [7, 8]].some(pair => bytes[2] === pair[0] && bytes[3] === pair[1]);
+        : ext === 'zip' ? bytes.length >= 4 && bytes[0] === 80 && bytes[1] === 75 && [[3, 4], [5, 6], [7, 8]].some(pair => bytes[2] === pair[0] && bytes[3] === pair[1])
+          : ['mp4', 'm4v', 'm4a'].includes(ext) ? bytes.subarray(4, 8).toString() === 'ftyp'
+            : ext === 'mov' ? bytes.subarray(4, 8).toString() === 'ftyp' || ['moov', 'mdat', 'wide', 'free'].includes(bytes.subarray(4, 8).toString())
+              : ['mkv', 'webm'].includes(ext) ? bytes.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]))
+                : ext === 'avi' ? bytes.subarray(0, 4).toString() === 'RIFF' && bytes.subarray(8, 12).toString() === 'AVI '
+                  : ['wmv', 'wma'].includes(ext) ? bytes.subarray(0, 16).equals(Buffer.from('3026b2758e66cf11a6d900aa0062ce6c', 'hex'))
+                    : ['ogg', 'opus'].includes(ext) ? bytes.subarray(0, 4).toString() === 'OggS'
+                      : ext === 'flac' ? bytes.subarray(0, 4).toString() === 'fLaC'
+                        : ['mp3', 'aac'].includes(ext) ? bytes.subarray(0, 3).toString() === 'ID3' || (bytes[0] === 255 && (bytes[1] & (ext === 'aac' ? 0xf6 : 0xe0)) === (ext === 'aac' ? 0xf0 : 0xe0))
+                          : ['aiff', 'aif'].includes(ext) ? bytes.subarray(0, 4).toString() === 'FORM' && ['AIFF', 'AIFC'].includes(bytes.subarray(8, 12).toString()) : false;
     if (!valid) throw new Error(`File signature does not match .${ext}: ${path.basename(filename)}`);
   } finally { await handle.close(); }
 }
@@ -82,6 +91,14 @@ export function parseSegments(value) {
     if (end <= start) throw new Error('Each split range must end after it starts');
     return { start, duration: end - start };
   });
+}
+export function parseSnapshotTimes(value) {
+  if (!Array.isArray(value) || !value.length || value.length > 100) throw new Error('Choose 1–100 frame timestamps');
+  const times = value.map(time => {
+    if (!(typeof time === 'number' && Number.isFinite(time)) && !(typeof time === 'string' && /^[+]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(time.trim()))) throw new Error('Frame timestamps must be finite numbers');
+    return number(time, undefined, 0, 604800);
+  });
+  return [...new Set(times)].sort((first, second) => first - second).map(time => ({ time }));
 }
 const abortError = () => Object.assign(new Error('Cancelled'), { name: 'AbortError' });
 const ensureActive = signal => { if (signal.aborted) throw abortError(); };
@@ -468,6 +485,7 @@ export function createEngine({ onUpdate = () => {}, settings = {}, backends } = 
       }
       const pdfs = inspected.filter(file => !file.inspectionError && !file.isDirectory && file.ext === 'pdf');
       const segments = operation === 'split' ? parseSegments(options.segments) : null;
+      const snapshots = operation === 'snapshot' && options.times !== undefined ? parseSnapshotTimes(options.times) : null;
       const mediaCategory = categoryFor(inspected.find(file => !file.inspectionError && ['audio', 'video'].includes(file.category))?.ext || '');
       const mergeFiles = operation === 'merge' ? inspected.filter(file => !file.inspectionError && !file.isDirectory && file.category === mediaCategory) : [];
       if (mergeFiles.length > 100) throw new Error('Merge accepts at most 100 files');
@@ -493,6 +511,10 @@ export function createEngine({ onUpdate = () => {}, settings = {}, backends } = 
       if (segments) {
         if (additions.length * segments.length > 10000) throw new Error('Split would exceed the 10000-job limit');
         additions = additions.flatMap(job => job.status === 'skipped' ? [job] : segments.map((segment, index) => ({ ...job, id: randomUUID(), options: { ...job.options, ...segment, filename: `${path.basename(job.input, path.extname(job.input))}-${String(index + 1).padStart(3, '0')}.${format}` } })));
+      }
+      if (snapshots) {
+        if (additions.length * snapshots.length > 10000) throw new Error('Frame extraction would exceed the 10000-job limit');
+        additions = additions.flatMap(job => job.status === 'skipped' ? [job] : snapshots.map(({ time }, index) => ({ ...job, id: randomUUID(), options: { ...job.options, time, filename: `${path.basename(job.input, path.extname(job.input))}-${String(index + 1).padStart(3, '0')}.${format}` } })));
       }
       jobs.push(...additions);
       additions.forEach(emit);
