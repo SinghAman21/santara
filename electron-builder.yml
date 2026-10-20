@@ -20,6 +20,9 @@ extraResources:
 artifactName: '${productName}-${version}-${os}-${arch}.${ext}'
 win:
   icon: build/icon.ico
+  extraResources:
+    - from: native/windows/build/santara-drag-watcher.exe
+      to: native/santara-drag-watcher.exe
   target:
     - target: nsis
       arch:
@@ -31,6 +34,9 @@ nsis:
   createDesktopShortcut: false
   createStartMenuShortcut: true
 linux:
+  executableName: santara
+  executableArgs:
+    - --ozone-platform=x11
   icon: build/icon.png
   syncDesktopName: true
   category: Utility

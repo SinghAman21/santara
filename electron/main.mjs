@@ -1,11 +1,16 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, session, Tray } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, protocol, screen, session, Tray } from 'electron';
+import { spawn } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
+import { createInterface } from 'node:readline';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { absolutePath, closeIntegrations, createStore, fileAction, openOutput, pathList, plainObject, revealPath, safeData } from './integrations.mjs';
-import { createEngine, detectBackends, getCapabilities, inspectFiles } from './engine.mjs';
+import { createEngine, detectBackends, getCapabilities, inspectFiles, normalizeImageOptions } from './engine.mjs';
+import { createPreviewService } from './previews.mjs';
+
+protocol.registerSchemesAsPrivileged([{ scheme: 'santara-media', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }]);
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const indexPath = path.resolve(directory, '../dist/index.html');
@@ -29,8 +34,16 @@ if (process.platform === 'linux') {
 }
 
 let window;
+let globalWheelWindow;
+let globalWheelPosition;
+let globalWheelMode;
+let globalWheelRequestedVisible = false;
+let mainWindowHiddenForWheel = false;
+let nativeWatcher;
 let tray;
 let engine;
+let previews;
+const imagePreviewControllers = new Set();
 let backends = {};
 let settings = {
   outputFolder: '', collision: 'rename', concurrency: 2, theme: 'system', tray: false,
@@ -46,6 +59,7 @@ let queue = Promise.resolve();
 let persistenceTimer;
 const pendingPaths = [];
 const allowed = new Set();
+const trustedContents = new Set();
 const persistenceErrors = [];
 const store = createStore(app.getPath('userData'), (message) => {
   console.error(message);
@@ -183,6 +197,119 @@ function focusWindow() {
   window.focus();
 }
 
+function wheelRequest(argv) {
+  const dedicated = argv.find((value) => value.startsWith('--santara-global-wheel='))?.split('=')[1];
+  const dedicatedAction = argv.find((value) => value.startsWith('--santara-wheel-action='))?.split('=').slice(1).join('=');
+  const actionIndex = argv.indexOf('--wheel');
+  const action = actionIndex >= 0 ? argv[actionIndex + 1] : undefined;
+  const argument = (key) => {
+    const equals = argv.find((value) => value.startsWith(`--${key}=`))?.split('=').slice(1).join('=');
+    const index = argv.indexOf(`--${key}`);
+    return equals ?? (index >= 0 ? argv[index + 1] : undefined);
+  };
+  const mode = dedicated || argument('mode');
+  const requestedAction = dedicatedAction || action;
+  if (!['convert', 'tools', 'actions'].includes(mode) && requestedAction !== 'hide') return null;
+  const coordinate = (key) => {
+    const value = argv.find((argument) => argument.startsWith(`--santara-wheel-${key}=`))?.split('=')[1];
+    const number = Number(value ?? argument(key));
+    return Number.isFinite(number) ? Math.round(number) : undefined;
+  };
+  return { mode: requestedAction === 'hide' ? 'hide' : mode, x: coordinate('x'), y: coordinate('y') };
+}
+
+function placeWheel(x, y) {
+  if (!globalWheelWindow || globalWheelWindow.isDestroyed()) return;
+  const pointer = screen.getCursorScreenPoint();
+  const point = process.platform === 'linux' || !Number.isFinite(x) || !Number.isFinite(y) ? pointer : { x, y };
+  const display = screen.getDisplayNearestPoint(point);
+  const [width, height] = globalWheelWindow.getSize();
+  const bounds = display.workArea;
+  const left = Math.max(bounds.x, Math.min(point.x - width / 2, bounds.x + bounds.width - width));
+  const top = Math.max(bounds.y, Math.min(point.y - height / 2, bounds.y + bounds.height - height));
+  globalWheelWindow.setPosition(Math.round(left), Math.round(top), false);
+}
+
+function showGlobalWheel(mode, x, y) {
+  if (!initialized || !['convert', 'tools', 'actions'].includes(mode)) return;
+  const newDrag = !globalWheelRequestedVisible;
+  globalWheelPosition = { x, y };
+  globalWheelMode = mode;
+  globalWheelRequestedVisible = true;
+  if (!globalWheelWindow || globalWheelWindow.isDestroyed()) {
+    globalWheelWindow = new BrowserWindow({
+      width: 420, height: 540, frame: false, transparent: true, backgroundColor: '#00000000',
+      resizable: false, movable: false, minimizable: false, maximizable: false,
+      focusable: false, skipTaskbar: true, alwaysOnTop: true, show: false,
+      webPreferences: {
+        preload: path.join(directory, 'preload.cjs'), contextIsolation: true, sandbox: true,
+        nodeIntegration: false, webSecurity: true, allowRunningInsecureContent: false,
+        webviewTag: false, partition: 'santara', navigateOnDragDrop: false,
+      },
+    });
+    const wheelWindow = globalWheelWindow;
+    const wheelContents = globalWheelWindow.webContents;
+    trustedContents.add(wheelContents);
+    globalWheelWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    globalWheelWindow.webContents.on('will-navigate', (event) => event.preventDefault());
+    globalWheelWindow.webContents.on('will-redirect', (event) => event.preventDefault());
+    globalWheelWindow.once('ready-to-show', () => {
+      if (!globalWheelRequestedVisible || wheelWindow.isDestroyed()) return;
+      wheelWindow.setAlwaysOnTop(true, 'screen-saver');
+      placeWheel(globalWheelPosition?.x, globalWheelPosition?.y);
+      wheelWindow.webContents.send('santara:wheel-mode', globalWheelMode, newDrag);
+      wheelWindow.showInactive();
+    });
+    wheelWindow.on('closed', () => {
+      trustedContents.delete(wheelContents);
+      if (globalWheelWindow === wheelWindow) {
+        globalWheelWindow = undefined;
+        globalWheelPosition = undefined;
+        globalWheelMode = undefined;
+        globalWheelRequestedVisible = false;
+      }
+    });
+    const query = { 'santara-wheel': '1', mode };
+    const loading = developmentURL ? globalWheelWindow.loadURL(`${developmentURL}/?${new URLSearchParams(query)}`) : globalWheelWindow.loadFile(indexPath, { query });
+    loading.catch((error) => console.error('Cannot load global wheel:', error.message));
+    return;
+  }
+  placeWheel(x, y);
+  globalWheelWindow.webContents.send('santara:wheel-mode', mode, newDrag);
+  if (!globalWheelWindow.isVisible()) globalWheelWindow.showInactive();
+}
+
+function hideGlobalWheel() {
+  globalWheelRequestedVisible = false;
+  if (globalWheelWindow && !globalWheelWindow.isDestroyed()) globalWheelWindow.hide();
+  globalWheelPosition = undefined;
+  globalWheelMode = undefined;
+  if (mainWindowHiddenForWheel) {
+    mainWindowHiddenForWheel = false;
+    focusWindow();
+  }
+}
+
+function startWindowsWatcher() {
+  if (process.platform !== 'win32' || nativeWatcher) return;
+  const executable = app.isPackaged
+    ? path.join(process.resourcesPath, 'native', 'santara-drag-watcher.exe')
+    : path.join(directory, '../native/windows/build/santara-drag-watcher.exe');
+  try {
+    nativeWatcher = spawn(executable, [], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    createInterface({ input: nativeWatcher.stdout }).on('line', (line) => {
+      try {
+        const event = JSON.parse(line);
+        if (event.type === 'show' || event.type === 'move') showGlobalWheel(event.mode, event.x, event.y);
+        else if (event.type === 'hide') hideGlobalWheel();
+      } catch (error) { console.error('Invalid drag watcher message:', error.message); }
+    });
+    nativeWatcher.stderr.on('data', (chunk) => console.error(`[drag watcher] ${String(chunk).trim()}`));
+    nativeWatcher.on('error', (error) => { nativeWatcher = undefined; console.error('Global drag watcher unavailable:', error.message); });
+    nativeWatcher.on('exit', () => { nativeWatcher = undefined; });
+  } catch (error) { console.error('Global drag watcher unavailable:', error.message); }
+}
+
 function syncTray() {
   if (!settings.tray) {
     tray?.destroy();
@@ -202,7 +329,7 @@ function syncTray() {
   }
 }
 
-function createWindow() {
+function createWindow({ showOnReady = true } = {}) {
   window = new BrowserWindow({
     width: 1280, height: 840, minWidth: 900, minHeight: 620, show: false,
     title: 'Santara', backgroundColor: '#faf9f6', autoHideMenuBar: true,
@@ -212,21 +339,27 @@ function createWindow() {
       webviewTag: false, partition: 'santara', navigateOnDragDrop: false,
     },
   });
+  const mainWindow = window;
+  const mainContents = window.webContents;
+  trustedContents.add(mainContents);
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', (event) => event.preventDefault());
   window.webContents.on('will-redirect', (event) => event.preventDefault());
   window.webContents.on('will-attach-webview', (event) => event.preventDefault());
-  window.once('ready-to-show', () => window?.show());
-  window.on('close', (event) => {
-    if (!quitting && tray && settings.minimizeToTray) { event.preventDefault(); window.hide(); }
+  mainWindow.once('ready-to-show', () => { if (showOnReady && !mainWindow.isDestroyed()) mainWindow.show(); });
+  mainWindow.on('close', (event) => {
+    if (!quitting && tray && settings.minimizeToTray) { event.preventDefault(); mainWindow.hide(); }
   });
-  window.on('closed', () => { window = undefined; });
-  const loading = developmentURL ? window.loadURL(developmentURL) : window.loadFile(indexPath);
+  mainWindow.on('closed', () => {
+    trustedContents.delete(mainContents);
+    if (window === mainWindow) window = undefined;
+  });
+  const loading = developmentURL ? mainWindow.loadURL(developmentURL) : mainWindow.loadFile(indexPath);
   loading.catch((error) => { console.error('Cannot load Santara:', error.message); dialog.showErrorBox('Santara could not start', error.message); app.quit(); });
 }
 
 function validateSender(event) {
-  if (!window || event.sender !== window.webContents || !event.senderFrame || event.senderFrame !== window.webContents.mainFrame) {
+  if (!trustedContents.has(event.sender) || !event.senderFrame || event.senderFrame !== event.sender.mainFrame) {
     throw new Error('Untrusted IPC sender');
   }
   const frameURL = new URL(event.senderFrame.url);
@@ -283,6 +416,10 @@ function registerIPC() {
       if (options[key] !== undefined && options[key] !== '') absolutePath(options[key]);
     }
     if (options.outputFolder) options.outputDirectory = options.outputFolder;
+    if (typeof options.reencode === 'string') {
+      if (!['true', 'false'].includes(options.reencode)) throw new Error('Invalid re-encode preference');
+      options.reencode = options.reencode === 'true';
+    }
     if (options.inputs !== undefined) throw new TypeError('Merge inputs must come from selected files');
     const result = await engine.enqueue({ files: inputs, operation: request.operation, format: request.format, options });
     updateFromEngine({});
@@ -343,21 +480,61 @@ function registerIPC() {
     try { return await fileAction(request, { window, allowed, backends }); }
     catch (error) { return { ok: false, reason: error.message }; }
   });
+  handle('finishGlobalWheel', async (page = 'converter') => {
+    if (!['converter', 'activity'].includes(page)) throw new Error('Invalid destination page');
+    hideGlobalWheel();
+    focusWindow();
+    if (page === 'activity' && window && !window.isDestroyed()) window.webContents.send('santara:global-page', page);
+  });
+  handle('selectGlobalOperation', async (request) => {
+    plainObject(request);
+    if (typeof request.capabilityId !== 'string' || typeof request.format !== 'string') throw new TypeError('Invalid operation');
+    const selected = pathList(request.files);
+    const inspected = selected.map((input) => files.find((file) => file.path === input)).filter(Boolean);
+    if (!inspected.length || inspected.length !== selected.length) throw new Error('Inspect dropped files before selecting an operation');
+    const available = (await capabilities()).find((entry) => entry.id === request.capabilityId && entry.available);
+    if (!available || !available.inputs.some((input) => input === '*' || inspected.some((file) => input === (file.isDirectory ? 'directory' : file.ext.toLowerCase())))) throw new Error('Operation is not available for this selection');
+    if ((available.outputs.length && !available.outputs.includes(request.format)) || (!available.outputs.length && request.format !== '')) throw new Error('Invalid output for this operation');
+    hideGlobalWheel();
+    focusWindow();
+    window.webContents.send('santara:global-operation', { capabilityId: request.capabilityId, format: request.format, files: inspected });
+  });
+  handle('preview', async (value) => {
+    registerPaths();
+    return previews.prepare(absolutePath(value));
+  });
+  handle('imagePreview', async (request) => {
+    plainObject(request);
+    const input = absolutePath(request.path);
+    if (!allowed.has(input)) throw new Error('Select this image before previewing it');
+    if (!['edit-image', 'background', 'crop', 'resize', 'rotate', 'flip', 'compress', 'strip-metadata'].includes(request.operation)) throw new Error('Unsupported image preview operation');
+    if (imagePreviewControllers.size >= 2) throw new Error('Preview is busy. Try again in a moment.');
+    const controller = new AbortController();
+    imagePreviewControllers.add(controller);
+    try {
+      const images = await import('./images.mjs');
+      const options = normalizeImageOptions(safeData(request.options || {}), images.imageOptionNames);
+      const preview = await images.previewImage({ input, operation: request.operation, options, signal: controller.signal });
+      return { url: preview.dataURL, width: preview.width, height: preview.height };
+    } finally { imagePreviewControllers.delete(controller); }
+  });
 }
 
 function secureSession() {
   const desktopSession = session.fromPartition('santara');
+  previews = createPreviewService({ backends, allowed });
+  desktopSession.protocol.handle('santara-media', (request) => previews.respond(request));
   desktopSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
   desktopSession.setPermissionCheckHandler(() => false);
   desktopSession.on('will-download', (event) => event.preventDefault());
   desktopSession.webRequest.onBeforeRequest((details, callback) => {
     const protocol = new URL(details.url).protocol;
-    callback({ cancel: !developmentURL && !['file:', 'data:', 'blob:', 'devtools:'].includes(protocol) });
+    callback({ cancel: !developmentURL && !['file:', 'data:', 'blob:', 'devtools:', 'santara-media:'].includes(protocol) });
   });
   desktopSession.webRequest.onHeadersReceived((details, callback) => {
     const policy = !developmentURL
-      ? "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"
-      : "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws://localhost:* ws://127.0.0.1:*; object-src 'none'; frame-src 'none'";
+      ? "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: santara-media:; connect-src santara-media:; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"
+      : "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: santara-media:; connect-src 'self' santara-media: ws://localhost:* ws://127.0.0.1:*; object-src 'none'; frame-src 'none'";
     callback({ responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': [policy] } });
   });
 }
@@ -366,10 +543,20 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   queueOpen(process.argv, process.cwd(), true);
-  app.on('second-instance', (_event, argv, cwd) => { queueOpen(argv, cwd); if (initialized) focusWindow(); });
+  app.on('second-instance', (_event, argv, cwd) => {
+    const request = wheelRequest(argv);
+    if (request?.mode) {
+      if (request.mode === 'hide') hideGlobalWheel();
+      else showGlobalWheel(request.mode, request.x, request.y);
+      return;
+    }
+    queueOpen(argv, cwd);
+    if (initialized) focusWindow();
+  });
   app.on('window-all-closed', () => { if (!tray) app.quit(); });
   app.on('activate', () => { if (initialized) focusWindow(); });
   app.on('before-quit', (event) => {
+    nativeWatcher?.kill();
     quitting = true;
     if (!initialized || flushed) return;
     event.preventDefault();
@@ -379,9 +566,11 @@ if (!app.requestSingleInstanceLock()) {
     shutdown = (async () => {
       await store.write('jobs', interrupted);
       await closeIntegrations();
+      for (const controller of imagePreviewControllers) controller.abort();
+      await previews?.close();
       for (const job of interrupted.filter((entry) => entry.status === 'queued')) await engine.cancel(job.id);
-      for (const job of jobs().filter((entry) => entry.status === 'running')) await engine.cancel(job.id);
-      while (jobs().some((job) => job.status === 'running')) {
+      for (const job of jobs().filter((entry) => ['preparing', 'processing'].includes(entry.status))) await engine.cancel(job.id);
+      while (jobs().some((job) => ['preparing', 'processing'].includes(job.status))) {
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
       await store.flush();
@@ -406,7 +595,12 @@ if (!app.requestSingleInstanceLock()) {
     secureSession();
     registerIPC();
     initialized = true;
-    createWindow();
+    const initialWheel = wheelRequest(process.argv);
+    const opensWheel = initialWheel && initialWheel.mode !== 'hide';
+    mainWindowHiddenForWheel = Boolean(opensWheel);
+    createWindow({ showOnReady: !opensWheel });
+    if (opensWheel) showGlobalWheel(initialWheel.mode, initialWheel.x, initialWheel.y);
+    startWindowsWatcher();
     syncTray();
     await drainOpenQueue();
   }).catch((error) => { console.error(error); dialog.showErrorBox('Santara could not start', error.message); app.quit(); });

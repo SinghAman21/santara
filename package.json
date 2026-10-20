@@ -11,7 +11,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "desktop": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && cross-env SANTARA_DEV_URL=http://127.0.0.1:5173 electron .\"",
+    "desktop": "npm run build:windows-hook && node scripts/desktop.mjs",
+    "build:windows-hook": "node scripts/build-windows-hook.mjs",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/*.test.mjs",
@@ -19,7 +20,7 @@
     "test:desktop": "node tests/electron-smoke.mjs",
     "manifest": "node scripts/export-capabilities.mjs",
     "icons": "node scripts/generate-icons.mjs",
-    "dist": "npm run build && npm run licenses && electron-builder --config electron-builder.yml",
+    "dist": "npm run build && npm run licenses && npm run build:windows-hook && electron-builder --config electron-builder.yml",
     "licenses": "node scripts/collect-licenses.mjs",
     "preview": "vite preview --host 127.0.0.1"
   },

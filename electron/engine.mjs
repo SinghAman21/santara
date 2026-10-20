@@ -6,6 +6,7 @@ import { spawn } from 'node:child_process';
 import { categoryFor, detectBackends, getCapabilities, mediaFormats, mediaDemuxers, videoFormats, audioEncoderFor, documentReaders, documentWriters } from './registry.mjs';
 import { convertSubtitles } from './subtitles.mjs';
 import { createArchive, extractArchive } from './archives.mjs';
+import { mediaOperationArgs, mediaMergeArgs } from './media.mjs';
 
 export { detectBackends, getCapabilities } from './registry.mjs';
 
@@ -57,6 +58,31 @@ const number = (value, fallback, min, max, integer = false) => {
   return result;
 };
 const clone = value => structuredClone(value);
+export function normalizeImageOptions(values, names) {
+  const options = Object.fromEntries(Object.entries(values).filter(([key]) => names.includes(key)));
+  for (const key of ['quality', 'compressionLevel', 'width', 'height', 'x', 'y', 'angle', 'cropX', 'cropY', 'cropWidth', 'cropHeight', 'brightness', 'saturation', 'contrast', 'padding']) {
+    if (typeof options[key] !== 'string') continue;
+    if (!options[key].trim()) delete options[key];
+    else options[key] = Number(options[key]);
+  }
+  for (const key of ['flipHorizontal', 'flipVertical', 'stripMetadata', 'autoOrient', 'progressive']) if (typeof options[key] === 'string') {
+    if (!['true', 'false'].includes(options[key])) throw new Error(`Invalid ${key}`);
+    options[key] = options[key] === 'true';
+  }
+  return options;
+}
+export function parseSegments(value) {
+  if (typeof value !== 'string' || value.length > 8000) throw new Error('Enter time ranges such as 0-5,10-15 (seconds)');
+  const ranges = value.split(',');
+  if (!ranges.length || ranges.length > 100) throw new Error('Split accepts 1–100 time ranges');
+  return ranges.map(range => {
+    const match = range.trim().match(/^(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)$/);
+    if (!match) throw new Error('Invalid split range. Use start-end seconds, separated by commas.');
+    const start = number(match[1], 0, 0, 604800), end = number(match[2], 0, 0, 604800);
+    if (end <= start) throw new Error('Each split range must end after it starts');
+    return { start, duration: end - start };
+  });
+}
 const abortError = () => Object.assign(new Error('Cancelled'), { name: 'AbortError' });
 const ensureActive = signal => { if (signal.aborted) throw abortError(); };
 const cropRectangle = (options, dimensions, video = false) => {
@@ -153,6 +179,8 @@ function ffmpegArgs(job, input, output, dimensions) {
     if (['mpeg4', 'wmv2'].includes(encoder)) args.push('-q:v', String(Math.max(2, Math.round(32 - number(options.quality, 75, 1, 100) * 0.3))));
   } else args.push('-map', '0:a:0', '-vn', '-c:a', encoder);
   if (job.operation === 'compress' && ['mp3', 'ogg', 'opus', 'm4a', 'wma'].includes(job.format)) args.push('-b:a', `${number(options.bitrate, 128, 16, 512, true)}k`);
+  if (options.sampleRate !== undefined) args.push('-ar', String(number(options.sampleRate, 44100, 8000, 192000, true)));
+  if (options.channels !== undefined) args.push('-ac', String(number(options.channels, 2, 1, 2, true)));
   if (job.operation === 'strip-metadata' || options.stripMetadata) args.push('-map_metadata', '-1', '-map_metadata:s', '-1', '-map_chapters', '-1');
   else args.push('-map_metadata', '0', '-map_chapters', '0');
   args.push('-progress', 'pipe:1', '-f', muxer, output);
@@ -262,7 +290,26 @@ export function createEngine({ onUpdate = () => {}, settings = {}, backends } = 
       } else if (cap.backend === 'ffmpeg') {
         let duration = 0;
         let dimensions;
-        if (detected.ffprobe?.available) {
+        let mergeMetadata;
+        let manifest;
+        if (job.operation === 'merge') {
+          if (!detected.ffprobe?.available) throw new Error('Merge requires FFprobe to validate every clip');
+          const paths = [input];
+          for (const [index, source] of (job.options.inputs || []).entries()) {
+            const extra = path.join(workspace, `merge-${index}.${path.extname(source).slice(1).toLowerCase()}`);
+            await safeCopy(source, extra, signal); await validateSignature(extra); paths.push(extra);
+          }
+          if (paths.length < 2) throw new Error('Merge requires at least two compatible files');
+          mergeMetadata = [];
+          for (const filename of paths) {
+            const result = await run(detected.ffprobe.path, ['-v', 'error', '-protocol_whitelist', 'file', '-f', mediaDemuxers[path.extname(filename).slice(1).toLowerCase()], '-show_streams', '-show_format', '-show_data_hash', 'sha256', '-of', 'json', filename], { ...runOptions, timeout: Math.min(runOptions.timeout, 10000) });
+            mergeMetadata.push(JSON.parse(result));
+          }
+          manifest = path.join(workspace, 'merge.txt');
+          await writeFile(manifest, paths.map(filename => `file '${path.basename(filename)}'`).join('\n') + '\n', { flag: 'wx', mode: 0o600 });
+          duration = mergeMetadata.reduce((total, metadata) => total + (Number(metadata.format?.duration) || 0), 0);
+        }
+        if (detected.ffprobe?.available && job.operation !== 'merge') {
           try {
             const json = await run(detected.ffprobe.path, ['-v', 'error', '-protocol_whitelist', 'file', '-f', mediaDemuxers[path.extname(job.input).slice(1).toLowerCase()], '-show_entries', 'format=duration:stream=codec_type,width,height:stream_side_data=rotation', '-of', 'json', input], { ...runOptions, timeout: Math.min(runOptions.timeout, 10000) });
             const metadata = JSON.parse(json);
@@ -274,9 +321,11 @@ export function createEngine({ onUpdate = () => {}, settings = {}, backends } = 
             }
           } catch (error) { ensureActive(signal); if (job.operation === 'crop') throw new Error(`Cannot inspect crop dimensions: ${error.message}`); }
         }
-        if (job.operation === 'trim') duration = Math.min(Math.max(0, duration - Number(job.options.start || 0)), Number(job.options.duration || 10));
+        if (['trim', 'split'].includes(job.operation)) duration = Math.min(Math.max(0, duration - Number(job.options.start || 0)), Number(job.options.duration || 10));
+        if (job.operation === 'speed') duration /= Number(job.options.factor || 1);
         let pending = '';
-        await run(detected.ffmpeg.path, ffmpegArgs(job, input, output, dimensions), { ...runOptions, onOutput: chunk => {
+        const args = job.operation === 'merge' ? mediaMergeArgs(job, manifest, output, mergeMetadata) : mediaOperationArgs(job, input, output, dimensions) || ffmpegArgs(job, input, output, dimensions);
+        await run(detected.ffmpeg.path, args, { ...runOptions, onOutput: chunk => {
           pending += chunk;
           const lines = pending.split('\n');
           pending = lines.pop().slice(-8192);
@@ -289,13 +338,7 @@ export function createEngine({ onUpdate = () => {}, settings = {}, backends } = 
       else if (cap.backend === 'sharp') {
         const images = await import('./images.mjs');
         ensureActive(signal);
-        const imageOptionNames = ['quality', 'compressionLevel', 'progressive', 'autoOrient', 'stripMetadata', 'width', 'height', 'x', 'y', 'angle', 'direction'];
-        const imageOptions = Object.fromEntries(Object.entries(job.options).filter(([key]) => imageOptionNames.includes(key)));
-        for (const key of ['quality', 'compressionLevel', 'width', 'height', 'x', 'y', 'angle']) {
-          if (typeof imageOptions[key] !== 'string') continue;
-          if (!imageOptions[key].trim()) delete imageOptions[key];
-          else imageOptions[key] = Number(imageOptions[key]);
-        }
+        const imageOptions = normalizeImageOptions(job.options, images.imageOptionNames);
         await images.convertImage({ input, output, operation: job.operation, format: job.format, options: imageOptions, signal });
       }
       else if (cap.backend === 'imagemagick') {
@@ -424,24 +467,33 @@ export function createEngine({ onUpdate = () => {}, settings = {}, backends } = 
         catch (error) { inspected.push({ path: path.resolve(filename), name: path.basename(filename), inspectionError: error.message }); }
       }
       const pdfs = inspected.filter(file => !file.inspectionError && !file.isDirectory && file.ext === 'pdf');
+      const segments = operation === 'split' ? parseSegments(options.segments) : null;
+      const mediaCategory = categoryFor(inspected.find(file => !file.inspectionError && ['audio', 'video'].includes(file.category))?.ext || '');
+      const mergeFiles = operation === 'merge' ? inspected.filter(file => !file.inspectionError && !file.isDirectory && file.category === mediaCategory) : [];
+      if (mergeFiles.length > 100) throw new Error('Merge accepts at most 100 files');
       const archiveInputs = inspected.filter(file => !file.inspectionError).filter((file, index, all) => !all.some((parent, parentIndex) => {
         if (parentIndex === index) return false;
         if (parent.path === file.path) return parentIndex < index;
         const relative = path.relative(parent.path, file.path);
         return parent.isDirectory && relative && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
       }));
-      const selected = operation === 'create-archive' && archiveInputs.length ? [archiveInputs[0], ...inspected.filter(file => file.inspectionError)] : operation === 'pdf-merge' && pdfs.length >= 2 ? [pdfs[0], ...inspected.filter(file => !pdfs.includes(file))] : inspected;
-      const additions = selected.map(file => {
-        const job = { id: randomUUID(), input: file.path, name: file.name, operation, format, status: 'queued', progress: 0, output: null, error: null, createdAt: new Date().toISOString(), options: { stripMetadata: config.stripMetadata, autoOrient: config.autoOrient !== false, ...clone(options), ...(operation === 'pdf-merge' ? { inputs: pdfs.slice(1).map(item => item.path) } : {}), ...(operation === 'create-archive' ? { inputs: archiveInputs.map(item => item.path) } : {}) } };
+      const selected = operation === 'create-archive' && archiveInputs.length ? [archiveInputs[0], ...inspected.filter(file => file.inspectionError)] : operation === 'pdf-merge' && pdfs.length >= 2 ? [pdfs[0], ...inspected.filter(file => !pdfs.includes(file))] : operation === 'merge' && mergeFiles.length >= 2 ? [mergeFiles[0], ...inspected.filter(file => !mergeFiles.includes(file))] : inspected;
+      let additions = selected.map(file => {
+        const job = { id: randomUUID(), input: file.path, name: file.name, operation, format, status: 'queued', progress: 0, output: null, error: null, createdAt: new Date().toISOString(), options: { stripMetadata: config.stripMetadata, autoOrient: config.autoOrient !== false, ...clone(options), ...(operation === 'merge' ? { inputs: mergeFiles.slice(1).map(item => item.path) } : {}), ...(operation === 'pdf-merge' ? { inputs: pdfs.slice(1).map(item => item.path) } : {}), ...(operation === 'create-archive' ? { inputs: archiveInputs.map(item => item.path) } : {}) } };
         try {
           if (file.inspectionError) throw new Error(file.inspectionError);
           if (file.isDirectory && operation !== 'create-archive') throw new Error('Directory selection must be expanded by the main process');
           if (operation === 'create-archive' && format === 'gz' && (archiveInputs.length !== 1 || archiveInputs[0].isDirectory)) throw new Error('GZIP requires exactly one regular file');
           if (operation === 'pdf-merge' && (pdfs.length < 2 || file !== pdfs[0])) throw new Error('Merge requires at least two compatible PDFs');
+          if (operation === 'merge' && (mergeFiles.length < 2 || file !== mergeFiles[0])) throw new Error('Merge requires at least two files of the same media category');
           capability(job);
         } catch (error) { job.status = 'skipped'; job.error = error.message; }
         return job;
       });
+      if (segments) {
+        if (additions.length * segments.length > 10000) throw new Error('Split would exceed the 10000-job limit');
+        additions = additions.flatMap(job => job.status === 'skipped' ? [job] : segments.map((segment, index) => ({ ...job, id: randomUUID(), options: { ...job.options, ...segment, filename: `${path.basename(job.input, path.extname(job.input))}-${String(index + 1).padStart(3, '0')}.${format}` } })));
+      }
       jobs.push(...additions);
       additions.forEach(emit);
       schedule();

@@ -165,6 +165,25 @@ export function getCapabilities(backends = {}, files = []) {
     capability.options.stripMetadata = { default: false };
     if (capability.operation === 'crop') capability.options = { ...capability.options, width: { min: 2, max: 16384, step: 2 }, height: { min: 2, max: 16384, step: 2 }, x: { min: 0, max: 16384 }, y: { min: 0, max: 16384 } };
   }
+  const extraMedia = {
+    visualize: { category: 'audio', label: 'Audio wave visualizer', filters: ['showwaves', 'color', 'overlay', 'format'], targets: ['mp4'], options: { width: { min: 2, max: 4096 }, height: { min: 2, max: 4096 }, fps: { min: 1, max: 60 }, style: ['point', 'line', 'p2p', 'cline'], backgroundColor: '#111827', waveColor: '#ff8a3d' } },
+    normalize: { category: 'audio', label: 'Normalize audio', filters: ['loudnorm', 'aresample'], options: { loudness: { min: -70, max: -5 }, truePeak: { min: -9, max: 0 }, loudnessRange: { min: 1, max: 50 } } },
+    channels: { category: 'audio', label: 'Change audio channels', filters: ['aresample'], options: { channels: [1, 2] } },
+    mute: { category: 'video', label: 'Mute video', filters: [], options: {} },
+    speed: { category: 'video', label: 'Change video speed', filters: ['setpts', 'atempo'], options: { factor: { min: 0.25, max: 4 } } },
+    snapshot: { category: 'video', label: 'Save video frame', filters: [], targets: ['png'], options: { time: { min: 0, max: 604800 } } },
+  };
+  for (const [operation, definition] of Object.entries(extraMedia)) {
+    const inputs = categories[definition.category].filter(ext => token(ffmpeg.demuxers, mediaDemuxers[ext]));
+    const targets = definition.targets || outputs.filter(format => definition.category === 'audio' ? ![...videoFormats, 'gif'].includes(format) : videoFormats.includes(format));
+    const available = !!ffmpeg.available && inputs.length > 0 && targets.length > 0 && definition.filters.every(filter => token(ffmpeg.filters, filter)) && (operation === 'snapshot' ? token(ffmpeg.encoders, 'png') && token(ffmpeg.muxers, 'image2pipe') : targets.every(format => outputs.includes(format)));
+    add(`${definition.category}:${operation}`, definition.label, definition.category, inputs, targets, 'ffmpeg', { operation, available, preservesMetadata: operation !== 'snapshot', options: { ...definition.options, quality: { min: 1, max: 100 } }, warning: operation === 'snapshot' ? 'Exports one frame at the selected time. Metadata is not preserved.' : operation === 'visualize' ? 'Creates an MP4 with an animated waveform and the source audio, entirely locally. Uses H.264/AAC re-encoding. The preview shows the overall envelope; export follows the audio in time.' : 'Re-encodes the first selected media stream. Supported metadata is copied unless removal is selected.' });
+  }
+  for (const category of ['audio', 'video']) for (const operation of ['split', 'merge']) {
+    const inputs = categories[category].filter(ext => token(ffmpeg.demuxers, mediaDemuxers[ext]));
+    const targets = outputs.filter(format => category === 'audio' ? ![...videoFormats, 'gif'].includes(format) : videoFormats.includes(format));
+    add(`${category}:${operation}`, `${operation === 'split' ? 'Split' : 'Merge'} ${category}`, category, inputs, targets, 'ffmpeg', { operation, available: !!ffmpeg.available && inputs.length > 0 && targets.length > 0 && (operation !== 'merge' || (!!backends.ffprobe?.available && token(ffmpeg.demuxers, 'concat'))), batch: operation === 'split', preservesMetadata: true, options: operation === 'split' ? { segments: '0-5,10-15' } : { reencode: ['true', 'false'] }, warning: operation === 'split' ? 'Enter start-end seconds, separated by commas. Each segment is a separate queued output; clips are re-encoded.' : 'Merges in selection order. Streams are validated before merging; incompatible dimensions or track layouts require preprocessing. Re-encoding is enabled by default; direct copy requires matching codecs and stream parameters.' });
+  }
   const coders = backends.imagemagick?.coders || {};
   const coder = ext => coders[ext === 'jpg' ? 'jpeg' : ext === 'tif' ? 'tiff' : ext];
   const imageInputs = categories.image.filter(ext => coder(ext)?.read);
@@ -191,6 +210,11 @@ export function getCapabilities(backends = {}, files = []) {
       warning: `${source.backend === 'sharp' ? 'Bundled raster conversion; 40 million pixel limit. ' : ''}Auto-orients by default. JPEG transparency is flattened onto white. Animated inputs use the first frame; metadata preservation is not guaranteed.`,
     });
   }
+  for (const operation of ['edit-image', 'background']) add(`image:${operation}`, operation === 'edit-image' ? 'Edit photo' : 'Add background', 'image', sharpInputs, sharpOutputs, 'sharp', {
+    operation, available: useSharp, preservesMetadata: true,
+    options: { quality: { min: 1, max: 100 }, width: { min: 1, max: 16384 }, height: { min: 1, max: 16384 }, padding: { min: 0, max: 16384 }, backgroundType: ['solid', 'gradient'], backgroundColor: '#fff4e8', backgroundColor2: '#e69b73', fit: ['inside', 'contain', 'cover', 'fill'], brightness: { min: 0, max: 4 }, saturation: { min: 0, max: 4 }, contrast: { min: 0, max: 4 } },
+    warning: 'Edits create a new file. Preview is reduced in size; exports use source pixels. Cropping uses oriented source coordinates. Solid and horizontal gradient backgrounds are supported. JPEG flattens transparency. First image frame only; 40 megapixel canvas limit.'
+  });
   add('image:svg', 'SVG input', 'image', ['svg', 'svgz'], [], 'imagemagick', { operation: 'convert', available: false, warning: 'SVG input is disabled: external resource isolation is not implemented.' });
   add('subtitle:convert', 'Convert subtitles', 'subtitle', ['srt', 'vtt'], ['srt', 'vtt', 'txt'], 'javascript', { operation: 'convert', warning: 'Cue text and timing retained; styling and cue settings are not preserved. TXT output omits timestamps and markup.' });
   for (const operation of ['compress', 'pdf-extract', 'pdf-merge', 'pdf-rotate']) add(`pdf:${operation}`, operation.replaceAll('-', ' '), 'pdf', ['pdf'], ['pdf'], 'qpdf', { operation, batch: operation !== 'pdf-merge', preservesMetadata: operation !== 'pdf-merge', options: operation === 'pdf-rotate' ? { angle: [90, 180, 270], pages: '1-z' } : operation === 'pdf-extract' ? { pages: '1-z' } : {}, warning: operation === 'pdf-merge' ? 'Document-level metadata is discarded when merging.' : 'PDF compression is structural and may not reduce file size.' });

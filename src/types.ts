@@ -19,6 +19,13 @@ export interface Bridge {
   reveal(path: string): Promise<unknown>;
   openOutput(path: string): Promise<unknown>;
   fileAction(request: { action: string; files: LocalFile[]; destination?: string }): Promise<unknown>;
+  preview?(path: string): Promise<{ url: string; width?: number; height?: number; duration?: number; waveform?: number[]; waveformDuration?: number }>;
+  imagePreview?(path: string, operation: string, options: Record<string, string>): Promise<{ url: string; width?: number; height?: number }>;
+  onWheelMode?(callback: (mode: string, newDrag?: boolean) => void): () => void;
+  finishGlobalWheel?(page?: 'converter' | 'activity'): Promise<void>;
+  selectGlobalOperation?(request: { capabilityId: string; format: string; files: LocalFile[] }): Promise<void>;
+  onGlobalOperation?(callback: (request: { capabilityId: string; format: string; files: LocalFile[] }) => void): () => void;
+  onGlobalPage?(callback: (page: 'converter' | 'activity') => void): () => void;
   onUpdate(callback: (update: Partial<Snapshot>) => void): () => void;
 }
 declare global { interface Window { santara?: Bridge } }

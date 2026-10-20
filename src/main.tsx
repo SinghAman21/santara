@@ -1,5 +1,9 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import App from './App';
 import './styles.css';
-createRoot(document.getElementById('root')!).render(<React.StrictMode><App /></React.StrictMode>);
+import App from './App';
+import GlobalWheelWindow from './GlobalWheelWindow';
+const root = createRoot(document.getElementById('root')!);
+const isGlobalWheel = new URLSearchParams(window.location.search).get('santara-wheel') === '1';
+if (isGlobalWheel) document.documentElement.classList.add('global-wheel-document');
+root.render(<React.StrictMode>{isGlobalWheel ? <GlobalWheelWindow /> : <App />}</React.StrictMode>);

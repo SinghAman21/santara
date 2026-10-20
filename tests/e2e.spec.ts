@@ -5,6 +5,7 @@ interface MockControl {
   state: Snapshot;
   calls: { method: string; value: unknown }[];
   emit(update: Partial<Snapshot>): void;
+  emitWheelMode(mode: string, newDrag?: boolean): void;
 }
 
 declare global { interface Window { __santaraTest: MockControl } }
@@ -29,10 +30,15 @@ test.beforeEach(async ({ page }) => {
         { id: 'image:convert', label: 'Convert image', category: 'image', inputs: ['png'], outputs: ['jpg', 'webp'], backend: 'imagemagick', available: true, batch: true, preservesMetadata: false },
         { id: 'audio:convert', label: 'Convert audio', category: 'audio', inputs: ['wav'], outputs: ['mp3'], backend: 'ffmpeg', available: true, batch: true, preservesMetadata: false },
         { id: 'subtitle:convert', label: 'Convert subtitles', category: 'subtitle', inputs: ['srt'], outputs: ['vtt'], backend: 'javascript', available: true, batch: true, preservesMetadata: false },
+        { id: 'image:edit-image', operation: 'edit-image', label: 'Edit photo', category: 'image', inputs: ['png'], outputs: ['png', 'jpg'], backend: 'sharp', available: true, batch: true, preservesMetadata: true },
+        { id: 'image:background', operation: 'background', label: 'Add background', category: 'image', inputs: ['png'], outputs: ['png', 'jpg'], backend: 'sharp', available: true, batch: true, preservesMetadata: true },
+        { id: 'audio:visualize', operation: 'visualize', label: 'Audio wave visualizer', category: 'audio', inputs: ['wav'], outputs: ['mp4'], backend: 'ffmpeg', available: true, batch: true, preservesMetadata: true },
+        { id: 'pdf:render', operation: 'render', label: 'Render PDF pages', category: 'pdf', inputs: ['pdf'], outputs: ['png', 'jpg'], backend: 'poppler', available: true, batch: true, preservesMetadata: false, options: { page: { min: 1, max: 100000 }, dpi: { min: 36, max: 600, default: 300 } } },
         { id: 'office:convert', label: 'Unavailable office conversion', category: 'document', inputs: ['png'], outputs: ['pdf'], backend: 'libreoffice', available: false, batch: true, preservesMetadata: false },
       ],
     };
     const listeners = new Set<(update: Partial<Snapshot>) => void>();
+    const wheelModeListeners = new Set<(mode: string, newDrag?: boolean) => void>();
     const calls: MockControl['calls'] = [];
     const emit = (update: Partial<Snapshot>) => {
       Object.assign(state, structuredClone(update));
@@ -55,9 +61,25 @@ test.beforeEach(async ({ page }) => {
       saveSettings: async patch => { record('saveSettings', patch); emit({ settings: { ...state.settings, ...patch } }); return structuredClone(state.settings); },
       pickOutput: async () => null, reveal: async () => undefined,
       openOutput: async () => undefined, fileAction: async () => undefined,
+      finishGlobalWheel: async destination => { record('finishGlobalWheel', destination); },
+      selectGlobalOperation: async request => { record('selectGlobalOperation', request); },
+      preview: async filename => {
+        record('preview', filename);
+        const waveform = Array.from({ length: 160 }, (_, index) => Math.abs(Math.sin(index * 0.27)) * (0.2 + Math.abs(Math.sin(index * 0.08)) * 0.6));
+        if (filename.endsWith('.wav')) {
+          const bytes = new Uint8Array(44 + 32000 * 2), view = new DataView(bytes.buffer);
+          const text = (offset: number, value: string) => bytes.set(new TextEncoder().encode(value), offset);
+          text(0, 'RIFF'); view.setUint32(4, bytes.length - 8, true); text(8, 'WAVEfmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true); view.setUint32(24, 8000, true); view.setUint32(28, 16000, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true); text(36, 'data'); view.setUint32(40, 64000, true);
+          for (let index = 0; index < 32000; index++) view.setInt16(44 + index * 2, Math.round(Math.sin(index * 440 * Math.PI * 2 / 8000) * 10000), true);
+          return { url: URL.createObjectURL(new Blob([bytes], { type: 'audio/wav' })), duration: 4, waveform };
+        }
+        const artwork = '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="800" height="600" fill="#e8e1c8"/><circle cx="520" cy="170" r="90" fill="#f29659"/><path d="M0 600L280 220L540 600Z" fill="#7d9271"/><path d="M220 600L610 300L800 600Z" fill="#465c43"/></svg>';
+        return { url: `data:image/svg+xml,${encodeURIComponent(artwork)}`, width: 800, height: 600, duration: 4, waveform };
+      },
+      onWheelMode: callback => { wheelModeListeners.add(callback); return () => { wheelModeListeners.delete(callback); }; },
       onUpdate: callback => { listeners.add(callback); return () => { listeners.delete(callback); }; },
     };
-    window.__santaraTest = { state, calls, emit };
+    window.__santaraTest = { state, calls, emit, emitWheelMode: (mode, newDrag) => { for (const listener of wheelModeListeners) listener(mode, newDrag); } };
     Object.defineProperty(window, 'santara', { configurable: true, value: api });
   });
 });
@@ -129,7 +151,7 @@ test('Shift drag and drop opens compatible operations after the mocked file boun
     const app = page.locator('.app');
     await app.dispatchEvent('dragenter', { dataTransfer: transfer });
     await app.dispatchEvent('dragover', { dataTransfer: transfer, shiftKey: true });
-    await expect(page.getByRole('heading', { name: 'A new format awaits.' })).toBeVisible();
+    await expect(page.getByRole('menu', { name: 'Convert', exact: true })).toBeVisible();
     expect(await page.evaluate(() => window.__santaraTest.calls.filter(call => call.method === 'droppedFiles'))).toEqual([]);
     await expect(page.locator('.file-row')).toHaveCount(0);
     await app.dispatchEvent('drop', { dataTransfer: transfer, shiftKey: true });
@@ -150,6 +172,97 @@ test('Shift drag and drop opens compatible operations after the mocked file boun
   } finally {
     await transfer.dispose();
   }
+});
+
+test('citrus wheel persists after modifier release and dropping a slice queues its format', async ({ page }, testInfo) => {
+  await page.goto('/');
+  const transfer = await page.evaluateHandle(() => {
+    const value = new DataTransfer();
+    value.items.add(new File(['Synthetic JPEG fixture; inspection boundary mocked'], 'photo.jpg', { type: 'image/png' }));
+    return value;
+  });
+  try {
+    const app = page.locator('.app');
+    await app.dispatchEvent('dragenter', { dataTransfer: transfer, clientX: 700, clientY: 400 });
+    await app.dispatchEvent('dragover', { dataTransfer: transfer, clientX: 700, clientY: 400, shiftKey: true });
+    await app.dispatchEvent('dragover', { dataTransfer: transfer, clientX: 710, clientY: 420, shiftKey: false });
+    const wheel = page.getByRole('menu', { name: 'Convert', exact: true });
+    await expect(wheel).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath('citrus-wheel.png') });
+    const jpg = wheel.getByRole('menuitem', { name: /^JPG/ });
+    await jpg.dispatchEvent('dragenter', { dataTransfer: transfer });
+    await expect(jpg).toHaveClass(/chosen/);
+    await jpg.dispatchEvent('drop', { dataTransfer: transfer });
+    await expect(page.locator('.drag-overlay')).toHaveCount(0);
+    expect(await page.evaluate(() => window.__santaraTest.calls.find(call => call.method === 'enqueue')?.value)).toMatchObject({ operation: 'convert', format: 'jpg' });
+  } finally { await transfer.dispose(); }
+});
+
+test('global citrus overlay accepts and queues a drop directly on a wheel slice', async ({ page }) => {
+  await page.goto('/?santara-wheel=1&mode=convert');
+  const transfer = await page.evaluateHandle(() => {
+    const value = new DataTransfer();
+    value.items.add(new File(['synthetic image fixture'], 'pixel.png', { type: 'image/png' }));
+    return value;
+  });
+  try {
+    const shell = page.locator('.global-wheel-shell');
+    await shell.dispatchEvent('dragenter', { dataTransfer: transfer });
+    const slice = page.locator('.citrus-segments [data-wheel-item="image:convert|jpg"]');
+    const accepted = await slice.evaluate((element, dataTransfer) => {
+      const event = new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer });
+      element.dispatchEvent(event);
+      return event.defaultPrevented;
+    }, transfer);
+    expect(accepted).toBe(true);
+    await expect(slice).toHaveClass(/chosen/);
+    await slice.dispatchEvent('drop', { dataTransfer: transfer });
+    await expect.poll(() => page.evaluate(() => window.__santaraTest.calls.find(call => call.method === 'enqueue')?.value)).toMatchObject({ operation: 'convert', format: 'jpg' });
+    expect(await page.evaluate(() => window.__santaraTest.calls.find(call => call.method === 'finishGlobalWheel')?.value)).toBe('activity');
+    await page.evaluate(() => window.__santaraTest.emitWheelMode('convert', true));
+    const nextTransfer = await page.evaluateHandle(() => {
+      const value = new DataTransfer();
+      value.items.add(new File(['synthetic audio fixture'], 'tone.wav', { type: 'audio/wav' }));
+      return value;
+    });
+    try {
+      await shell.dispatchEvent('dragenter', { dataTransfer: nextTransfer });
+      await expect(page.getByRole('menuitem', { name: /^MP3/ })).toBeVisible();
+      await expect(page.getByRole('menuitem', { name: /^JPG/ })).toHaveCount(0);
+    } finally { await nextTransfer.dispose(); }
+  } finally { await transfer.dispose(); }
+});
+
+test('keyboard wheel switches groups and highlights partial selection coverage', async ({ page }) => {
+  await page.goto('/');
+  await addFiles(page);
+  await page.getByRole('button', { name: 'Choose an operation' }).click();
+  await page.keyboard.press('Alt');
+  await expect(page.getByRole('tab', { name: /^Tools/ })).toHaveAttribute('aria-selected', 'true');
+  const edit = page.getByRole('menuitem', { name: /^Edit photo/ });
+  await expect(edit).toHaveAttribute('aria-label', /1 of 3 files/);
+  await edit.focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(page.getByRole('menuitem', { name: /^Add background/ })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
+test('PDF workspace labels the source preview and exports the selected page settings', async ({ page }, testInfo) => {
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Good things come in new formats.' })).toBeVisible();
+  await page.evaluate(() => window.__santaraTest.emit({ files: [{ id: 'pdf', path: '/fixtures/original.pdf', name: 'original.pdf', size: 100, ext: 'pdf', category: 'pdf' }] }));
+  await page.getByRole('button', { name: /^original\.pdf/ }).click();
+  await page.getByRole('button', { name: 'Render PDF pages · PNG' }).click();
+  const workspace = page.getByRole('dialog', { name: 'Render a page' });
+  await expect(workspace.getByRole('heading', { name: 'First page preview' })).toBeVisible();
+  await expect(workspace.getByRole('img')).toBeVisible();
+  await workspace.getByLabel('Page to render', { exact: true }).fill('2');
+  await workspace.getByLabel('Resolution (DPI)', { exact: true }).fill('144');
+  await page.screenshot({ path: testInfo.outputPath('pdf-workspace.png') });
+  await workspace.getByRole('button', { name: 'Render page', exact: true }).click();
+  expect(await page.evaluate(() => window.__santaraTest.calls.find(call => call.method === 'enqueue')?.value)).toMatchObject({ operation: 'render', format: 'png', options: { page: '2', dpi: '144' } });
+  await expect(workspace).toHaveCount(0);
 });
 
 test('keyboard picker supports arrows, Escape, and Ctrl K search', async ({ page }) => {

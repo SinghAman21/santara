@@ -46,6 +46,22 @@ try {
   const jpeg = path.join(temporary, 'native-image.jpg');
   await sharp({ create: { width: 96, height: 72, channels: 3, background: { r: 238, g: 138, b: 62 } } }).jpeg().toFile(jpeg);
   await renderer.evaluate((filename) => window.santara.inspectPaths([filename]), jpeg);
+  const dragData = await renderer.evaluateHandle(() => new DataTransfer());
+  try {
+    await renderer.locator('.file-row').filter({ hasText: 'native-image.jpg' }).dispatchEvent('dragstart', { dataTransfer: dragData, clientX: 620, clientY: 350 });
+    await renderer.locator('.app').dispatchEvent('dragenter', { dataTransfer: dragData, clientX: 620, clientY: 350 });
+    await renderer.locator('.app').dispatchEvent('dragover', { dataTransfer: dragData, altKey: true, clientX: 620, clientY: 350 });
+    const toolWheel = renderer.getByRole('menu', { name: 'Tools', exact: true });
+    await expect(toolWheel).toBeVisible();
+    const resizeSlice = toolWheel.getByRole('menuitem', { name: /^Resize/ });
+    await resizeSlice.dispatchEvent('dragenter', { dataTransfer: dragData });
+    await expect(resizeSlice).toHaveClass(/chosen/);
+    await resizeSlice.dispatchEvent('drop', { dataTransfer: dragData });
+    await expect(renderer.locator('.output-card')).toContainText(/resize image/i);
+    await renderer.getByRole('button', { name: 'Clear operation' }).click();
+  } finally {
+    await dragData.dispose();
+  }
   await renderer.getByRole('button', { name: /^native-image\.jpg/ }).click();
   await renderer.getByRole('dialog').getByRole('button', { name: /^convert image · PNG\b/i }).click();
   await renderer.getByRole('button', { name: 'Run operation', exact: true }).click();

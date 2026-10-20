@@ -1,0 +1,52 @@
+.citrus-rind {
+  background: radial-gradient(circle at 36% 27%, #ffcd8b, #f5a058 62%, #c96a37);
+  box-shadow: inset 0 0 0 4px #fff5dc, 0 17px 44px #713a1e3b;
+}
+
+.citrus-segments path {
+  fill: #ffe2b8;
+  stroke: #fff7e8;
+  stroke-width: 5;
+  filter: drop-shadow(0 3px 3px #a65c3033);
+}
+
+.citrus-segments path:nth-child(even) { fill: #ffdaaa; }
+.citrus-segments path.chosen { fill: #ef8748; stroke: #fff6df; }
+.citrus-label { color: #493526; text-shadow: 0 1px #fff8; }
+.citrus-label.chosen { color: #fff; text-shadow: 0 1px 2px #7d3d20; }
+.citrus-core {
+  background: radial-gradient(circle at 35% 28%, #fffdf6, #fff0da);
+  box-shadow: inset 0 0 0 5px #fff8ec, 0 4px 14px #824c2d38;
+}
+.wheel-file-badge {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  border-radius: 16px;
+  background: linear-gradient(145deg, #f69c58, #e97843);
+  box-shadow: 0 5px 14px #bc633c43, inset 0 1px #fff6;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .03em;
+  white-space: nowrap;
+}
+.wheel-mode-bar button { white-space: nowrap; flex-shrink: 0; }
+.wheel-mode-bar button:focus-visible, .wheel-pagination button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+[data-theme=dark] .citrus-rind {
+  background: radial-gradient(circle at 36% 27%, #d68c57, #9e512e 76%, #703d2a);
+  box-shadow: inset 0 0 0 4px #724a34, 0 17px 44px #0008;
+}
+[data-theme=dark] .citrus-segments path { fill: #664c34; stroke: #a77752; }
+[data-theme=dark] .citrus-segments path:nth-child(even) { fill: #755239; }
+[data-theme=dark] .citrus-segments path.chosen { fill: #cc7140; stroke: #ebad75; }
+[data-theme=dark] .citrus-label { color: #f3e3ca; text-shadow: 0 1px #3c2b20; }
+[data-theme=dark] .citrus-core {
+  background: radial-gradient(circle at 35% 28%, #493b2c, #302a23);
+  box-shadow: inset 0 0 0 5px #a37552, 0 4px 14px #0008;
+}

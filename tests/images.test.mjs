@@ -4,7 +4,7 @@ import * as fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import sharp from 'sharp';
-import { convertImage, imageCapabilities, inspectImage } from '../electron/images.mjs';
+import { convertImage, imageCapabilities, imageOptionNames, inspectImage, previewImage } from '../electron/images.mjs';
 
 async function fixture(context, { width = 8, height = 4, background = '#ff0000', format = 'png', orientation } = {}) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'santara-images-test-'));
@@ -151,6 +151,12 @@ test('animated WebP emits a first-frame warning and a single frame', async conte
   assert.equal(metadata.height, 2);
   assert.ok(!metadata.pages || metadata.pages === 1);
   assert.deepEqual([...await sharp(output).raw().toBuffer()].slice(0, 3), [255, 0, 0]);
+  const preview = await previewImage({ input, options: { padding: 1, backgroundColor: '#fff' } });
+  assert.match(preview.warnings.join(' '), /first frame/i);
+  const previewMetadata = await sharp(Buffer.from(preview.dataURL.split(',')[1], 'base64')).metadata();
+  assert.equal(previewMetadata.width, 4);
+  assert.equal(previewMetadata.height, 4);
+  assert.ok(!previewMetadata.pages || previewMetadata.pages === 1);
 });
 
 test('PNG quality does not quantize colour or alpha', async context => {
@@ -158,4 +164,213 @@ test('PNG quality does not quantize colour or alpha', async context => {
   await convertImage({ input, output, options: { quality: 1, stripMetadata: true } });
   assert.deepEqual(await sharp(output).raw().toBuffer(), await sharp(input).raw().toBuffer());
   assert.equal((await sharp(output).metadata()).isPalette, false);
+});
+
+test('the exported option contract includes the flat renderer recipe and is immutable', () => {
+  assert.ok(Object.isFrozen(imageOptionNames));
+  for (const name of ['cropX', 'cropY', 'cropWidth', 'cropHeight', 'width', 'height', 'angle', 'flipHorizontal', 'flipVertical', 'brightness', 'saturation', 'contrast', 'backgroundColor', 'backgroundColor2', 'backgroundType', 'padding', 'fit']) assert.ok(imageOptionNames.includes(name), name);
+});
+
+test('edit-image applies crop, rotation and both flips in recipe order before padding and background', async context => {
+  const { input, output } = await fixture(context, { width: 3, height: 2 });
+  const red = [255, 0, 0];
+  const green = [0, 255, 0];
+  const blue = [0, 0, 255];
+  const yellow = [255, 255, 0];
+  const magenta = [255, 0, 255];
+  const cyan = [0, 255, 255];
+  await sharp(Buffer.from([red, green, blue, yellow, magenta, cyan].flat()), { raw: { width: 3, height: 2, channels: 3 } }).png().toFile(input);
+  const result = await convertImage({ input, output, operation: 'edit-image', options: { cropX: 1, cropY: 0, cropWidth: 2, cropHeight: 2, width: 2, height: 2, angle: 90, flipHorizontal: true, flipVertical: true, padding: 1, backgroundColor: '#123', stripMetadata: true } });
+  assert.equal(result.width, 4);
+  assert.equal(result.height, 4);
+  const { data, info } = await sharp(output).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  const pixel = (left, top) => [...data.subarray((top * info.width + left) * 3, (top * info.width + left) * 3 + 3)];
+  assert.deepEqual(pixel(0, 0), [17, 34, 51]);
+  assert.deepEqual(pixel(1, 1), blue);
+  assert.deepEqual(pixel(2, 1), cyan);
+  assert.deepEqual(pixel(1, 2), green);
+  assert.deepEqual(pixel(2, 2), magenta);
+});
+
+test('recipe resize occurs before rotation and fit modes provide an exact canvas', async context => {
+  const { input, output, root } = await fixture(context);
+  await convertImage({ input, output, operation: 'edit-image', options: { cropWidth: 6, cropHeight: 4, width: 3, angle: 90, padding: 1 } });
+  const rotated = await sharp(output).metadata();
+  assert.equal(rotated.width, 4);
+  assert.equal(rotated.height, 5);
+  for (const fit of ['inside', 'contain', 'cover', 'fill']) {
+    const target = path.join(root, `${fit}.png`);
+    await convertImage({ input, output: target, operation: 'edit-image', options: { width: 8, height: 8, fit, stripMetadata: true } });
+    const { data, info } = await sharp(target).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    assert.equal(info.width, 8);
+    assert.equal(info.height, fit === 'inside' ? 4 : 8);
+    assert.equal(data[3], fit === 'contain' ? 0 : 255);
+  }
+});
+
+test('solid backgrounds blend alpha and gradient backgrounds are genuine generated raster pixels', async context => {
+  const { input, output, root } = await fixture(context, { width: 3, height: 2, background: '#00000000' });
+  await convertImage({ input, output, operation: 'background', options: { backgroundType: 'gradient', backgroundColor: '#f00', backgroundColor2: '#00f', stripMetadata: true } });
+  assert.equal((await sharp(output).metadata()).format, 'png');
+  const gradient = await sharp(output).removeAlpha().raw().toBuffer();
+  assert.deepEqual([...gradient], [255, 0, 0, 128, 0, 128, 0, 0, 255, 255, 0, 0, 128, 0, 128, 0, 0, 255]);
+  const solid = path.join(root, 'solid.png');
+  await sharp({ create: { width: 3, height: 2, channels: 4, background: '#ff000080' } }).png().toFile(input);
+  await convertImage({ input, output: solid, operation: 'background', options: { backgroundColor: '#0000ff', stripMetadata: true } });
+  const pixel = [...await sharp(solid).ensureAlpha().raw().toBuffer()].slice(0, 4);
+  assert.ok(Math.abs(pixel[0] - 128) <= 1);
+  assert.equal(pixel[1], 0);
+  assert.ok(Math.abs(pixel[2] - 127) <= 1);
+  assert.equal(pixel[3], 255);
+});
+
+test('background defaults to white while an empty edit recipe retains alpha', async context => {
+  const { input, output, root } = await fixture(context, { background: '#00000000' });
+  await convertImage({ input, output, operation: 'background', options: { stripMetadata: true } });
+  assert.deepEqual([...await sharp(output).ensureAlpha().raw().toBuffer()].slice(0, 4), [255, 255, 255, 255]);
+  const transparent = path.join(root, 'transparent.png');
+  await convertImage({ input, output: transparent, operation: 'edit-image', options: { stripMetadata: true, padding: 1 } });
+  assert.ok([...await sharp(transparent).ensureAlpha().raw().toBuffer()].every((value, index) => index % 4 !== 3 || value === 0));
+});
+
+test('brightness, saturation and contrast change color while preserving alpha', async context => {
+  const { input, root } = await fixture(context, { width: 1, height: 1, background: '#50647880' });
+  const base = [...await sharp(input).raw().toBuffer()];
+  for (const options of [{ brightness: 0 }, { brightness: 1.5 }, { saturation: 0 }, { contrast: 0 }, { contrast: 2 }]) {
+    const output = path.join(root, `${Object.keys(options)[0]}-${Object.values(options)[0]}.png`);
+    await convertImage({ input, output, operation: 'edit-image', options: { ...options, stripMetadata: true } });
+    const pixel = [...await sharp(output).ensureAlpha().raw().toBuffer()];
+    assert.equal(pixel[3], base[3]);
+    assert.notDeepEqual(pixel.slice(0, 3), base.slice(0, 3));
+    if (options.brightness === 0) assert.deepEqual(pixel.slice(0, 3), [0, 0, 0]);
+    if (options.saturation === 0) assert.ok(Math.max(...pixel.slice(0, 3)) - Math.min(...pixel.slice(0, 3)) <= 1);
+    if (options.contrast === 0) assert.deepEqual(pixel.slice(0, 3), [128, 128, 128]);
+    if (options.contrast === 2) assert.deepEqual(pixel.slice(0, 3), base.slice(0, 3).map(value => value * 2 - 128));
+  }
+});
+
+test('recipe crop uses oriented dimensions and metadata survives intermediate stages', async context => {
+  const { input, output, root } = await fixture(context, { format: 'jpeg', orientation: 6 });
+  const options = { cropY: 4, cropWidth: 4, cropHeight: 4, width: 2, angle: 90, flipHorizontal: true, padding: 1, backgroundType: 'gradient', backgroundColor: '#fff', backgroundColor2: '#000' };
+  await convertImage({ input, output, operation: 'edit-image', options });
+  const metadata = await sharp(output).metadata();
+  assert.equal(metadata.width, 4);
+  assert.equal(metadata.height, 4);
+  assert.ok(metadata.exif);
+  assert.ok(!metadata.orientation || metadata.orientation === 1);
+  const stripped = path.join(root, 'stripped.png');
+  await convertImage({ input, output: stripped, operation: 'edit-image', options: { ...options, stripMetadata: true } });
+  const strippedMetadata = await sharp(stripped).metadata();
+  assert.equal(strippedMetadata.exif, undefined);
+  assert.equal(strippedMetadata.icc, undefined);
+  await assert.rejects(convertImage({ input, output: path.join(root, 'bad.png'), operation: 'edit-image', options: { ...options, autoOrient: false } }), /cropY|bounds/);
+});
+
+test('invalid flat recipes and injected background sources fail without publishing', async context => {
+  const { input, output, root } = await fixture(context);
+  const recipes = [
+    { cropWidth: 3 }, { cropX: 7, cropWidth: 2, cropHeight: 1 }, { cropWidth: '2', cropHeight: 1 },
+    { width: 0 }, { width: 16385 }, { fit: 'outside' }, { fit: 'contain', width: 4 },
+    { angle: Infinity }, { angle: '90' }, { flipHorizontal: 'true' }, { flipVertical: 1 },
+    { brightness: -1 }, { brightness: NaN }, { saturation: 5 }, { contrast: '1' },
+    { padding: -1 }, { padding: 0.5 }, { padding: 16385 },
+    { backgroundType: 'svg' }, { backgroundColor: 'file:///etc/passwd' },
+    { backgroundColor: '<svg/>' }, { backgroundColor2: { input: '/etc/passwd' } },
+    { background: '/etc/passwd' }, { input: '/etc/passwd' }, { composite: [] },
+  ];
+  for (const options of recipes) await assert.rejects(convertImage({ input, output, operation: 'edit-image', options }), /Invalid|requires|bounds|Unsupported/);
+  await assert.rejects(fs.stat(output), /ENOENT/);
+  assert.deepEqual((await fs.readdir(root)).filter(name => name.startsWith('.santara-')), []);
+});
+
+test('recipe resize, rotation and padding enforce output pixel limits before allocation', async context => {
+  const { input, output } = await fixture(context);
+  for (const options of [{ width: 10000, height: 10000, fit: 'fill' }, { width: 16384 }, { width: 6000, height: 6000, fit: 'fill', angle: 45 }, { width: 10000, height: 3000, fit: 'fill', padding: 1000 }]) {
+    await assert.rejects(convertImage({ input, output, operation: 'edit-image', options }), /megapixel|width|height/);
+  }
+  await assert.rejects(fs.stat(output), /ENOENT/);
+});
+
+test('recipe exports are atomic, private, cannot overwrite files, and honor cancellation', async context => {
+  const { input, output, root } = await fixture(context, { width: 1800, height: 1800 });
+  const options = { backgroundType: 'gradient', backgroundColor: '#123', backgroundColor2: '#abc', padding: 1 };
+  await fs.writeFile(output, 'keep existing output');
+  await assert.rejects(convertImage({ input, output, operation: 'edit-image', options }), /EEXIST/);
+  assert.equal(await fs.readFile(output, 'utf8'), 'keep existing output');
+  await assert.rejects(convertImage({ input, output: input, operation: 'edit-image', options }), /differ/);
+  const cancelled = path.join(root, 'cancelled.png');
+  const controller = new AbortController();
+  const pending = convertImage({ input, output: cancelled, operation: 'background', options, signal: controller.signal });
+  setTimeout(() => controller.abort(), 10);
+  await assert.rejects(pending, { name: 'AbortError' });
+  await assert.rejects(fs.stat(cancelled), /ENOENT/);
+  const saved = path.join(root, 'saved.png');
+  await convertImage({ input, output: saved, operation: 'edit-image', options: { width: 10, stripMetadata: true } });
+  assert.equal((await fs.stat(saved)).mode & 0o777, 0o600);
+  assert.deepEqual((await fs.readdir(root)).filter(name => name.startsWith('.santara-')), []);
+});
+
+test('preview returns a bounded real PNG using the export recipe without filesystem writes', async context => {
+  const { input, output, root } = await fixture(context, { width: 80, height: 40 });
+  const options = { cropX: 10, cropWidth: 60, cropHeight: 40, width: 30, angle: 90, flipVertical: true, padding: 2, backgroundType: 'gradient', backgroundColor: '#123456', backgroundColor2: '#fedcba', contrast: 1.2, stripMetadata: true };
+  const before = await fs.readdir(root);
+  const preview = await previewImage({ input, options, maxWidth: 16, maxHeight: 16 });
+  assert.match(preview.dataURL, /^data:image\/png;base64,/);
+  assert.equal(preview.width, 11);
+  assert.equal(preview.height, 16);
+  assert.deepEqual(await fs.readdir(root), before);
+  const previewBytes = Buffer.from(preview.dataURL.split(',')[1], 'base64');
+  const metadata = await sharp(previewBytes).metadata();
+  assert.equal(metadata.width, preview.width);
+  assert.equal(metadata.height, preview.height);
+  assert.equal(metadata.format, 'png');
+  assert.equal(metadata.exif, undefined);
+  await convertImage({ input, output, operation: 'edit-image', options });
+  const expected = await sharp(output).resize({ width: 16, height: 16, fit: 'inside', withoutEnlargement: true }).raw().toBuffer();
+  assert.deepEqual(await sharp(previewBytes).raw().toBuffer(), expected);
+});
+
+test('preview defaults to no enlargement and rejects invalid bounds, unsafe input and aborted work', async context => {
+  const { input, root } = await fixture(context, { format: 'jpeg', orientation: 6 });
+  const preview = await previewImage({ input });
+  assert.equal(preview.width, 4);
+  assert.equal(preview.height, 8);
+  for (const bounds of [{ maxWidth: 2049 }, { maxHeight: 0 }, { maxWidth: '16' }]) await assert.rejects(previewImage({ input, ...bounds }), /maxWidth|maxHeight/);
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(previewImage({ input, signal: controller.signal }), { name: 'AbortError' });
+  const unsafe = path.join(root, 'unsafe.png');
+  await fs.writeFile(unsafe, '<svg><image href="file:///etc/passwd"/></svg>');
+  await assert.rejects(previewImage({ input: unsafe }), /SVG/);
+  await assert.rejects(previewImage({ input, options: { backgroundColor: { input: unsafe } } }), /backgroundColor/);
+});
+
+test('new exports and preview share the bounded decoder and reject input symlinks', async context => {
+  const { input, output, root } = await fixture(context, { format: 'jpeg' });
+  const linked = path.join(root, 'linked.jpg');
+  await fs.symlink(input, linked);
+  for (const operation of ['edit-image', 'background']) await assert.rejects(convertImage({ input: linked, output, operation }), /ELOOP/);
+  await assert.rejects(previewImage({ input: linked }), /ELOOP/);
+  const bytes = await fs.readFile(input);
+  const marker = bytes.indexOf(Buffer.from([0xff, 0xc0]));
+  assert.ok(marker >= 0);
+  bytes.writeUInt16BE(5000, marker + 5);
+  bytes.writeUInt16BE(10000, marker + 7);
+  await fs.writeFile(input, bytes);
+  for (const operation of ['edit-image', 'background']) await assert.rejects(convertImage({ input, output, operation, options: { width: 1 } }), /pixel limit|megapixel/i);
+  await assert.rejects(previewImage({ input, maxWidth: 1, maxHeight: 1 }), /pixel limit|megapixel/i);
+  await assert.rejects(fs.stat(output), /ENOENT/);
+});
+
+test('preview enforces its default size bound and aborts in-flight recipes without writes', async context => {
+  const { input, root } = await fixture(context, { width: 2400, height: 1200 });
+  const preview = await previewImage({ input });
+  assert.equal(preview.width, 1024);
+  assert.equal(preview.height, 512);
+  const before = await fs.readdir(root);
+  const controller = new AbortController();
+  const pending = previewImage({ input, options: { backgroundType: 'gradient', padding: 2 }, signal: controller.signal });
+  setTimeout(() => controller.abort(), 10);
+  await assert.rejects(pending, { name: 'AbortError' });
+  assert.deepEqual(await fs.readdir(root), before);
 });
