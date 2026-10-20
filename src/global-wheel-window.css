@@ -23,7 +23,7 @@ html.global-wheel-document body { min-width: 0; }
 .global-wheel-card {
   width: 380px;
   max-width: 100vw;
-  padding: 10px 10px 14px;
+  padding: 8px;
   border: 1px solid #fff9;
   border-radius: 26px;
   background: #fffcf2e8;
@@ -31,20 +31,7 @@ html.global-wheel-document body { min-width: 0; }
   backdrop-filter: blur(14px);
 }
 
-.global-wheel-drag-label {
-  margin: 0 auto 8px;
-  width: fit-content;
-  padding: 6px 12px;
-  border: 1px solid #edc8a0;
-  border-radius: 20px;
-  background: #fff9ee;
-  color: #98633c;
-  font-size: 11px;
-}
-
 .global-wheel-card .citrus-wheel { width: 360px; margin: auto; }
-.global-wheel-card .wheel-description { margin-top: 8px; }
-.global-wheel-card .wheel-description > span { color: #786754; }
 .global-wheel-cancel {
   position: absolute;
   top: 4px;
@@ -60,7 +47,5 @@ html.global-wheel-document body { min-width: 0; }
 }
 
 [data-theme=dark] .global-wheel-card { background: #26221de8; border-color: #fff2; }
-[data-theme=dark] .global-wheel-drag-label,
 [data-theme=dark] .global-wheel-cancel { background: #3b3026; color: #f1d8be; border-color: #855b3e; }
 [data-theme=dark] .global-wheel-shell { color: #f1d8be; }
-[data-theme=dark] .global-wheel-card .wheel-description > span { color: #c8b19a; }

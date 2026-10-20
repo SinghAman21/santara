@@ -61,7 +61,7 @@ node --input-type=module --check < extension.js && python3 -m json.tool metadata
 
 ## Known limitations
 
-- Linux placement uses Electron's XWayland pointer coordinates rather than GNOME stage coordinates; mixed-DPI and multi-monitor layouts still need manual verification.
+- Linux placement uses GNOME pointer coordinates passed to the host, falling back to Electron's cursor location when unavailable; mixed-DPI and multi-monitor layouts still need manual verification.
 - The integration cannot force a wheel over arbitrary client windows or receive the drag's URI list. The Electron window still needs to be the drop destination for file contents.
 - External XDND drag updates arrive while the pointer moves. Modifier polling runs every 50 ms during the drag.
 - The command template is implemented and targets Santara's installed single-instance CLI. The optional URI receiver is not registered or supported.

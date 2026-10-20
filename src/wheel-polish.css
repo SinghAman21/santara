@@ -15,9 +15,12 @@
 .citrus-label { color: #493526; text-shadow: 0 1px #fff8; }
 .citrus-label.chosen { color: #fff; text-shadow: 0 1px 2px #7d3d20; }
 .citrus-core {
+  pointer-events: none;
+  cursor: default;
   background: radial-gradient(circle at 35% 28%, #fffdf6, #fff0da);
   box-shadow: inset 0 0 0 5px #fff8ec, 0 4px 14px #824c2d38;
 }
+.citrus-core .santara-mark { width: 50px; height: 56px; filter: drop-shadow(0 2px 2px #8f4a2830); }
 .wheel-file-badge {
   display: grid;
   place-items: center;

@@ -234,7 +234,7 @@ function wheelRequest(argv) {
 function placeWheel(x, y) {
   if (!globalWheelWindow || globalWheelWindow.isDestroyed()) return;
   const pointer = screen.getCursorScreenPoint();
-  const point = process.platform === 'linux' || !Number.isFinite(x) || !Number.isFinite(y) ? pointer : { x, y };
+  const point = Number.isFinite(x) && Number.isFinite(y) ? { x, y } : pointer;
   const display = screen.getDisplayNearestPoint(point);
   const [width, height] = globalWheelWindow.getSize();
   const bounds = display.workArea;
@@ -542,7 +542,7 @@ function registerIPC() {
     if (!inspected.length || inspected.length !== selected.length || inspected.some((file) => file.isDirectory || file.category !== 'image')) throw new Error('Select inspected image files first');
     const capability = (await capabilities()).find((entry) => entry.id === request.capabilityId && entry.available && entry.category === 'image');
     const operation = capability?.operation || capability?.id.split(':').pop();
-    if (!capability || !['compress', 'crop', 'resize', 'rotate', 'flip', 'background', 'edit-image', 'strip-metadata'].includes(operation)) throw new Error('Image tool is unavailable');
+    if (!capability || !['compress', 'crop', 'resize', 'rotate', 'flip', 'background', 'edit-image', 'metadata', 'strip-metadata'].includes(operation)) throw new Error('Image tool is unavailable');
     if (!inspected.every((file) => capability.inputs.includes(file.ext))) throw new Error('The selected tool does not support every image');
     const format = request.format || capability.outputs.find((output) => output === inspected[0].ext) || capability.outputs[0];
     if (!capability.outputs.includes(format)) throw new Error('Unsupported image output format');
@@ -607,7 +607,7 @@ function registerIPC() {
     plainObject(request);
     const input = absolutePath(request.path);
     if (!allowed.has(input)) throw new Error('Select this image before previewing it');
-    if (!['edit-image', 'background', 'crop', 'resize', 'rotate', 'flip', 'compress', 'strip-metadata'].includes(request.operation)) throw new Error('Unsupported image preview operation');
+    if (!['edit-image', 'background', 'crop', 'resize', 'rotate', 'flip', 'compress', 'metadata', 'strip-metadata'].includes(request.operation)) throw new Error('Unsupported image preview operation');
     if (imagePreviewControllers.size >= 2) throw new Error('Preview is busy. Try again in a moment.');
     const controller = new AbortController();
     imagePreviewControllers.add(controller);

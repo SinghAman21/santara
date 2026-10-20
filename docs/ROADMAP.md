@@ -4,7 +4,7 @@ This is a one-session continuation plan. Implemented means code exists; optional
 
 | Area | Status | Delivered behavior / next implementation |
 | --- | --- | --- |
-| Built-in raster images | Partial | Sharp-backed JPG, PNG, WebP, TIFF, AVIF conversion and image operations; image tools open a separate local-preview editor with draggable crop handles/presets, resize/fit, rotate/flip, solid/gradient/transparent backgrounds, basic adjustments, compression presets, and metadata stripping. Add richer adjustment controls, metadata inspection/editing, annotation/redaction/collage, local-image backgrounds, and package-level fixture verification. |
+| Built-in raster images | Partial | Sharp-backed JPG, PNG, WebP, TIFF, AVIF conversion and image operations; tools open a local-preview editor with fit/zoom/pan, editable final background canvas defaults, editable EXIF date/artist/copyright/description fields, copy-based metadata deletion, and size-checked compression including palette-quantized PNG. Add richer adjustment controls, full metadata inspection, annotation/redaction/collage, and local-image backgrounds. |
 | Subtitles | Implemented | SRT/VTT conversion and TXT output. Preserve timing where applicable; styling/settings and TXT timestamps have explicit loss warnings. |
 | Archives | Implemented with limits | ZIP/TAR/GZ creation/extraction with mature libraries and bounded resource/path policies. Keep traversal, link, collision, malformed-header, and decompression tests. |
 | Audio/video basics | Implemented, optional FFmpeg | Convert, compress, trim, crop, resize, rotate, flip, GIF, audio extraction. Detect required codecs/filters and verify real output with FFprobe. |

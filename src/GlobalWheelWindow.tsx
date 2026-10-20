@@ -79,6 +79,7 @@ export default function GlobalWheelWindow() {
     : [...new Map(snapshot.capabilities
       .filter(capability => capability.available && capability.outputs.length)
       .filter(capability => mode !== 'tools' || operationName(capability) !== 'create-archive')
+      .filter(capability => mode !== 'tools' || !(capability.category === 'image' && operationName(capability) === 'strip-metadata'))
       .filter(capability => mode !== 'tools' || !selectedCategories.size || selectedCategories.has(capability.category))
       .filter(capability => mode === 'convert'
         ? ['convert', 'render'].includes(operationName(capability))
@@ -159,16 +160,15 @@ export default function GlobalWheelWindow() {
     event.dataTransfer.dropEffect = 'copy';
   }} onDrop={event => void onDrop(event)}>
     <div className="global-wheel-card">
-      <div className="global-wheel-drag-label">{working ? 'Adding to your local queue…' : 'Drop on a slice'}</div>
       <RadialWheel
         label={mode === 'convert' ? 'Convert' : mode === 'tools' ? 'Tools' : 'File actions'}
         subtitle={externalFiles.some(file => !file.ext) ? 'Image routes are shown provisionally · drop to verify' : 'Hold the drag · hover a slice · release to apply'}
         items={items.length ? items : [{ id: 'unknown', label: 'Inspect on drop', detail: 'We will show supported choices after inspection' }]}
         selected={choice}
-        preview={<span className="wheel-file-badge">{hints.length > 1 ? `${hints.length} files` : hints[0]?.ext.toUpperCase() || 'FILE'}</span>}
         onHighlight={highlight}
         onChoose={highlight}
         dragging
+        hideDescription
       />
     </div>
     <button className="global-wheel-cancel" onClick={() => void api.finishGlobalWheel?.('converter')} aria-label="Close drop wheel">×</button>

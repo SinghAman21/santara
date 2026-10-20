@@ -32,6 +32,8 @@ test.beforeEach(async ({ page }) => {
         { id: 'subtitle:convert', label: 'Convert subtitles', category: 'subtitle', inputs: ['srt'], outputs: ['vtt'], backend: 'javascript', available: true, batch: true, preservesMetadata: false },
         { id: 'image:edit-image', operation: 'edit-image', label: 'Edit photo', category: 'image', inputs: ['png'], outputs: ['png', 'jpg'], backend: 'sharp', available: true, batch: true, preservesMetadata: true },
         { id: 'image:background', operation: 'background', label: 'Add background', category: 'image', inputs: ['png'], outputs: ['png', 'jpg'], backend: 'sharp', available: true, batch: true, preservesMetadata: true },
+        { id: 'image:compress', operation: 'compress', label: 'Compress', category: 'image', inputs: ['png'], outputs: ['png'], backend: 'sharp', available: true, batch: true, preservesMetadata: true },
+        { id: 'image:metadata', operation: 'metadata', label: 'Edit metadata', category: 'image', inputs: ['png'], outputs: ['png'], backend: 'sharp', available: true, batch: true, preservesMetadata: true },
         { id: 'audio:visualize', operation: 'visualize', label: 'Audio wave visualizer', category: 'audio', inputs: ['wav'], outputs: ['mp4'], backend: 'ffmpeg', available: true, batch: true, preservesMetadata: true },
         { id: 'archive:create', operation: 'create-archive', label: 'Create archive', category: 'archive', inputs: ['*'], outputs: ['zip'], backend: 'javascript', available: true, batch: false, preservesMetadata: false },
         { id: 'pdf:render', operation: 'render', label: 'Render PDF pages', category: 'pdf', inputs: ['pdf'], outputs: ['png', 'jpg'], backend: 'poppler', available: true, batch: true, preservesMetadata: false, options: { page: { min: 1, max: 100000 }, dpi: { min: 36, max: 600, default: 300 } } },
@@ -77,6 +79,7 @@ test.beforeEach(async ({ page }) => {
         const artwork = '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="800" height="600" fill="#e8e1c8"/><circle cx="520" cy="170" r="90" fill="#f29659"/><path d="M0 600L280 220L540 600Z" fill="#7d9271"/><path d="M220 600L610 300L800 600Z" fill="#465c43"/></svg>';
         return { url: `data:image/svg+xml,${encodeURIComponent(artwork)}`, width: 800, height: 600, duration: 4, waveform };
       },
+      imagePreview: async () => ({ url: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="800" height="600" fill="#ee8844"/></svg>')}`, width: 800, height: 600, sourceWidth: 800, sourceHeight: 600 }),
       onWheelMode: callback => { wheelModeListeners.add(callback); return () => { wheelModeListeners.delete(callback); }; },
       onUpdate: callback => { listeners.add(callback); return () => { listeners.delete(callback); }; },
     };
@@ -247,14 +250,19 @@ test('global image tools wheel shows image tools and hides generic archive creat
     await expect(page.getByRole('menuitem', { name: /^Edit photo/ })).toBeVisible();
     await expect(page.getByRole('menuitem', { name: /^Add background/ })).toBeVisible();
     await expect(page.getByRole('menuitem', { name: /^Create archive/ })).toHaveCount(0);
+    await expect(shell.locator('.citrus-core .santara-mark')).toBeVisible();
+    await expect(shell.locator('.citrus-core')).toHaveText('');
+    await expect(shell.getByText('Drop on a slice')).toHaveCount(0);
+    await expect(shell.locator('.wheel-description')).toHaveCount(0);
   } finally { await transfer.dispose(); }
 });
 
-test('global wheel shows provisional image routes before native file metadata arrives', async ({ page }) => {
+test('global wheel shows provisional image routes without extra helper captions', async ({ page }) => {
   await page.goto('/?santara-wheel=1&mode=tools');
   await expect(page.getByRole('menuitem', { name: /^Edit photo/ })).toBeVisible();
   await expect(page.getByRole('menuitem', { name: /^Add background/ })).toBeVisible();
-  await expect(page.getByText(/Image routes are shown provisionally/)).toBeVisible();
+  await expect(page.locator('.wheel-description')).toHaveCount(0);
+  await expect(page.getByText('Drop on a slice')).toHaveCount(0);
 });
 
 test('keyboard wheel switches groups and highlights partial selection coverage', async ({ page }) => {
@@ -270,6 +278,32 @@ test('keyboard wheel switches groups and highlights partial selection coverage',
   await expect(page.getByRole('menuitem', { name: /^Add background/ })).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
+test('image editor exposes a real padded background canvas and directional zoom navigation', async ({ page }) => {
+  await page.goto('/');
+  await addFiles(page);
+  await page.getByRole('button', { name: 'Choose an operation' }).click();
+  await page.keyboard.press('Alt');
+  await page.getByRole('menuitem', { name: /^Add background/ }).click();
+  const backgroundEditor = page.getByRole('dialog', { name: 'Add background' });
+  await expect(backgroundEditor.getByLabel('Canvas width')).toHaveValue('864');
+  await expect(backgroundEditor.getByLabel('Canvas height')).toHaveValue('664');
+  await expect(backgroundEditor.getByLabel('Padding')).toHaveValue('32');
+  const color = backgroundEditor.getByRole('button', { name: 'Choose #ef8354 background' });
+  await color.click();
+  await expect(color).toHaveAttribute('aria-pressed', 'true');
+  await expect(backgroundEditor.locator('.image-tool-preview-wrap')).toHaveCSS('background-color', 'rgb(239, 131, 84)');
+  await backgroundEditor.getByRole('button', { name: 'Close editor' }).click();
+
+  await page.getByRole('button', { name: 'Choose an operation' }).click();
+  await page.keyboard.press('Alt');
+  await page.getByRole('menuitem', { name: /^Edit photo/ }).click();
+  const photoEditor = page.getByRole('dialog', { name: 'Edit photo' });
+  await photoEditor.getByRole('button', { name: 'Zoom in' }).click();
+  await photoEditor.getByRole('button', { name: 'Move image left' }).click();
+  await expect(photoEditor.locator('.image-tool-preview')).toHaveAttribute('style', /--image-pan-x: -48px/);
+  await expect(photoEditor.getByRole('button', { name: 'Move image up' })).toBeEnabled();
 });
 
 test('PDF workspace labels the source preview and exports the selected page settings', async ({ page }, testInfo) => {

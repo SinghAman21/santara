@@ -197,15 +197,16 @@ export function getCapabilities(backends = {}, files = []) {
     ...(useSharp ? [{ backend: 'sharp', inputs: sharpInputs, outputs: sharpOutputs, available: true, suffix: '' }] : []),
     { backend: 'imagemagick', inputs: imageInputs, outputs: imageOutputs, available: !!backends.imagemagick?.available && imageInputs.length > 0 && imageOutputs.length > 0, suffix: useSharp ? ':imagemagick' : '' },
   ];
-  for (const source of imageBackends) for (const operation of ['convert', 'compress', 'resize', 'crop', 'rotate', 'flip', 'strip-metadata']) {
-    add(`image:${operation}${source.suffix}`, `${operation.replaceAll('-', ' ')} image`, 'image', source.inputs, source.outputs, source.backend, {
+  for (const source of imageBackends) for (const operation of ['convert', 'compress', 'resize', 'crop', 'rotate', 'flip', ...(source.backend === 'sharp' ? ['metadata'] : []), 'strip-metadata']) {
+    const label = operation === 'metadata' ? 'Edit metadata' : operation === 'strip-metadata' ? 'Delete metadata' : `${operation.replaceAll('-', ' ')} image`;
+    add(`image:${operation}${source.suffix}`, label, 'image', source.inputs, source.outputs, source.backend, {
       operation, available: source.available,
       options: {
         stripMetadata: { default: false }, autoOrient: { default: true },
         ...(['resize', 'crop'].includes(operation) ? { width: { min: 1, max: 16384 }, height: { min: 1, max: 16384 }, ...(operation === 'crop' ? { x: { min: 0, max: 16384 }, y: { min: 0, max: 16384 } } : operation === 'resize' ? { fit: ['inside', 'cover', 'fill'] } : {}) }
           : operation === 'rotate' ? { angle: { min: -360, max: 360 } }
             : operation === 'flip' ? { direction: ['horizontal', 'vertical'] }
-              : ['convert', 'compress'].includes(operation) ? { quality: { min: 1, max: 100 } } : {}),
+              : ['convert', 'compress'].includes(operation) ? { quality: { min: 1, max: 100 } } : operation === 'metadata' ? { artist: 'text', copyright: 'text', description: 'text' } : {}),
       },
       warning: `${source.backend === 'sharp' ? 'Bundled raster conversion; 40 million pixel limit. ' : ''}Auto-orients by default. JPEG transparency is flattened onto white. Animated inputs use the first frame; metadata preservation is not guaranteed.`,
     });

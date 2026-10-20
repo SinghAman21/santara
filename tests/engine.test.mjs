@@ -421,6 +421,7 @@ test('bundled Sharp converts PNG to JPEG and JPEG to PNG through engine atomic o
     const last = (await settled(engine)).at(-1);
     assert.equal(last.status, 'completed', last.error);
     await validateSignature(last.output);
+    assert.equal(path.dirname(last.output), path.dirname(first.output), 'default outputs stay beside their source image');
     assert.ok(!(await readdir(directory)).some(name => name.startsWith('.santara-')));
   });
 });

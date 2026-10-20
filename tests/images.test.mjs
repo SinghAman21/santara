@@ -102,6 +102,77 @@ test('metadata is retained by default and removed explicitly', async context => 
   }
 });
 
+test('image compression publishes a smaller result and refuses to create a larger copy', async context => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'santara-compress-test-'));
+  context.after(() => fs.rm(root, { recursive: true, force: true }));
+  const input = path.join(root, 'photo.jpg');
+  const output = path.join(root, 'photo-compressed.jpg');
+  const width = 640, height = 480;
+  const pixels = Buffer.alloc(width * height * 3);
+  let seed = 17;
+  for (let index = 0; index < pixels.length; index++) {
+    seed = (seed * 48271) % 2147483647;
+    pixels[index] = seed & 255;
+  }
+  await sharp(pixels, { raw: { width, height, channels: 3 } }).jpeg({ quality: 100, chromaSubsampling: '4:4:4' }).toFile(input);
+  await convertImage({ input, output, operation: 'compress', format: 'jpeg', options: { quality: 70, stripMetadata: true } });
+  assert.ok((await fs.stat(output)).size < (await fs.stat(input)).size);
+
+  const tiny = path.join(root, 'tiny.jpg');
+  const tinyOutput = path.join(root, 'tiny-compressed.jpg');
+  await sharp({ create: { width: 1, height: 1, channels: 3, background: '#fff' } }).jpeg({ quality: 90 }).toFile(tiny);
+  await assert.rejects(convertImage({ input: tiny, output: tinyOutput, operation: 'compress', format: 'jpeg' }), /already highly optimized/);
+  await assert.rejects(fs.stat(tinyOutput), /ENOENT/);
+});
+
+test('PNG compression uses palette quantization and produces a visibly smaller file', async context => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'santara-png-compress-test-'));
+  context.after(() => fs.rm(root, { recursive: true, force: true }));
+  const input = path.join(root, 'gradient.png');
+  const output = path.join(root, 'gradient-compressed.png');
+  const width = 512, height = 384;
+  const pixels = Buffer.alloc(width * height * 3);
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    const offset = (y * width + x) * 3;
+    pixels[offset] = (x + y) % 256;
+    pixels[offset + 1] = (x * 3 + y) % 256;
+    pixels[offset + 2] = (x + y * 3) % 256;
+  }
+  await sharp(pixels, { raw: { width, height, channels: 3 } }).png({ compressionLevel: 1 }).toFile(input);
+  await convertImage({ input, output, operation: 'compress', format: 'png', options: { quality: 70, stripMetadata: true } });
+  assert.ok((await fs.stat(output)).size < (await fs.stat(input)).size * 0.9);
+  assert.equal((await sharp(output).metadata()).format, 'png');
+});
+
+test('background tool creates requested final canvas with visible solid padding', async context => {
+  const { input, root } = await fixture(context, { width: 24, height: 12, format: 'png', background: '#ff0000' });
+  const output = path.join(root, 'canvas.png');
+  await convertImage({ input, output, operation: 'background', format: 'png', options: { width: 88, height: 76, padding: 20, fit: 'contain', backgroundType: 'solid', backgroundColor: '#00ff00', stripMetadata: true } });
+  const result = await sharp(output).metadata();
+  assert.equal(result.width, 88);
+  assert.equal(result.height, 76);
+  const { data, info } = await sharp(output).raw().toBuffer({ resolveWithObject: true });
+  assert.deepEqual([...data.subarray(0, 3)], [0, 255, 0]);
+  const center = ((Math.floor(info.height / 2) * info.width) + Math.floor(info.width / 2)) * info.channels;
+  assert.ok(data[center] > 240 && data[center + 1] < 10 && data[center + 2] < 10);
+});
+
+test('metadata editor writes the requested EXIF text fields and previews source dimensions', async context => {
+  const { input, root } = await fixture(context, { width: 24, height: 12, format: 'jpeg' });
+  const output = path.join(root, 'metadata-copy.jpg');
+  await convertImage({ input, output, operation: 'metadata', format: 'jpeg', options: { artist: 'Santara Artist', copyright: 'Local Copyright', description: 'Edited locally', dateTime: '2026:10:20 12:00:00' } });
+  const metadata = await sharp(output).metadata();
+  assert.ok(metadata.exif);
+  assert.match(metadata.exif.toString('latin1'), /Santara Artist/);
+  assert.match(metadata.exif.toString('latin1'), /2026:10:20 12:00:00/);
+  assert.match(metadata.exif.toString('latin1'), /Local Copyright/);
+  assert.match(metadata.exif.toString('latin1'), /Edited locally/);
+  const preview = await previewImage({ input, maxWidth: 8, maxHeight: 8 });
+  assert.equal(preview.sourceWidth, 24);
+  assert.equal(preview.sourceHeight, 12);
+  assert.ok(preview.width <= 8 && preview.height <= 8);
+});
+
 test('invalid formats, external resource options, SVG and corrupt input fail closed', async context => {
   const { input, output, root } = await fixture(context);
   await assert.rejects(convertImage({ input, output, format: 'svg' }), /format/);
@@ -168,7 +239,7 @@ test('PNG quality does not quantize colour or alpha', async context => {
 
 test('the exported option contract includes the flat renderer recipe and is immutable', () => {
   assert.ok(Object.isFrozen(imageOptionNames));
-  for (const name of ['cropX', 'cropY', 'cropWidth', 'cropHeight', 'width', 'height', 'angle', 'flipHorizontal', 'flipVertical', 'brightness', 'saturation', 'contrast', 'backgroundColor', 'backgroundColor2', 'backgroundType', 'padding', 'fit']) assert.ok(imageOptionNames.includes(name), name);
+  for (const name of ['cropX', 'cropY', 'cropWidth', 'cropHeight', 'width', 'height', 'angle', 'flipHorizontal', 'flipVertical', 'brightness', 'saturation', 'contrast', 'backgroundColor', 'backgroundColor2', 'backgroundType', 'padding', 'fit', 'dateTime']) assert.ok(imageOptionNames.includes(name), name);
 });
 
 test('edit-image applies crop, rotation and both flips in recipe order before padding and background', async context => {

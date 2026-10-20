@@ -6,8 +6,8 @@ import path from 'node:path';
 const pixelLimit = 40_000_000;
 const decodeOptions = { limitInputPixels: pixelLimit, animated: false, pages: 1, failOn: 'warning' };
 const formats = { jpg: 'jpeg', jpeg: 'jpeg', png: 'png', webp: 'webp', tiff: 'tiff', avif: 'heif', bmp: 'bmp', heic: 'heif' };
-const operations = ['convert', 'compress', 'resize', 'crop', 'rotate', 'flip', 'strip-metadata', 'edit-image', 'background'];
-export const imageOptionNames = Object.freeze(['quality', 'compressionLevel', 'progressive', 'autoOrient', 'stripMetadata', 'width', 'height', 'x', 'y', 'angle', 'direction', 'cropX', 'cropY', 'cropWidth', 'cropHeight', 'flipHorizontal', 'flipVertical', 'brightness', 'saturation', 'contrast', 'backgroundColor', 'backgroundColor2', 'backgroundType', 'padding', 'fit']);
+const operations = ['convert', 'compress', 'resize', 'crop', 'rotate', 'flip', 'strip-metadata', 'metadata', 'edit-image', 'background'];
+export const imageOptionNames = Object.freeze(['quality', 'compressionLevel', 'progressive', 'autoOrient', 'stripMetadata', 'width', 'height', 'x', 'y', 'angle', 'direction', 'cropX', 'cropY', 'cropWidth', 'cropHeight', 'flipHorizontal', 'flipVertical', 'brightness', 'saturation', 'contrast', 'backgroundColor', 'backgroundColor2', 'backgroundType', 'padding', 'fit', 'artist', 'copyright', 'description', 'dateTime']);
 const optionNames = new Set(imageOptionNames);
 
 export function imageCapabilities() {
@@ -104,24 +104,27 @@ async function editPipeline(pipeline, width, height, operation, options, signal)
   }
   const fit = options.fit ?? 'inside';
   if (!['inside', 'contain', 'cover', 'fill'].includes(fit)) throw new Error('Invalid fit');
+  const padding = integer(options.padding ?? 0, 'padding', 0, 16384);
   const targetWidth = options.width === undefined ? undefined : integer(options.width, 'width', 1, 16384);
   const targetHeight = options.height === undefined ? undefined : integer(options.height, 'height', 1, 16384);
   if (fit !== 'inside' && (!targetWidth || !targetHeight)) throw new Error('Canvas fit requires width and height');
   if (targetWidth || targetHeight) {
-    const scale = (fit === 'cover' ? Math.max : Math.min)(targetWidth ? targetWidth / width : Infinity, targetHeight ? targetHeight / height : Infinity);
+    const contentWidth = operation === 'background' && targetWidth ? targetWidth - padding * 2 : targetWidth;
+    const contentHeight = operation === 'background' && targetHeight ? targetHeight - padding * 2 : targetHeight;
+    if (operation === 'background' && ((contentWidth !== undefined && contentWidth < 1) || (contentHeight !== undefined && contentHeight < 1))) throw new Error('Canvas padding must leave room for the image');
+    const scale = (fit === 'cover' ? Math.max : Math.min)(contentWidth ? contentWidth / width : Infinity, contentHeight ? contentHeight / height : Infinity);
     const resizedWidth = Math.max(1, Math.round(width * scale));
     const resizedHeight = Math.max(1, Math.round(height * scale));
     if (fit !== 'fill') dimensions(resizedWidth, resizedHeight, 'Resize');
     if (fit !== 'inside' && targetWidth && targetHeight) dimensions(targetWidth, targetHeight, 'Canvas');
-    pipeline.resize({ width: targetWidth, height: targetHeight, fit, background: '#00000000' });
-    width = fit === 'inside' ? resizedWidth : targetWidth;
-    height = fit === 'inside' ? resizedHeight : targetHeight;
+    pipeline.resize({ width: contentWidth, height: contentHeight, fit, background: '#00000000' });
+    width = operation === 'background' ? contentWidth : fit === 'inside' ? resizedWidth : targetWidth;
+    height = operation === 'background' ? contentHeight : fit === 'inside' ? resizedHeight : targetHeight;
   }
   const angle = number(options.angle ?? 0, 'angle', -360, 360);
   const brightness = number(options.brightness ?? 1, 'brightness', 0, 4);
   const saturation = number(options.saturation ?? 1, 'saturation', 0, 4);
   const contrast = number(options.contrast ?? 1, 'contrast', 0, 4);
-  const padding = integer(options.padding ?? 0, 'padding', 0, 16384);
   const backgroundRequested = operation === 'background' || ['backgroundType', 'backgroundColor', 'backgroundColor2'].some(key => options[key] !== undefined);
   const backgroundType = options.backgroundType ?? 'solid';
   if (!['solid', 'gradient', 'transparent'].includes(backgroundType)) throw new Error('Invalid backgroundType');
@@ -141,12 +144,30 @@ async function editPipeline(pipeline, width, height, operation, options, signal)
   }
   if (brightness !== 1 || saturation !== 1) pipeline.modulate({ brightness, saturation: brightness === 0 ? 0 : saturation });
   if (contrast !== 1) pipeline.linear(contrast, 128 * (1 - contrast));
-  dimensions(width + padding * 2, height + padding * 2, 'Canvas');
-  if (padding) pipeline.extend({ top: padding, bottom: padding, left: padding, right: padding, background: '#00000000' });
+  if (operation === 'background') {
+    const canvasWidth = targetWidth ?? width + padding * 2;
+    const canvasHeight = targetHeight ?? height + padding * 2;
+    dimensions(canvasWidth, canvasHeight, 'Canvas');
+    if (padding * 2 >= canvasWidth || padding * 2 >= canvasHeight) throw new Error('Canvas padding must leave room for the image');
+  } else {
+    dimensions(width + padding * 2, height + padding * 2, 'Canvas');
+    if (padding) pipeline.extend({ top: padding, bottom: padding, left: padding, right: padding, background: '#00000000' });
+  }
   if (backgroundRequested) {
     ({ pipeline, width, height } = await checkpoint(pipeline, options, signal));
-    const pixels = await backgroundPixels(width, height, first, backgroundType === 'gradient' ? second : first, signal);
-    pipeline.composite([{ input: pixels, raw: { width, height, channels: 4 }, blend: 'dest-over' }]);
+    if (operation === 'background') {
+      const canvasWidth = targetWidth ?? width + padding * 2;
+      const canvasHeight = targetHeight ?? height + padding * 2;
+      const pixels = await backgroundPixels(canvasWidth, canvasHeight, first, backgroundType === 'gradient' ? second : first, signal);
+      const content = await job(pipeline, () => pipeline.png().toBuffer(), signal);
+      pipeline = sharp(pixels, { raw: { width: canvasWidth, height: canvasHeight, channels: 4 }, limitInputPixels: pixelLimit })
+        .composite([{ input: content, left: padding + Math.max(0, Math.floor((canvasWidth - padding * 2 - width) / 2)), top: padding + Math.max(0, Math.floor((canvasHeight - padding * 2 - height) / 2)) }]);
+      width = canvasWidth;
+      height = canvasHeight;
+    } else {
+      const pixels = await backgroundPixels(width, height, first, backgroundType === 'gradient' ? second : first, signal);
+      pipeline.composite([{ input: pixels, raw: { width, height, channels: 4 }, blend: 'dest-over' }]);
+    }
   }
   return pipeline;
 }
@@ -259,7 +280,26 @@ export async function previewImage({ input, operation = 'edit-image', options = 
   const { pipeline } = await checkpoint(edited, previewOptions, signal);
   pipeline.resize({ width: maxWidth, height: maxHeight, fit: 'inside', withoutEnlargement: true }).png();
   const { data, info } = await job(pipeline, () => pipeline.toBuffer({ resolveWithObject: true }), signal);
-  return { dataURL: `data:image/png;base64,${data.toString('base64')}`, width: info.width, height: info.height, warnings: loaded.metadata.pages > 1 ? ['Animated or multipage image: only the first frame is used.'] : [] };
+  const swapsAxes = options.autoOrient !== false && [5, 6, 7, 8].includes(loaded.metadata.orientation);
+  return { dataURL: `data:image/png;base64,${data.toString('base64')}`, width: info.width, height: info.height, sourceWidth: swapsAxes ? loaded.metadata.height : loaded.metadata.width, sourceHeight: swapsAxes ? loaded.metadata.width : loaded.metadata.height, warnings: loaded.metadata.pages > 1 ? ['Animated or multipage image: only the first frame is used.'] : [] };
+}
+
+function addMetadata(pipeline, operation, options) {
+  if (operation === 'strip-metadata' || options.stripMetadata) return pipeline;
+  pipeline.withMetadata();
+  const fields = { Artist: options.artist, Copyright: options.copyright, ImageDescription: options.description, DateTime: options.dateTime };
+  for (const value of Object.values(fields)) if (value !== undefined && (typeof value !== 'string' || value.length > 512 || /[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(value))) throw new Error('Metadata fields must be at most 512 printable characters');
+  const values = Object.fromEntries(Object.entries(fields).filter(([, value]) => typeof value === 'string' && value.length > 0));
+  if (operation === 'metadata' && Object.keys(values).length) pipeline.withExifMerge({ IFD0: values });
+  return pipeline;
+}
+
+function outputPipeline(pipeline, selected, quality, options, operation) {
+  if (selected === 'jpg' || selected === 'jpeg') return pipeline.flatten({ background: '#ffffff' }).jpeg({ quality, progressive: options.progressive ?? true, mozjpeg: operation === 'compress' });
+  if (selected === 'png') return pipeline.png(operation === 'compress' ? { compressionLevel: 9, adaptiveFiltering: true, quality, effort: 10, palette: true } : { compressionLevel: options.compressionLevel ?? 9 });
+  if (selected === 'webp') return pipeline.webp({ quality, ...(operation === 'compress' ? { effort: 6 } : {}) });
+  if (selected === 'avif') return pipeline.avif({ quality, ...(operation === 'compress' ? { effort: 9 } : {}) });
+  return pipeline.tiff({ compression: operation === 'compress' ? (options.hasAlpha ? 'deflate' : 'jpeg') : 'lzw', quality });
 }
 
 export async function convertImage({ input, output, operation = 'convert', format, options = {}, signal } = {}) {
@@ -273,18 +313,28 @@ export async function convertImage({ input, output, operation = 'convert', forma
   const target = path.resolve(output);
   const loaded = await load(input, signal);
   if (target === path.resolve(input)) throw new Error('Image output must differ from input');
-  const pipeline = await imagePipeline(loaded, operation, options, signal);
-  if (operation !== 'strip-metadata' && !options.stripMetadata) pipeline.withMetadata();
-  if (selected === 'jpg' || selected === 'jpeg') pipeline.flatten({ background: '#ffffff' }).jpeg({ quality, progressive: options.progressive ?? true });
-  else if (selected === 'png') pipeline.png({ compressionLevel });
-  else if (selected === 'webp') pipeline.webp({ quality });
-  else if (selected === 'avif') pipeline.avif({ quality });
-  else pipeline.tiff({ compression: 'lzw' });
+  let outputBuffer;
+  if (operation === 'compress') {
+    const candidates = [...new Set([quality, Math.min(quality, 70), Math.min(quality, 55), Math.min(quality, 40), Math.min(quality, 25), 10])];
+    for (const candidateQuality of candidates) {
+      check(signal);
+      const candidate = await imagePipeline(loaded, operation, { ...options, quality: candidateQuality }, signal);
+      addMetadata(candidate, operation, options);
+      const encoded = await job(candidate, () => outputPipeline(candidate, selected, candidateQuality, { ...options, compressionLevel, hasAlpha: loaded.metadata.hasAlpha }, operation).toBuffer(), signal);
+      if (encoded.length < loaded.buffer.length) { outputBuffer = encoded; break; }
+    }
+    if (!outputBuffer) throw new Error('This image is already highly optimized; no smaller output could be produced at the selected settings.');
+  } else {
+    const pipeline = await imagePipeline(loaded, operation, options, signal);
+    addMetadata(pipeline, operation, options);
+    outputBuffer = await job(pipeline, () => outputPipeline(pipeline, selected, quality, { ...options, compressionLevel, hasAlpha: loaded.metadata.hasAlpha }, operation).toBuffer(), signal);
+  }
   const stage = await fs.mkdtemp(path.join(path.dirname(target), '.santara-image-'));
   let published = false;
   try {
     const temporary = path.join(stage, 'image');
-    const info = await job(pipeline, () => pipeline.toFile(temporary), signal);
+    await fs.writeFile(temporary, outputBuffer, { flag: 'wx', mode: 0o600, signal });
+    const info = { ...(await sharp(outputBuffer, decodeOptions).metadata()), size: outputBuffer.length };
     await fs.chmod(temporary, 0o600);
     check(signal);
     await fs.link(temporary, target);
