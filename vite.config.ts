@@ -1,3 +1,5 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-export default defineConfig({ plugins: [react()], base: './', server: { host: '127.0.0.1' } });
+import tailwindcss from '@tailwindcss/vite';
+import { resolve } from 'node:path';
+export default defineConfig({ plugins: [tailwindcss(), react()], base: './', server: { host: '127.0.0.1' }, build: { rollupOptions: { input: { app: resolve(__dirname, 'index.html'), showcase: resolve(__dirname, 'showcase.html') } } } });

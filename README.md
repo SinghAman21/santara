@@ -12,6 +12,12 @@ Install Node.js 22 and npm, then run `npm ci`, `npm run typecheck`, `npm run tes
 
 Run `npx playwright install --with-deps chromium` once, then `npx playwright test` for browser smoke tests. These use the Vite preview and a mock preload bridge, not a live Electron process. See [testing](docs/TESTING.md).
 
+## Product landing page
+
+The separate React/Vite product landing page is available at `/showcase.html` during development and at `showcase.html` in the production build. It presents the current use cases, local processing model, and platform installation choices without replacing the Electron app entry at `/`.
+
+Set `VITE_SANTARA_RELEASE_BASE_URL` at build time to the public directory or release-download URL that contains the installers. The landing page appends the current asset names for the Windows x64 installer, Linux `.deb`, and Linux AppImage. Until this is configured, download controls stay disabled so the page does not link to missing packages. The platform selector matches the current Windows and Linux desktop targets.
+
 ## Packaging
 
 Generate icons once with `npm run icons` after installing Playwright Chromium. Run `npm run dist -- --win --x64 --publish never` on Windows, or `npm run dist -- --linux --x64 --publish never` on Linux. Expected outputs are an NSIS installer, a Debian package, and an AppImage in `release/`. CI builds are unsigned by default. A manually dispatched signing build requires certificate secrets and fails if signing is unavailable. No macOS, ARM, RPM, portable Windows, or store targets are configured.
