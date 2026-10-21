@@ -394,7 +394,9 @@ function startWindowsWatcher() {
 function syncTray() {
   if (tray) return;
   try {
-    const icon = nativeImage.createFromDataURL('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAGUlEQVQ4T2P8z8Dwn4ECwESJ5lEDRg0YNQAAX+0CHvQjZJAAAAAASUVORK5CYII=');
+    const sourceIcon = nativeImage.createFromPath(path.resolve(directory, '../dist/santara.png'));
+    if (sourceIcon.isEmpty()) throw new Error('Santara tray icon could not be loaded');
+    const icon = sourceIcon.resize({ width: process.platform === 'win32' ? 16 : 22, height: process.platform === 'win32' ? 16 : 22 });
     tray = new Tray(icon);
     tray.setToolTip('Santara — offline converter');
     tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Santara is running', enabled: false }, { type: 'separator' }, { label: 'Quit', click: () => app.quit() }]));

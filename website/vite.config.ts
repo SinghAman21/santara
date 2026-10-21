@@ -30,6 +30,7 @@ const devDownloads: Plugin = {
 
 export default defineConfig({
   root: import.meta.dirname,
+  publicDir: resolve(import.meta.dirname, '../public'),
   plugins: [react(), tailwindcss(), devDownloads],
   server: { host: '127.0.0.1', fs: { allow: [resolve(import.meta.dirname, '..')] } },
   build: { outDir: 'dist', emptyOutDir: true },

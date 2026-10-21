@@ -10,3 +10,6 @@
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 .license-list{text-align:left;border:1px solid var(--line);border-radius:9px;margin:0 0 20px;padding:0 15px}.license-list>div{padding:13px 0;border-bottom:1px solid var(--line)}.license-list>div:last-child{border:0}.license-list strong{display:block;font-size:11px;font-weight:500}.license-list span{display:block;font-size:10px;color:var(--muted);margin-top:6px;line-height:1.8}.version{width:100%;text-align:left}.naming-input{width:180px;font-size:11px}
 @media(forced-colors:active){button{border:1px solid ButtonText}.toggle.on{outline:2px solid Highlight}.nav-item.active{outline:2px solid Highlight}.drop-zone{border:2px dashed CanvasText}}
+.brand .santara-logo { width: 33px; height: 33px; border-radius: 8px; flex: none; }
+.privacy-visual>.santara-logo--illustration { width: 82px; height: 82px; object-fit: cover; transform: none; border-radius: 18px; z-index: 1; margin-top: 15px; }
+.guide-content>.santara-logo--illustration { width: 85px; height: 85px; object-fit: cover; border-radius: 18px; margin-bottom: 16px; }

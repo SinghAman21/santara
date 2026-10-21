@@ -84,6 +84,7 @@ async function main() {
   const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), `santara-${target}-x64-`));
   const appDirectory = path.join(temporaryDirectory, 'app');
   try {
+    run(process.execPath, [process.env.npm_execpath, 'run', 'icons'], 'Icon generation');
     run(process.execPath, [process.env.npm_execpath, 'run', 'build'], 'App build');
     if (target === 'win32') {
       if (process.platform === 'linux') {

@@ -27,7 +27,7 @@ function navigate(path: string) {
 function Link({ to, className = '', children, onClick, ...props }: { to: Route; className?: string; children: ReactNode; onClick?: () => void } & React.AnchorHTMLAttributes<HTMLAnchorElement>) {
   return <a href={paths[to]} className={className} onClick={(event) => { onClick?.(); if (!event.defaultPrevented && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0 && event.currentTarget.target !== '_blank') { event.preventDefault(); navigate(paths[to]); } }} {...props}>{children}</a>;
 }
-function Mark() { return <span className="fruit-mark" aria-hidden="true"><span/><span/><span/><span/><i/></span>; }
+function Mark() { return <img className="site-mark" src="/santara.png" alt="" aria-hidden="true"/>; }
 function Header({ route }: { route: Route }) {
   const [menu, setMenu] = useState(false); const [dark, setDark] = useState(() => localStorage.getItem('santara-theme') === 'dark');
   useEffect(() => { document.documentElement.classList.toggle('dark', dark); localStorage.setItem('santara-theme', dark ? 'dark' : 'light'); }, [dark]);
