@@ -10,7 +10,7 @@ const devDownloads: Plugin = {
   configureServer(server) {
     server.middlewares.use('/downloads', (request, response, next) => {
       const fileName = decodeURIComponent(new URL(request.url || '/', 'http://localhost').pathname.slice(1));
-      if (!['Santara-0.1.0-linux-amd64.deb', 'Santara-0.1.0-linux-x86_64.AppImage'].includes(fileName)) return next();
+      if (!['Santara-0.1.0-linux-amd64.deb', 'Santara-0.1.0-linux-x86_64.AppImage', 'Santara-0.1.0-win-x64.exe'].includes(fileName)) return next();
       const filePath = resolve(releases, fileName);
       try {
         const stats = statSync(filePath);
