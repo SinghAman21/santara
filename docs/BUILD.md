@@ -13,10 +13,12 @@ The package declares `main: electron/main.mjs` and scripts listed in `package.js
 1. Install Node.js 22 and npm, then `npm ci` using the committed lockfile.
 2. Run `npm run typecheck`, `npm run test`, and `npm run build`.
 3. Run browser tests as described in [TESTING.md](TESTING.md).
-4. On Windows run `npm run dist -- --win --x64 --publish never`.
-5. On Linux run `npm run dist -- --linux --x64 --publish never`; if package metadata lacks a homepage/repository, append `--config.extraMetadata.homepage=YOUR_REAL_PROJECT_URL` with your actual URL.
+4. On Windows 10/11 x64, install Visual Studio Build Tools with the Desktop development with C++ workload and Windows SDK. Initialize the MSVC x64 environment, then run `npm run dist:windows`. This builds the drag-watcher helper and NSIS `.exe` installer. On Ubuntu x64, install Wine and MinGW-w64 (`sudo apt install wine g++-mingw-w64-x86-64`) and run the same command to cross-compile the helper and create the NSIS installer.
+5. On Linux x64, run `npm run dist:linux`; if package metadata lacks a homepage/repository, append `--config.extraMetadata.homepage=YOUR_REAL_PROJECT_URL` to the underlying Electron Builder command with your actual URL.
 
-Native builds are preferred. CI runs the Windows build on Windows and the Linux build on Ubuntu 22.04. Cross-compilation is not validated. Linux targets are only `deb` and `AppImage`; installation runtime libraries and AppImage/FUSE compatibility still require clean-machine testing.
+Native builds are preferred. CI runs the Windows NSIS build on Windows and Linux `deb`/`AppImage` builds on Ubuntu 22.04. Windows CI uses MSVC; Linux cross-builds use MinGW-w64 for the watcher and Wine for NSIS tooling. Linux installation runtime libraries and AppImage/FUSE compatibility still require clean-machine testing.
+
+Windows installs by running `release/Santara-<version>-win-x64.exe`; uninstall through Windows Settings → Apps → Installed apps. Debian/Ubuntu installs with `sudo apt install ./release/Santara-*.deb` and uninstalls with `sudo apt remove santara`. Run an AppImage with `chmod +x release/Santara-*.AppImage && ./release/Santara-*.AppImage`; removing the AppImage file uninstalls the portable application.
 
 After building, run `node scripts/check-release.mjs` to check required package fields, scripts, and release input paths. This is a preflight check, not an archive audit or installer test.
 

@@ -23,6 +23,10 @@ node --test .\native\windows\protocol.test.mjs
 
 The script builds `native\windows\build\santara-drag-watcher.exe` and runs the helper's transition self-test. The same commands can run in a Windows CI job after initializing the MSVC x64 developer environment. No Electron, app, or package configuration is changed here.
 
+## Linux cross-build for the Windows installer
+
+For an Ubuntu x64 cross-build, install Wine and the MinGW-w64 x64 compiler (`sudo apt install wine g++-mingw-w64-x86-64`) and run `npm run dist:windows` from the repository root. The script cross-compiles this helper, runs its state self-test under Wine, then invokes electron-builder for the NSIS installer. Native Windows/MSVC builds remain the preferred release validation path.
+
 ## Manual hook check
 
 Start the executable in a console:
