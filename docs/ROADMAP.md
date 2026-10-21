@@ -19,7 +19,7 @@ This is a one-session continuation plan. Implemented means code exists; optional
 | EPUB validation / password archives | Unsupported | Add explicit validation/encryption capabilities and safe credential handling; never log passwords. Test malformed EPUBs and encrypted/archive failure paths. |
 | Desktop workflow | Partial | Global citrus wheel and hidden Electron host are implemented. Image tools open separate compact windows; image conversion queues without opening a dashboard and reports completion locally. Global drag handoff, shell/context-manager integration, and native sharing providers still need OS-specific validation. |
 | Accessibility / localization | Partial | Basic keyboard picker, navigation, focus handling, and centralized primary strings exist. Audit screen readers, focus restoration, contrast, scaling, and all hardcoded detail strings. |
-| Licensing / distribution | Partial | Generated runtime notices, icons, native-library unpacking, CI, and x64 NSIS/deb/AppImage preview artifacts exist. Finish component source/attribution and LGPL replacement verification; test clean-machine installs and signed Windows builds. |
+| Licensing / distribution | Partial | Generated runtime notices, icons, target-specific x64 Sharp packaging checks, CI, and NSIS/deb/AppImage preview artifacts exist. Finish component source/attribution and LGPL replacement verification; test clean-machine installs and signed Windows builds. Native ARM and 32-bit packages require separate implementation and validation. |
 
 ## Next module and test sequence
 

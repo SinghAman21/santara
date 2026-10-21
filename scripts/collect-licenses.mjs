@@ -3,11 +3,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
+const appDirectoryArgument = process.argv.find(argument => argument.startsWith('--app-dir='));
+const appDirectory = appDirectoryArgument ? path.resolve(appDirectoryArgument.slice('--app-dir='.length)) : root;
 const lock = JSON.parse(await readFile(path.join(root, 'package-lock.json'), 'utf8'));
 const sections = ['Santara runtime dependency notices\nGenerated from package-lock.json. Electron ships additional LICENSE and LICENSES.chromium.html notices.\n'];
 for (const [location, metadata] of Object.entries(lock.packages).sort(([first], [second]) => first.localeCompare(second))) {
   if (!location || metadata.dev || !location.includes('node_modules/')) continue;
-  const directory = path.join(root, location);
+  const directory = path.join(appDirectory, location);
   let entries;
   try { entries = await readdir(directory); } catch { continue; }
   const manifest = JSON.parse(await readFile(path.join(directory, 'package.json'), 'utf8'));

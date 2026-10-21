@@ -30,7 +30,7 @@ jobs:
       - run: npm ci
       - name: Install optional integration engines
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg poppler-utils qpdf
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg poppler-utils qpdf xvfb xauth
       - run: npm run typecheck
       - run: npm run test
       - run: npm run build
@@ -48,9 +48,18 @@ jobs:
         env:
           CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+      - name: Smoke test packaged Windows app
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:SANTARA_EXECUTABLE = (Resolve-Path 'release/win-unpacked/Santara.exe').Path
+          npm run test:desktop
       - name: Package Linux
         if: runner.os == 'Linux'
         run: npm run dist -- --linux --x64 --publish never --config.extraMetadata.homepage="${{ github.server_url }}/${{ github.repository }}"
+      - name: Smoke test packaged Linux app
+        if: runner.os == 'Linux'
+        run: SANTARA_EXECUTABLE="$PWD/release/linux-unpacked/santara" xvfb-run -a npm run test:desktop
       - name: Upload packages
         uses: actions/upload-artifact@v4
         with:

@@ -15,7 +15,7 @@ Run `npx playwright install --with-deps chromium` once, then `npx playwright tes
 
 ## Packaging
 
-`npm run dist` builds for the current host OS: on Windows 10/11 x64 it creates the NSIS `.exe`; on Linux x64 it creates the `.deb` and AppImage. Use Node.js 22 and npm. On Windows, install Visual Studio Build Tools with the **Desktop development with C++** workload and Windows SDK so Santara can build its native drag watcher. From the repository root, install dependencies and generate the app icons once:
+`npm run dist` builds for the current host OS: on Windows 10/11 x64 it creates the NSIS `.exe`; on Linux x64 it creates the `.deb` and AppImage. These are x64 packages; native ARM and 32-bit builds are not supported. Use Node.js 22 and npm. On Windows, install Visual Studio Build Tools with the **Desktop development with C++** workload and Windows SDK so Santara can build its native drag watcher. From the repository root, install dependencies and generate the app icons once:
 
 ```bash
 npm ci
@@ -40,7 +40,7 @@ npm run icons
 npm run dist:windows
 ```
 
-The Windows build compiles and bundles `santara-drag-watcher.exe`; the installer is written to `release/` as `Santara-<version>-win-x64.exe`. Linux builds produce a `.deb` and `.AppImage` in `release/`. Builds are unsigned by default; the Windows installer may show a publisher warning. Do not disable SmartScreen. Signing is configured separately for trusted CI runs; see [build and signing](docs/BUILD.md).
+The Windows build compiles and bundles `santara-drag-watcher.exe`; the installer is written to `release/` as `Santara-<version>-win-x64.exe`. Linux builds produce a `.deb` and `.AppImage` in `release/`. Packaging assembles production dependencies in a temporary app directory, removes unrelated Sharp binaries, and checks that the target's native image library is present in the packaged app. Builds are unsigned by default; the Windows installer may show a publisher warning. Do not disable SmartScreen. Signing is configured separately for trusted CI runs; see [build and signing](docs/BUILD.md).
 
 On Ubuntu, `npm run dist:windows` cross-builds the watcher with MinGW-w64 and packages the Windows NSIS installer with Wine. Install the prerequisites with `sudo apt update && sudo apt install wine g++-mingw-w64-x86-64`, then run `npm run dist:windows`. If your Wine setup cannot run the NSIS tools, build natively on Windows or download the Windows CI artifact. Plain `npm run dist` builds packages for the current OS.
 

@@ -21,9 +21,9 @@
     "test:desktop": "node tests/electron-smoke.mjs",
     "manifest": "node scripts/export-capabilities.mjs",
     "icons": "node scripts/generate-icons.mjs",
-    "dist": "npm run build && npm run licenses && npm run build:windows-hook && electron-builder --config electron-builder.yml",
-    "dist:windows": "node scripts/check-windows-packager.mjs && npm run build:windows-hook:cross && npm run dist -- --win --x64 --publish never",
-    "dist:linux": "npm run dist -- --linux --x64 --publish never",
+    "dist": "node scripts/package.mjs",
+    "dist:windows": "node scripts/package.mjs --win --x64 --publish never",
+    "dist:linux": "node scripts/package.mjs --linux --x64 --publish never",
     "licenses": "node scripts/collect-licenses.mjs",
     "preview": "vite preview --host 127.0.0.1"
   },
