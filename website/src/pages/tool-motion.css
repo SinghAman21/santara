@@ -1,0 +1,131 @@
+.tool-canvas { overflow: hidden; }
+.tool-motion { display: grid; grid-template-rows: auto 1fr auto; align-items: center; min-width: 0; min-height: 500px; padding: 18px 0 22px; --motion-paper: #FFFDF9; --motion-sky: #DCE6DD; --motion-hill: #90A783; --motion-foreground: #657F60; --motion-screen: #272F2C; --motion-track: #D9D0C4; --motion-track-frame: #B6AAA0; --motion-ink: #40372E; --motion-muted: #776B5E; --motion-accent: #CF6430; }
+.dark .tool-motion { --motion-paper: #3D3830; --motion-sky: #485A50; --motion-hill: #78966A; --motion-foreground: #526B4D; --motion-screen: #191D1B; --motion-track: #62584D; --motion-track-frame: #89796B; --motion-ink: #F4F0E8; --motion-muted: #C9BAAA; --motion-accent: #FF9857; }
+.tool-motion-label { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; color: #6A5D4F; font-size: 9px; font-weight: 800; letter-spacing: .1em; }
+.dark .tool-motion-label { color: #C9BBAD; }
+.motion-svg { display: block; width: min(100%, 400px); max-height: 330px; margin: auto; overflow: visible; color: var(--motion-ink); }
+.motion-svg text { fill: var(--motion-muted); font-family: var(--font-sans); font-size: 10px; font-weight: 800; letter-spacing: 1px; }
+.motion-paper { fill: var(--motion-paper); stroke: rgba(110,86,65,.2); stroke-width: 1.3; }
+.motion-sky { fill: var(--motion-sky); }
+.motion-sun { fill: #F3A468; }
+.motion-hill { fill: var(--motion-hill); }
+.motion-foreground { fill: var(--motion-foreground); }
+.motion-screen { fill: var(--motion-screen); }
+.motion-play { fill: #F8F0E5; }
+.motion-track { fill: var(--motion-track); }
+.motion-track-frame { fill: var(--motion-track-frame); }
+.motion-accent { fill: var(--motion-accent); }
+.motion-text-strong { fill: var(--motion-accent); }
+.motion-text-line { fill: var(--motion-track); }
+.motion-page-image { fill: var(--motion-sky); }
+.motion-wave-bar { fill: var(--motion-accent); transform-box: fill-box; transform-origin: center; }
+.motion-wave-high { fill: #EA9160; }
+.tool-motion-caption { display: grid; gap: 5px; min-width: 0; padding: 15px 0 0; border-top: 1px solid rgba(105,83,63,.18); }
+.tool-motion-caption strong { font-family: var(--font-display); font-size: 25px; font-weight: 400; letter-spacing: -.045em; }
+.tool-motion-caption p { max-width: 365px; margin: 0; color: #665A4B; font-size: 11px; line-height: 1.55; }
+.dark .tool-motion-caption p { color: #C9BBAD; }
+
+/* Each operation changes a different part of its miniature workspace. */
+.motion-compress-photo, .motion-compress-video, .motion-compress-pdf, .motion-compress-wave { transform-box: fill-box; transform-origin: center; animation: motion-compact 2.4s ease-in-out infinite alternate; }
+.motion-compress-meter { transform-box: fill-box; transform-origin: left center; animation: motion-meter 2.4s ease-in-out infinite alternate; }
+.motion-crop-window { fill: rgba(255,255,255,.06); stroke: #FFF9EE; stroke-width: 3; stroke-dasharray: 5 4; transform-box: fill-box; transform-origin: center; animation: motion-crop 2.4s ease-in-out infinite alternate; }
+.motion-crop-corners { fill: none; stroke: var(--motion-accent); stroke-width: 4; transform-box: fill-box; transform-origin: center; animation: motion-crop 2.4s ease-in-out infinite alternate; }
+.motion-resize-photo { transform-box: fill-box; transform-origin: center; animation: motion-resize 2.4s ease-in-out infinite alternate; }
+.motion-resize-guide { fill: none; stroke: var(--motion-accent); stroke-width: 2; stroke-dasharray: 5 5; transform-box: fill-box; transform-origin: center; animation: motion-resize-guide 2.4s ease-in-out infinite alternate; }
+.motion-rotate-photo { transform-box: fill-box; transform-origin: center; animation: motion-rotate 2.8s cubic-bezier(.2,.75,.25,1) infinite alternate; }
+.motion-arrow { fill: none; stroke: var(--motion-accent); stroke-width: 3; stroke-linecap: round; }
+.motion-flip-photo { transform-box: fill-box; transform-origin: center; animation: motion-flip 2.5s ease-in-out infinite alternate; }
+.motion-axis { fill: none; stroke: var(--motion-accent); stroke-width: 2; stroke-dasharray: 5 5; }
+.motion-background-wash { fill: #F0A869; transform-box: fill-box; transform-origin: center; animation: motion-background 2.4s ease-in-out infinite alternate; }
+.motion-background-photo { transform-box: fill-box; transform-origin: center; animation: motion-inset 2.4s ease-in-out infinite alternate; }
+.motion-edit-wash { fill: rgba(255,178,91,.4); clip-path: inset(0 100% 0 0); animation: motion-reveal-wash 2.7s ease-in-out infinite alternate; }
+.motion-edit-divider { fill: none; stroke: var(--motion-accent); stroke-width: 3; animation: motion-divider 2.7s ease-in-out infinite alternate; }
+.motion-metadata-photo { transform-box: fill-box; transform-origin: center; animation: motion-photo-lift 2.4s ease-in-out infinite alternate; }
+.motion-metadata-panel { animation: motion-rise 2.4s ease-in-out infinite alternate; }
+.motion-delete-tags { animation: motion-vanish 2.4s ease-in-out infinite alternate; }
+.motion-delete-stroke { fill: none; stroke: var(--motion-accent); stroke-width: 5; stroke-linecap: round; stroke-dasharray: 245; stroke-dashoffset: 245; animation: motion-strike 2.4s ease-in-out infinite alternate; }
+.motion-trim-outside { fill: rgba(29,28,26,.42); animation: motion-trim-shade 2.5s ease-in-out infinite alternate; }
+.motion-trim-handles { fill: none; stroke: var(--motion-accent); stroke-width: 5; stroke-linecap: round; transform-box: fill-box; transform-origin: center; animation: motion-trim 2.5s ease-in-out infinite alternate; }
+.motion-split-left, .motion-split-right, .motion-merge-left, .motion-merge-right, .motion-merge-pdf-left, .motion-merge-pdf-right { transform-box: fill-box; transform-origin: center; }
+.motion-split-left { animation: motion-split-left 2.4s ease-in-out infinite alternate; }
+.motion-split-right { animation: motion-split-right 2.4s ease-in-out infinite alternate; }
+.motion-merge-left, .motion-merge-pdf-left { fill: var(--motion-accent); animation: motion-merge-left 2.4s ease-in-out infinite alternate; }
+.motion-merge-right, .motion-merge-pdf-right { fill: var(--motion-hill); animation: motion-merge-right 2.4s ease-in-out infinite alternate; }
+.motion-speed-trail { fill: none; stroke: var(--motion-accent); stroke-width: 3; stroke-dasharray: 12 8; }
+.motion-speed-dot { fill: var(--motion-accent); animation: motion-speed 1.5s cubic-bezier(.2,.7,.1,1) infinite; }
+.motion-snapshot-card { animation: motion-snapshot 2.4s ease-in-out infinite alternate; }
+.motion-speaker { fill: var(--motion-accent); }
+.motion-sound-waves { fill: none; stroke: var(--motion-accent); stroke-width: 3; animation: motion-vanish 2.1s ease-in-out infinite alternate; }
+.motion-mute-stroke { fill: none; stroke: var(--motion-accent); stroke-width: 5; stroke-dasharray: 90; stroke-dashoffset: 90; animation: motion-strike 2.1s ease-in-out infinite alternate; }
+.motion-gif-frame-a { animation: motion-gif 1.8s ease-in-out infinite; }
+.motion-gif-frame-b { animation: motion-gif 1.8s ease-in-out .6s infinite; }
+.motion-gif-frame-c { animation: motion-gif 1.8s ease-in-out 1.2s infinite; }
+.motion-extracted-wave { animation: motion-extract-wave 2.5s ease-in-out infinite alternate; }
+.motion-redaction { fill: #292722; animation: motion-mask 2.3s ease-in-out infinite alternate; }
+.motion-soft-wave { opacity: .6; }
+.motion-normalize-wave .motion-wave-bar:nth-child(3n) { animation: motion-normalize-high 2.4s ease-in-out infinite alternate; }
+.motion-normalize-wave .motion-wave-bar:nth-child(3n + 1) { animation: motion-normalize-low 2.4s ease-in-out infinite alternate; }
+.motion-target-line { fill: none; stroke: var(--motion-accent); stroke-width: 2; stroke-dasharray: 5 4; }
+.motion-normalize-knob { fill: var(--motion-accent); animation: motion-knob 2.4s ease-in-out infinite alternate; }
+.motion-visualizer-screen { fill: #262725; }
+.motion-visualizer-wave .motion-wave-bar { animation: motion-visualizer .8s ease-in-out infinite alternate; }
+.motion-visualizer-wave .motion-wave-bar:nth-child(3n) { animation-delay: -.25s; }
+.motion-visualizer-wave .motion-wave-bar:nth-child(4n) { animation-delay: -.5s; }
+.motion-channel-left { animation: motion-channel-left 2.5s ease-in-out infinite alternate; }
+.motion-channel-right { animation: motion-channel-right 2.5s ease-in-out infinite alternate; }
+.motion-bleep-region { fill: rgba(242,122,53,.28); stroke: var(--motion-accent); stroke-width: 2; transform-box: fill-box; transform-origin: center; animation: motion-bleep 2s ease-in-out infinite alternate; }
+.motion-bleep-lines { fill: none; stroke: var(--motion-accent); stroke-width: 2; animation: motion-bleep-lines 2s ease-in-out infinite alternate; }
+.motion-pdf-back { opacity: .55; animation: motion-pdf-stack 2.4s ease-in-out infinite alternate; }
+.motion-extract-page { animation: motion-extract-page 2.4s ease-in-out infinite alternate; }
+.motion-render-page { animation: motion-render-page 2.5s ease-in-out infinite alternate; }
+.motion-render-image { animation: motion-render-image 2.5s ease-in-out infinite alternate; }
+.motion-archive-box { fill: #C78B58; }
+.motion-archive-seam { fill: none; stroke: #755039; stroke-width: 3; }
+.motion-archive-zip { fill: #F6D1A4; }
+.motion-archive-lid { fill: #E9AA70; stroke: #A56B40; stroke-width: 2; transform-box: fill-box; transform-origin: center bottom; animation: motion-open-lid 2.6s ease-in-out infinite alternate; }
+.motion-unpacked-files { animation: motion-unpack 2.6s ease-in-out infinite alternate; }
+
+@keyframes motion-compact { to { transform: scale(.84); } }
+@keyframes motion-meter { to { transform: scaleX(.42); } }
+@keyframes motion-crop { to { transform: scale(.77); } }
+@keyframes motion-resize { to { transform: scale(.73,.78); } }
+@keyframes motion-resize-guide { to { transform: scale(.75,.8); } }
+@keyframes motion-rotate { to { transform: rotate(90deg) scale(.85); } }
+@keyframes motion-flip { to { transform: scaleX(-1); } }
+@keyframes motion-background { to { transform: scale(1.08); } }
+@keyframes motion-inset { to { transform: scale(.82); } }
+@keyframes motion-reveal-wash { to { clip-path: inset(0 0 0 0); } }
+@keyframes motion-divider { to { transform: translateX(106px); } }
+@keyframes motion-photo-lift { to { transform: translateY(-21px) scale(.82); } }
+@keyframes motion-rise { from { opacity: .2; transform: translateY(25px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes motion-vanish { to { opacity: 0; transform: translateY(-8px); } }
+@keyframes motion-strike { to { stroke-dashoffset: 0; } }
+@keyframes motion-trim-shade { to { opacity: .85; } }
+@keyframes motion-trim { to { transform: scaleX(.7); } }
+@keyframes motion-split-left { to { transform: translateX(-16px); } }
+@keyframes motion-split-right { to { transform: translateX(16px); } }
+@keyframes motion-merge-left { from { transform: translateX(-22px); } to { transform: translateX(7px); } }
+@keyframes motion-merge-right { from { transform: translateX(22px); } to { transform: translateX(-7px); } }
+@keyframes motion-speed { to { transform: translateX(146px); } }
+@keyframes motion-snapshot { from { opacity: .25; transform: translate(-37px,37px) scale(.7); } to { opacity: 1; transform: translate(0,0) scale(1); } }
+@keyframes motion-gif { 0%,100% { opacity: .25; transform: scale(.94); } 50% { opacity: 1; transform: scale(1); } }
+@keyframes motion-extract-wave { from { opacity: .25; transform: translateY(-36px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes motion-mask { from { opacity: .1; transform: scaleX(.15); transform-origin: left center; } to { opacity: 1; transform: scaleX(1); transform-origin: left center; } }
+@keyframes motion-normalize-high { to { transform: scaleY(.68); } }
+@keyframes motion-normalize-low { to { transform: scaleY(1.45); } }
+@keyframes motion-knob { to { transform: translateX(38px); } }
+@keyframes motion-visualizer { to { transform: scaleY(1.65); } }
+@keyframes motion-channel-left { to { transform: translateY(35px); } }
+@keyframes motion-channel-right { to { transform: translateY(-35px); } }
+@keyframes motion-bleep { to { transform: translateX(27px); } }
+@keyframes motion-bleep-lines { to { transform: translateX(27px); opacity: .5; } }
+@keyframes motion-pdf-stack { to { transform: translateX(12px) scale(.94); } }
+@keyframes motion-extract-page { to { transform: translateX(67px) translateY(-12px); } }
+@keyframes motion-render-page { to { opacity: .55; transform: translateX(-17px); } }
+@keyframes motion-render-image { from { opacity: .15; transform: translateX(-43px) scale(.75); } to { opacity: 1; transform: translateX(0) scale(1); } }
+@keyframes motion-open-lid { to { transform: rotate(-15deg) translateY(-11px); } }
+@keyframes motion-unpack { from { opacity: .1; transform: translateY(75px); } to { opacity: 1; transform: translateY(-4px); } }
+
+@media (max-width: 1100px) { .tool-motion { min-height: 370px; } .motion-svg { max-height: 250px; } }
+@media (max-width: 480px) { .tool-motion { min-height: 320px; padding-block: 10px 14px; } .motion-svg { max-height: 220px; } .tool-motion-caption strong { font-size: 22px; } }
+@media (prefers-reduced-motion: reduce) { .tool-motion *, .tool-motion *::before, .tool-motion *::after { animation: none !important; transition: none !important; } }
