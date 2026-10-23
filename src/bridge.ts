@@ -1,7 +1,7 @@
 import type { Bridge, LocalFile, Settings, Snapshot } from './types';
-import { invoke, isTauri } from '@tauri-apps/api/core';
+import { isTauriRuntime, tauriBridge } from './tauri-bridge';
 export const defaultSettings: Settings = { theme: 'system', outputFolder: '', collision: 'rename', concurrency: 2, quality: 85, stripMetadata: false, recursive: false, preserveStructure: false, namingPattern: '{name}-converted', shortcuts: { convert: 'Shift', tools: 'Alt', actions: 'Control' }, backendPaths: {}, tray: false };
-export const isDesktop = !!window.santara;
+export const isDesktop = !!window.santara || isTauriRuntime;
 const category = (ext: string): LocalFile['category'] => {
   if ('jpg jpeg png webp heic tiff tif avif bmp svg'.split(' ').includes(ext)) return 'image';
   if ('mp3 m4a wav flac ogg opus aiff wma'.split(' ').includes(ext)) return 'audio';
@@ -21,8 +21,4 @@ const unavailable = async (): Promise<never> => { throw new Error('Launch the Sa
 function browserFiles(files: File[]): LocalFile[] { return files.map(file => { const ext = file.name.split('.').pop()?.toLowerCase() || ''; return { id: crypto.randomUUID(), path: file.name, name: file.name, size: file.size, ext, category: category(ext) }; }); }
 function chooseFiles(folder = false): Promise<LocalFile[]> { return new Promise(resolve => { const input = document.createElement('input'); input.type = 'file'; input.multiple = true; if (folder) input.setAttribute('webkitdirectory', ''); input.onchange = () => resolve(browserFiles(Array.from(input.files || []))); input.addEventListener('cancel', () => resolve([])); input.click(); }); }
 const browserBridge: Bridge = { bootstrap: async () => initial, addFiles: () => chooseFiles(), addFolder: () => chooseFiles(true), droppedFiles: async files => browserFiles(files), inspectPaths: unavailable, enqueue: unavailable, cancel: unavailable, retry: unavailable, saveSettings: async patch => { browserSettings = { ...browserSettings, ...patch }; localStorage.setItem('santara-preview-settings', JSON.stringify(browserSettings)); return browserSettings; }, pickOutput: unavailable, reveal: unavailable, openOutput: unavailable, fileAction: unavailable, onUpdate: () => () => {} };
-const tauriShellBridge: Bridge = {
-  ...browserBridge,
-  finishGlobalWheel: async () => { await invoke('shell_hide_wheel'); },
-};
-export const api: Bridge = window.santara || (isTauri() ? tauriShellBridge : browserBridge);
+export const api: Bridge = window.santara || (isTauriRuntime ? tauriBridge : browserBridge);

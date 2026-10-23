@@ -3,6 +3,8 @@
 #[cfg(not(any(target_os = "linux", target_os = "windows")))]
 compile_error!("Santara supports only Linux and Windows desktop targets");
 
+mod services;
+
 use serde::Serialize;
 use tauri::{
     menu::{Menu, MenuItem},
@@ -71,8 +73,26 @@ fn place_wheel(window: &WebviewWindow) -> Result<(), String> {
 
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![runtime_info, shell_hide_wheel])
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .invoke_handler(tauri::generate_handler![
+            runtime_info,
+            shell_hide_wheel,
+            services::bootstrap,
+            services::inspect_paths,
+            services::consume_drop,
+            services::choose_files,
+            services::choose_folder,
+            services::pick_output,
+            services::save_settings,
+            services::reveal,
+            services::open_output,
+            services::file_action,
+        ])
         .setup(|app| {
+            let state = services::AppState::load(app.handle())?;
+            app.manage(state);
             let workspace = MenuItem::with_id(app, "workspace", "Show Santara", true, None::<&str>)?;
             let wheel = MenuItem::with_id(app, "wheel", "Show wheel prototype", true, None::<&str>)?;
             let image = MenuItem::with_id(app, "image", "Show image editor prototype", true, None::<&str>)?;
@@ -111,7 +131,11 @@ fn main() {
                     eprintln!("Santara shell drag entered {} ({} entries)", window.label(), paths.len());
                 }
                 WindowEvent::DragDrop(DragDropEvent::Drop { paths, .. }) => {
-                    eprintln!("Santara shell drop on {} ({} entries)", window.label(), paths.len());
+                    let app = window.app_handle();
+                    let state = app.state::<services::AppState>();
+                    if let Err(error) = state.record_drop(window.label(), paths) {
+                        eprintln!("Santara drop rejected: {error}");
+                    }
                 }
                 WindowEvent::DragDrop(DragDropEvent::Leave) => {
                     eprintln!("Santara shell drag left {}", window.label());
