@@ -34,11 +34,11 @@ struct Event {
 class DragState {
 public:
     DragState(int dragWidth, int dragHeight, std::string shiftMode,
-              std::string altMode, std::string controlMode)
+              std::string altMode, std::string controlMode, std::string controlShiftMode)
         : thresholdX_(std::max(1, dragWidth / 2)),
           thresholdY_(std::max(1, dragHeight / 2)),
           shiftMode_(std::move(shiftMode)), altMode_(std::move(altMode)),
-          controlMode_(std::move(controlMode)) {}
+          controlMode_(std::move(controlMode)), controlShiftMode_(std::move(controlShiftMode)) {}
 
     void begin(int x, int y, unsigned int modifiers) {
         leftDown_ = true;
@@ -85,11 +85,16 @@ private:
     std::string shiftMode_;
     std::string altMode_;
     std::string controlMode_;
+    std::string controlShiftMode_;
 
     const char* modeFor(unsigned int modifiers) const {
-        if ((modifiers & Shift) != 0) return shiftMode_.c_str();
-        if ((modifiers & Alt) != 0) return altMode_.c_str();
-        if ((modifiers & Control) != 0) return controlMode_.c_str();
+        const std::string* selected = nullptr;
+        if ((modifiers & (Control | Shift)) == (Control | Shift) && controlShiftMode_ != "none")
+            selected = &controlShiftMode_;
+        else if ((modifiers & Shift) != 0) selected = &shiftMode_;
+        else if ((modifiers & Alt) != 0) selected = &altMode_;
+        else if ((modifiers & Control) != 0) selected = &controlMode_;
+        if (selected && *selected != "none") return selected->c_str();
         return "";
     }
 
@@ -132,6 +137,7 @@ struct Config {
     std::string shiftMode = "convert";
     std::string altMode = "tools";
     std::string controlMode = "actions";
+    std::string controlShiftMode = "none";
 };
 
 HHOOK mouseHook = nullptr;
@@ -239,13 +245,14 @@ BOOL WINAPI consoleHandler(DWORD signal) {
 bool validMode(const char* value) {
     return std::strcmp(value, "convert") == 0 ||
            std::strcmp(value, "tools") == 0 ||
-           std::strcmp(value, "actions") == 0;
+           std::strcmp(value, "actions") == 0 ||
+           std::strcmp(value, "none") == 0;
 }
 
 bool parseArguments(int argc, char** argv, bool* selfTest) {
     for (int index = 1; index < argc; ++index) {
         if (std::strcmp(argv[index], "--help") == 0) {
-            std::puts("Usage: santara-drag-watcher.exe [--shift-mode convert|tools|actions] [--alt-mode convert|tools|actions] [--control-mode convert|tools|actions] [--self-test]");
+            std::puts("Usage: santara-drag-watcher.exe [--shift-mode MODE] [--alt-mode MODE] [--control-mode MODE] [--ctrl-shift-mode MODE] [--self-test]; MODE=convert|tools|actions|none");
             return false;
         }
         if (std::strcmp(argv[index], "--self-test") == 0) {
@@ -259,13 +266,14 @@ bool parseArguments(int argc, char** argv, bool* selfTest) {
         if (std::strcmp(key, "--shift-mode") == 0) config.shiftMode = value;
         else if (std::strcmp(key, "--alt-mode") == 0) config.altMode = value;
         else if (std::strcmp(key, "--control-mode") == 0) config.controlMode = value;
+        else if (std::strcmp(key, "--ctrl-shift-mode") == 0) config.controlShiftMode = value;
         else return false;
     }
     return true;
 }
 
 bool runSelfTest() {
-    DragState state(8, 8, "convert", "tools", "actions");
+    DragState state(8, 8, "convert", "tools", "actions", "none");
     state.begin(100, 100, 0);
     if (!state.move(102, 102, Shift).empty()) return false;
     auto events = state.move(104, 100, Shift);
@@ -287,7 +295,11 @@ bool runSelfTest() {
     state.begin(200, 200, 0);
     state.move(205, 200, Control);
     events = state.release(205, 200);
-    return events.size() == 1 && std::strcmp(events[0].type, "hide") == 0;
+    if (events.size() != 1 || std::strcmp(events[0].type, "hide") != 0) return false;
+    DragState custom(8, 8, "convert", "none", "actions", "tools");
+    custom.begin(0, 0, 0);
+    events = custom.move(4, 0, Control | Shift);
+    return events.size() == 1 && events[0].mode == "tools";
 }
 
 } // namespace
@@ -307,7 +319,7 @@ int main(int argc, char** argv) {
     const int dragWidth = std::max(1, GetSystemMetrics(SM_CXDRAG));
     const int dragHeight = std::max(1, GetSystemMetrics(SM_CYDRAG));
     DragState state(dragWidth, dragHeight, config.shiftMode,
-                    config.altMode, config.controlMode);
+                    config.altMode, config.controlMode, config.controlShiftMode);
     dragState = &state;
     downKeys[VK_SHIFT] = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
     downKeys[VK_MENU] = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;

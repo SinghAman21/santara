@@ -10,6 +10,8 @@ mod media;
 mod archives;
 mod pdf;
 mod documents;
+#[cfg(windows)]
+mod windows_watcher;
 
 use serde::Serialize;
 use tauri::{
@@ -111,20 +113,25 @@ fn wheel_request(args: &[String]) -> Option<WheelRequest> {
     Some(WheelRequest { action, mode, point })
 }
 
-fn handle_wheel_request(app: &tauri::AppHandle, args: &[String]) -> bool {
-    let Some(request) = wheel_request(args) else { return false };
-    let Some(window) = app.get_webview_window("wheel") else { return true };
-    if request.action == "hide" {
-        let _ = window.hide();
-        return true;
-    }
-    if let Some(mode) = request.mode {
+fn show_wheel(app: &tauri::AppHandle, mode: &str, point: Option<(i32, i32)>) {
+    let Some(window) = app.get_webview_window("wheel") else { return };
+    if ["convert", "tools", "actions"].contains(&mode) {
         if let Ok(mut current) = app.state::<services::AppState>().wheel_mode.lock() { *current = mode.into(); }
         let new_drag = !window.is_visible().unwrap_or(false);
-        if let Err(error) = place_wheel(&window, request.point) { eprintln!("Wheel placement unavailable: {error}"); }
+        if let Err(error) = place_wheel(&window, point) { eprintln!("Wheel placement unavailable: {error}"); }
         let _ = window.emit("santara:wheel-mode", serde_json::json!({ "mode": mode, "newDrag": new_drag }));
         let _ = window.show();
     }
+}
+
+fn hide_wheel(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("wheel") { let _ = window.hide(); }
+}
+
+fn handle_wheel_request(app: &tauri::AppHandle, args: &[String]) -> bool {
+    let Some(request) = wheel_request(args) else { return false };
+    if request.action == "hide" { hide_wheel(app); }
+    else if let Some(mode) = request.mode { show_wheel(app, mode, request.point); }
     true
 }
 
@@ -180,6 +187,8 @@ fn main() {
         .setup(|app| {
             let state = services::AppState::load(app.handle())?;
             app.manage(state);
+            #[cfg(windows)]
+            windows_watcher::start(app.handle());
             let args = std::env::args().collect::<Vec<_>>();
             if handle_wheel_request(app.handle(), &args) {
                 if let Some(workspace) = app.get_webview_window("workspace") { let _ = workspace.hide(); }
@@ -241,8 +250,14 @@ fn main() {
                 _ => {}
             }
         })
-        .run(tauri::generate_context!())
-        .expect("Santara Tauri shell failed to start");
+        .build(tauri::generate_context!())
+        .expect("Santara Tauri shell failed to build")
+        .run(|_app, event| {
+            #[cfg(windows)]
+            if matches!(event, tauri::RunEvent::Exit) { windows_watcher::stop(_app); }
+            #[cfg(not(windows))]
+            let _ = event;
+        });
 }
 
 #[cfg(test)]

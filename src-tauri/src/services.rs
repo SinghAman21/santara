@@ -166,6 +166,9 @@ pub struct AppState {
 }
 
 impl AppState {
+    #[cfg(windows)]
+    pub fn shortcuts(&self) -> Result<Shortcuts, String> { Ok(self.lock()?.settings.shortcuts.clone()) }
+
     pub fn load(app: &AppHandle) -> Result<Self, String> {
         let directory = app.path().app_config_dir().map_err(|error| error.to_string())?;
         fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
@@ -669,6 +672,8 @@ pub async fn save_settings(app: AppHandle, state: State<'_, AppState>, patch: Va
     *state.semaphore.lock().map_err(|_| "Santara queue is unavailable")? = Arc::new(Semaphore::new(usize::from(updated.concurrency)));
     let snapshot = state.snapshot()?;
     let _ = app.emit("santara:update", serde_json::json!({ "settings": updated, "backends": snapshot.backends, "capabilities": snapshot.capabilities }));
+    #[cfg(windows)]
+    if previous.shortcuts != updated.shortcuts { crate::windows_watcher::restart(&app); }
     Ok(updated)
 }
 

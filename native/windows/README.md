@@ -8,9 +8,9 @@ This isolated Windows x64 helper watches the current interactive desktop for a l
 {"type":"hide","mode":"convert","x":856,"y":532}
 ```
 
-Default mappings are Shift → `convert`, Alt → `tools`, Control → `actions`. Change them with `--shift-mode`, `--alt-mode`, or `--control-mode`; accepted mode names are `convert`, `tools`, and `actions`. When more than one modifier is held, Shift takes priority, then Alt, then Control. A mode change emits a new `show`; releasing all mapped modifiers emits `hide`. Coordinates are screen pixels and can be negative on monitors left of or above the primary display.
+Default mappings are Shift → `convert`, Alt → `tools`, Control → `actions`. Change them with `--shift-mode`, `--alt-mode`, `--control-mode`, or `--ctrl-shift-mode`; accepted mode names are `convert`, `tools`, `actions`, and `none` (unassigned). Configured Ctrl+Shift takes priority, then Shift, Alt, and Control. A mode change emits a new `show`; releasing all mapped modifiers emits `hide`. Coordinates are screen pixels and can be negative on monitors left of or above the primary display.
 
-Releasing a modifier leaves the last selected wheel visible; moving the pointer continues to update its position. The wheel hides only when the drag ends. The helper is a prototype and has not yet been built or exercised on Windows. It uses user-mode `WH_MOUSE_LL` and `WH_KEYBOARD_LL` hooks on the launching user's interactive desktop. It does not elevate, inspect files, read the clipboard, access the network, or register a drop target. The Electron overlay must own the actual file drop. This process only reports modifier and pointer state; it cannot make the overlay receive drags that the OS routes elsewhere.
+Releasing a modifier leaves the last selected wheel visible. The wheel hides only when the drag ends. The helper is a prototype and has not yet been exercised with real Explorer drags on Windows. It uses user-mode `WH_MOUSE_LL` and `WH_KEYBOARD_LL` hooks on the launching user's interactive desktop. It does not elevate, inspect files, read the clipboard, access the network, or register a drop target. The Tauri overlay must own the actual file drop. This process only reports modifier and pointer state; it cannot make the overlay receive drags that the OS routes elsewhere. Tauri starts only the bundled helper from its resource directory (or the local development build) and terminates it on exit.
 
 ## Build and test on Windows
 
@@ -21,7 +21,7 @@ Install Visual Studio Build Tools with the Desktop development with C++ workload
 node --test .\native\windows\protocol.test.mjs
 ```
 
-The script builds `native\windows\build\santara-drag-watcher.exe` and runs the helper's transition self-test. The same commands can run in a Windows CI job after initializing the MSVC x64 developer environment. No Electron, app, or package configuration is changed here.
+The script builds `native\windows\build\santara-drag-watcher.exe` and runs the helper's transition self-test. The same commands can run in a Windows CI job after initializing the MSVC x64 developer environment. Packaging must place this helper under Tauri's `native/` resource directory; a missing helper leaves the workspace and direct drop available.
 
 ## Linux cross-build for the Windows installer
 
