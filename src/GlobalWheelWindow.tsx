@@ -70,6 +70,9 @@ export default function GlobalWheelWindow() {
   }, [snapshot.settings.theme]);
 
   useEffect(() => {
+    void api.currentWheelMode?.().then(value => {
+      if (value === 'convert' || value === 'tools' || value === 'actions') setMode(value);
+    });
     return api.onWheelMode?.((value, newDrag) => {
       if (newDrag) {
         setHints([]);

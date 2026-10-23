@@ -33,6 +33,7 @@ export interface Bridge {
   closeVideoTool?(): Promise<unknown>;
   onWheelMode?(callback: (mode: string, newDrag?: boolean) => void): () => void;
   finishGlobalWheel?(page?: 'converter' | 'activity' | 'background'): Promise<void>;
+  currentWheelMode?(): Promise<string>;
   selectGlobalOperation?(request: { capabilityId: string; format: string; files: LocalFile[] }): Promise<void>;
   onGlobalOperation?(callback: (request: { capabilityId: string; format: string; files: LocalFile[] }) => void): () => void;
   onGlobalPage?(callback: (page: 'converter' | 'activity') => void): () => void;

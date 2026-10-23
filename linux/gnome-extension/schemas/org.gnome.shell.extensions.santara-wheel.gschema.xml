@@ -7,7 +7,7 @@
       <description>Use a command template or a registered URI handler.</description>
     </key>
     <key name="command-template" type="s">
-      <default>'santara --ozone-platform=x11 --santara-wheel-action={action} --santara-global-wheel={mode} --santara-wheel-x={x} --santara-wheel-y={y}'</default>
+      <default>'santara --santara-wheel-action={action} --santara-global-wheel={mode} --santara-wheel-x={x} --santara-wheel-y={y}'</default>
       <summary>Santara command template</summary>
       <description>Arguments are parsed without a shell. Supported placeholders: {action}, {mode}, {x}, and {y}.</description>
     </key>

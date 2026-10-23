@@ -43,21 +43,28 @@ fn shell_hide_wheel(window: tauri::WebviewWindow) -> Result<(), String> {
     window.hide().map_err(|error| error.to_string())
 }
 
-fn place_wheel(window: &WebviewWindow) -> Result<(), String> {
-    let monitor = window
-        .current_monitor()
-        .map_err(|error| error.to_string())?
+#[tauri::command]
+fn shell_wheel_mode(state: tauri::State<'_, services::AppState>) -> Result<String, String> {
+    state.wheel_mode.lock().map(|mode| mode.clone()).map_err(|_| "Wheel state is unavailable".into())
+}
+
+fn place_wheel(window: &WebviewWindow, requested: Option<(i32, i32)>) -> Result<(), String> {
+    let size = window.outer_size().map_err(|error| error.to_string())?;
+    let cursor = window.cursor_position().ok();
+    let point = requested.or_else(|| cursor.map(|value| (value.x.round() as i32, value.y.round() as i32)));
+    let monitors = window.available_monitors().map_err(|error| error.to_string())?;
+    let monitor = point.and_then(|(x, y)| monitors.iter().find(|monitor| {
+        let area = monitor.work_area();
+        x >= area.position.x && y >= area.position.y
+            && i64::from(x) < i64::from(area.position.x) + i64::from(area.size.width)
+            && i64::from(y) < i64::from(area.position.y) + i64::from(area.size.height)
+    }).cloned())
+        .or(window.current_monitor().map_err(|error| error.to_string())?)
         .or(window.primary_monitor().map_err(|error| error.to_string())?)
         .ok_or("No monitor is available for the wheel")?;
     let area = monitor.work_area();
-    let size = window.outer_size().map_err(|error| error.to_string())?;
-    let cursor = window.cursor_position().ok();
-    let point_x = cursor
-        .map(|point| point.x.round() as i32)
-        .unwrap_or(area.position.x + area.size.width as i32 / 2);
-    let point_y = cursor
-        .map(|point| point.y.round() as i32)
-        .unwrap_or(area.position.y + area.size.height as i32 / 2);
+    let point_x = point.map(|value| value.0).unwrap_or(area.position.x + area.size.width as i32 / 2);
+    let point_y = point.map(|value| value.1).unwrap_or(area.position.y + area.size.height as i32 / 2);
     let max_x = area
         .position
         .x
@@ -77,8 +84,60 @@ fn place_wheel(window: &WebviewWindow) -> Result<(), String> {
         .map_err(|error| error.to_string())
 }
 
+#[derive(Debug, PartialEq)]
+struct WheelRequest {
+    action: &'static str,
+    mode: Option<&'static str>,
+    point: Option<(i32, i32)>,
+}
+
+fn wheel_request(args: &[String]) -> Option<WheelRequest> {
+    let argument = |key: &str| args.iter().find_map(|value| value.strip_prefix(key));
+    let action = match argument("--santara-wheel-action=")? { "show" => "show", "hide" => "hide", _ => return None };
+    let mode = match argument("--santara-global-wheel=") {
+        Some("convert") => Some("convert"), Some("tools") => Some("tools"), Some("actions") => Some("actions"),
+        Some("") | None if action == "hide" => None,
+        _ => return None,
+    };
+    let point = match (argument("--santara-wheel-x="), argument("--santara-wheel-y=")) {
+        (Some(x), Some(y)) => {
+            let x = x.parse::<i32>().ok()?;
+            let y = y.parse::<i32>().ok()?;
+            Some((x, y))
+        }
+        (None, None) => None,
+        _ => return None,
+    };
+    Some(WheelRequest { action, mode, point })
+}
+
+fn handle_wheel_request(app: &tauri::AppHandle, args: &[String]) -> bool {
+    let Some(request) = wheel_request(args) else { return false };
+    let Some(window) = app.get_webview_window("wheel") else { return true };
+    if request.action == "hide" {
+        let _ = window.hide();
+        return true;
+    }
+    if let Some(mode) = request.mode {
+        if let Ok(mut current) = app.state::<services::AppState>().wheel_mode.lock() { *current = mode.into(); }
+        let new_drag = !window.is_visible().unwrap_or(false);
+        if let Err(error) = place_wheel(&window, request.point) { eprintln!("Wheel placement unavailable: {error}"); }
+        let _ = window.emit("santara:wheel-mode", serde_json::json!({ "mode": mode, "newDrag": new_drag }));
+        let _ = window.show();
+    }
+    true
+}
+
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            if !handle_wheel_request(app, &args) {
+                if let Some(window) = app.get_webview_window("workspace") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+        }))
         .register_uri_scheme_protocol("santara-media", |context, request| {
             let state = context.app_handle().state::<services::AppState>();
             state.serve_preview(context.webview_label(), request)
@@ -89,6 +148,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             runtime_info,
             shell_hide_wheel,
+            shell_wheel_mode,
             services::bootstrap,
             services::inspect_paths,
             services::consume_drop,
@@ -120,6 +180,10 @@ fn main() {
         .setup(|app| {
             let state = services::AppState::load(app.handle())?;
             app.manage(state);
+            let args = std::env::args().collect::<Vec<_>>();
+            if handle_wheel_request(app.handle(), &args) {
+                if let Some(workspace) = app.get_webview_window("workspace") { let _ = workspace.hide(); }
+            }
             let workspace = MenuItem::with_id(app, "workspace", "Show Santara", true, None::<&str>)?;
             let wheel = MenuItem::with_id(app, "wheel", "Show wheel prototype", true, None::<&str>)?;
             let image = MenuItem::with_id(app, "image", "Show image editor prototype", true, None::<&str>)?;
@@ -136,7 +200,7 @@ fn main() {
                             app.exit(0);
                         } else if let Some(window) = app.get_webview_window(event.id().as_ref()) {
                             if window.label() == "wheel" {
-                                if let Err(error) = place_wheel(&window) {
+                                if let Err(error) = place_wheel(&window, None) {
                                     eprintln!("Santara shell wheel placement unavailable: {error}");
                                 }
                             }
@@ -179,4 +243,17 @@ fn main() {
         })
         .run(tauri::generate_context!())
         .expect("Santara Tauri shell failed to start");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn accepts_only_bounded_wheel_commands() {
+        let args = vec!["santara".into(), "--santara-wheel-action=show".into(), "--santara-global-wheel=tools".into(), "--santara-wheel-x=-120".into(), "--santara-wheel-y=250".into()];
+        assert_eq!(wheel_request(&args), Some(WheelRequest { action: "show", mode: Some("tools"), point: Some((-120, 250)) }));
+        assert!(wheel_request(&["--santara-wheel-action=show".into(), "--santara-global-wheel=unknown".into()]).is_none());
+        assert_eq!(wheel_request(&["--santara-wheel-action=hide".into(), "--santara-global-wheel=".into()]).unwrap().action, "hide");
+    }
 }

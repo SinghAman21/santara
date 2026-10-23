@@ -11,7 +11,7 @@ cp -a "$SOURCE_DIR/." "$DEST_DIR/"
 glib-compile-schemas --strict "$DEST_DIR/schemas"
 
 gsettings --schemadir "$DEST_DIR/schemas" set org.gnome.shell.extensions.santara-wheel launch-method 'command'
-gsettings --schemadir "$DEST_DIR/schemas" set org.gnome.shell.extensions.santara-wheel command-template 'santara --ozone-platform=x11 --santara-wheel-action={action} --santara-global-wheel={mode} --santara-wheel-x={x} --santara-wheel-y={y}'
+gsettings --schemadir "$DEST_DIR/schemas" set org.gnome.shell.extensions.santara-wheel command-template 'santara --santara-wheel-action={action} --santara-global-wheel={mode} --santara-wheel-x={x} --santara-wheel-y={y}'
 
 python3 - "$UUID" <<'PY'
 import ast

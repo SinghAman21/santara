@@ -44,6 +44,7 @@ export const tauriBridge: Bridge = {
   finishGlobalWheel: async page => { await invoke('finish_global_wheel', { page }); },
   selectGlobalOperation: request => invoke('select_global_operation', { request }),
   onWheelMode: callback => subscription<{ mode: string; newDrag: boolean }>('santara:wheel-mode', payload => callback(payload.mode, payload.newDrag)),
+  currentWheelMode: () => invoke<string>('shell_wheel_mode'),
   onGlobalOperation: callback => subscription('santara:global-operation', callback),
   onGlobalPage: callback => subscription('santara:global-page', callback),
   onUpdate: callback => subscription('santara:update', callback),

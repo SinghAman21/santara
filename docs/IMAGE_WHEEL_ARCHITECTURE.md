@@ -1,6 +1,6 @@
 # Santara Image Wheel Architecture
 
-Tauri migration note: `src-tauri/` now receives native file drops and has a provisional Rust raster job path with crop, resize, rotation, flip, adjustments, and generated background canvases. Metadata editing/preservation, codec parity, and native global drag hooks are still being ported; the feature descriptions below remain the Electron baseline until Phase 8 validation.
+Tauri migration note: `src-tauri/` now receives native file drops and has a provisional Rust raster job path with crop, resize, rotation, flip, adjustments, and generated background canvases. The optional GNOME extension now targets Tauri's single-instance wheel command. Metadata editing/preservation, codec parity, and the Windows global drag helper are still being ported; the feature descriptions below remain the Electron baseline until Phase 8 validation.
 
 ## Product direction
 

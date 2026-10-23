@@ -156,6 +156,7 @@ struct PreviewEntry {
 
 pub struct AppState {
     data: Mutex<Data>,
+    pub wheel_mode: Mutex<String>,
     semaphore: Mutex<Arc<Semaphore>>,
     media: Mutex<crate::media::MediaBackend>,
     pdf: Mutex<crate::pdf::PdfBackend>,
@@ -212,6 +213,7 @@ impl AppState {
         let documents = crate::documents::detect(&data.settings.backend_paths);
         Ok(Self {
             data: Mutex::new(data),
+            wheel_mode: Mutex::new("convert".into()),
             semaphore: Mutex::new(Arc::new(Semaphore::new(usize::from(concurrency)))),
             media: Mutex::new(media),
             pdf: Mutex::new(pdf),
