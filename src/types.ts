@@ -14,6 +14,7 @@ export interface Bridge {
   enqueue(request: { files: LocalFile[]; operation: string; format: string; options: Record<string, unknown> }): Promise<unknown>;
   cancel(id: string): Promise<unknown>;
   retry(id: string): Promise<unknown>;
+  copyDiagnostic?(id: string): Promise<void>;
   saveSettings(patch: Partial<Settings>): Promise<Settings>;
   pickOutput(): Promise<string | null>;
   reveal(path: string): Promise<unknown>;

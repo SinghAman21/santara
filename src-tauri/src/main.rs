@@ -166,6 +166,7 @@ fn main() {
             services::enqueue,
             services::cancel,
             services::retry,
+            services::copy_diagnostic,
             services::image_preview,
             services::preview,
             services::preview_context,

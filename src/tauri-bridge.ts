@@ -24,6 +24,7 @@ export const tauriBridge: Bridge = {
   enqueue: request => invoke('enqueue', { request }),
   cancel: id => invoke('cancel', { id }),
   retry: id => invoke('retry', { id }),
+  copyDiagnostic: id => invoke('copy_diagnostic', { id }),
   saveSettings: (patch: Partial<Settings>) => invoke<Settings>('save_settings', { patch }),
   pickOutput: () => invoke<string | null>('pick_output'),
   reveal: path => invoke('reveal', { path }),

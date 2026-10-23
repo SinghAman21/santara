@@ -928,6 +928,24 @@ pub fn retry(app: AppHandle, state: State<'_, AppState>, id: String) -> Result<V
 }
 
 #[tauri::command]
+pub fn copy_diagnostic(app: AppHandle, state: State<'_, AppState>, id: String) -> Result<(), String> {
+    let data = state.lock()?;
+    let job = data.jobs.iter().find(|job| job.id == id).ok_or("Unknown job")?;
+    let details = serde_json::json!({
+        "version": env!("CARGO_PKG_VERSION"),
+        "runtime": "tauri",
+        "platform": if cfg!(windows) { "win32" } else { "linux" },
+        "operation": job.operation,
+        "format": job.format,
+        "status": job.status,
+        "error": job.error.as_ref().map(|_| "A local processing error occurred; see the on-device job details"),
+    });
+    let text = serde_json::to_string_pretty(&details).map_err(|error| error.to_string())?;
+    drop(data);
+    app.clipboard().write_text(text).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub async fn image_preview(state: State<'_, AppState>, path: String, operation: String, options: Value) -> Result<Value, String> {
     let input = state.known_path(&path, false)?;
     tauri::async_runtime::spawn_blocking(move || crate::processing::image_preview(&input, &operation, &options))
