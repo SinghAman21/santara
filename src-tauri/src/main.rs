@@ -7,7 +7,7 @@ use serde::Serialize;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
-    DragDropEvent, Manager, WindowEvent,
+    DragDropEvent, Manager, PhysicalPosition, WebviewWindow, WindowEvent,
 };
 
 #[derive(Serialize)]
@@ -27,9 +27,51 @@ fn runtime_info() -> RuntimeInfo {
     }
 }
 
+#[tauri::command]
+fn shell_hide_wheel(window: tauri::WebviewWindow) -> Result<(), String> {
+    if window.label() != "wheel" {
+        return Err("Only the wheel can close itself".into());
+    }
+    window.hide().map_err(|error| error.to_string())
+}
+
+fn place_wheel(window: &WebviewWindow) -> Result<(), String> {
+    let monitor = window
+        .current_monitor()
+        .map_err(|error| error.to_string())?
+        .or(window.primary_monitor().map_err(|error| error.to_string())?)
+        .ok_or("No monitor is available for the wheel")?;
+    let area = monitor.work_area();
+    let size = window.outer_size().map_err(|error| error.to_string())?;
+    let cursor = window.cursor_position().ok();
+    let point_x = cursor
+        .map(|point| point.x.round() as i32)
+        .unwrap_or(area.position.x + area.size.width as i32 / 2);
+    let point_y = cursor
+        .map(|point| point.y.round() as i32)
+        .unwrap_or(area.position.y + area.size.height as i32 / 2);
+    let max_x = area
+        .position
+        .x
+        .saturating_add(area.size.width as i32)
+        .saturating_sub(size.width as i32)
+        .max(area.position.x);
+    let max_y = area
+        .position
+        .y
+        .saturating_add(area.size.height as i32)
+        .saturating_sub(size.height as i32)
+        .max(area.position.y);
+    let x = (point_x - size.width as i32 / 2).clamp(area.position.x, max_x);
+    let y = (point_y - size.height as i32 / 2).clamp(area.position.y, max_y);
+    window
+        .set_position(PhysicalPosition::new(x, y))
+        .map_err(|error| error.to_string())
+}
+
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![runtime_info])
+        .invoke_handler(tauri::generate_handler![runtime_info, shell_hide_wheel])
         .setup(|app| {
             let workspace = MenuItem::with_id(app, "workspace", "Show Santara", true, None::<&str>)?;
             let wheel = MenuItem::with_id(app, "wheel", "Show wheel prototype", true, None::<&str>)?;
@@ -46,6 +88,11 @@ fn main() {
                         if event.id().as_ref() == "quit" {
                             app.exit(0);
                         } else if let Some(window) = app.get_webview_window(event.id().as_ref()) {
+                            if window.label() == "wheel" {
+                                if let Err(error) = place_wheel(&window) {
+                                    eprintln!("Santara shell wheel placement unavailable: {error}");
+                                }
+                            }
                             let _ = window.show();
                             let _ = window.set_focus();
                         }

@@ -4,7 +4,7 @@
 
 Replace Electron with Tauri 2 while preserving Santara’s Windows x64 and Linux x64 behavior, especially the global citrus wheel, local processing, floating editors, and optional native integrations. Reuse the existing React/Vite interface where practical. Do not add macOS support or weaken privacy, safety, accessibility, or offline behavior to meet a size target.
 
-Phase 0 is recorded in [ADR 0001](adr/0001-tauri-runtime-boundaries.md) and the [parity matrix](TAURI_PARITY_MATRIX.md). Phase 1 has an isolated Tauri shell prototype; its cross-platform gate remains open. Keep the current Electron implementation intact until Tauri reaches the parity and release gates below.
+Phase 0 is recorded in [ADR 0001](adr/0001-tauri-runtime-boundaries.md) and the [parity matrix](TAURI_PARITY_MATRIX.md). Phase 1 has an isolated Tauri shell prototype. On this migration branch, implement Phases 1–7 in order, record the checks for each phase, and run the full validation in Phase 8. The user authorized Electron removal on this branch after its replacements are implemented. Keep all processing local and offline-first; do not add macOS support.
 
 ## Baseline and constraints
 
@@ -15,7 +15,9 @@ Phase 0 is recorded in [ADR 0001](adr/0001-tauri-runtime-boundaries.md) and the 
 - Keep FFmpeg, LibreOffice, Pandoc, Poppler, qpdf, and other external engines optional and capability-detected unless a separate reviewed distribution decision says otherwise.
 - Tauri uses system WebViews on Windows/Linux. Document the WebView2 offline-install choice and Linux WebKitGTK dependencies; test AppImage portability rather than assuming it.
 
-## Ordered phases and gates
+## Ordered implementation phases and deferred validation
+
+The phase gates below are now acceptance checks collected in [the validation checklist](TAURI_VALIDATION_CHECKLIST.md). They do not stop the next code phase. A failed check blocks declaring migration complete, not continued implementation. Phase 8 runs them against the integrated Tauri tree and fixes failures before release.
 
 ### Phase 0 — Inventory, baseline, and migration decisions
 
@@ -80,10 +82,17 @@ Phase 0 is recorded in [ADR 0001](adr/0001-tauri-runtime-boundaries.md) and the 
 
 ### Phase 7 — Cutover and safe cleanup
 
-- Only after Phases 1–6 pass, remove Electron-only source, scripts, native helpers, dependencies, CI jobs, and docs that have verified replacements.
+- After implementing replacements in Phases 1–6, remove Electron-only source, scripts, native helpers, dependencies, CI jobs, and docs on `tauri-rt`. Keep the previous implementation available in Git history while Phase 8 validates the replacement.
 - Keep any still-required Windows/Linux helper isolated and documented; remove duplicate or generated files only after checking references and build inputs.
 - Switch primary dev/build/package scripts and update README, architecture docs, capability docs, roadmap, and resume notes.
-- **Gate:** clean checkout builds both targets without Electron; all tests and release smoke checks pass; `git diff` confirms no needed platform integration was dropped.
+- **Code completion check:** clean checkout has Tauri as the sole runtime; `git diff` confirms no needed platform integration was dropped. Runtime and release checks move to Phase 8.
+
+### Phase 8 — Integrated platform validation and release gate
+
+- Run every check in `docs/TAURI_VALIDATION_CHECKLIST.md` against the integrated Tauri branch, including native Windows 10/11 x64 and Ubuntu LTS x64 acceptance.
+- Fix failures in their owning phase code and repeat the affected checks. Measure actual installer and installed footprints from final artifacts, with estimates labeled separately.
+- Do not publish or claim feature parity until both platforms pass, including real file-manager drags, offline install behavior, accessibility, safety, licensing, and clean-checkout builds.
+- **Final gate:** the parity matrix is complete with evidence for both platforms and no Electron runtime dependency remains.
 
 ## Parallel-agent plan for implementation
 

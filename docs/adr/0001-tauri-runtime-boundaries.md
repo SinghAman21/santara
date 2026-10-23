@@ -1,10 +1,10 @@
 # ADR 0001: Tauri runtime boundaries and Phase 0 baseline
 
-Status: accepted for implementation on `tauri-rt`, 2026-10-23. This decision does not authorize Electron cleanup or claim Tauri parity.
+Status: accepted for implementation on `tauri-rt`, 2026-10-23. The user later authorized Electron cleanup on this branch after Tauri code replacements are implemented; validation is deferred to Phase 8. This decision does not claim Tauri parity.
 
 ## Decision
 
-Keep the Electron application and `npm run dist` operational while an isolated Tauri 2 host is built. The existing `src/types.ts` `Bridge` interface is the renderer-facing compatibility contract. A Tauri adapter will implement that interface, with Rust commands and events scoped to named windows. The renderer must not import Tauri APIs outside the adapter. The Rust host owns validation, capability detection, jobs, local file access, and window lifecycle. No Node sidecar, upload service, account, telemetry, or macOS target is part of this migration.
+Use an isolated Tauri 2 host during implementation, then remove the Electron runtime from `tauri-rt` after its code replacements exist. The existing `src/types.ts` `Bridge` interface is the renderer-facing compatibility contract. A Tauri adapter will implement that interface, with Rust commands and events scoped to named windows. The renderer must not import Tauri APIs outside the adapter. The Rust host owns validation, capability detection, jobs, local file access, and window lifecycle. No Node sidecar, upload service, account, telemetry, or macOS target is part of this migration.
 
 Use Rust bindings to libvips for the primary local raster pipeline, with libvips and its codec libraries packaged and attributed per target. [libvips is LGPL-2.1-or-later](https://github.com/libvips/libvips); dynamic linking and license notices are the distribution direction. This is a selected implementation direction, not a support claim: image input/output formats are enabled only after runtime probes and format parity tests. `libvips-dev` is required on the Linux build host and is missing as of this audit. Check Rust binding maintenance, Windows binary provenance, transitive codec licenses, and redistribution notices before a release build. Existing Sharp remains in Electron until Tauri image parity passes. Optional FFmpeg, Poppler, qpdf, LibreOffice, Pandoc, ImageMagick, and archive backends stay capability detected; no arbitrary executable path reaches a job command without explicit local settings confirmation and validation.
 
@@ -45,7 +45,7 @@ Events preserve the adapter callback signatures: `santara:update` (`Partial<Snap
 
 ## Phase 0 environment and baseline
 
-Audited on Ubuntu 26.04.1 LTS x64. Rust 1.93.1, Cargo 1.93.1, Node 22.22.1, GTK 3.24.52, WebKitGTK 4.1 2.52.6, Ayatana AppIndicator 0.5.94 and librsvg 2.61.3 are installed. Wine 10 and MinGW x64 are available. `patchelf`, `libvips-dev`, and `xvfb` are absent; the user will install them, without this agent invoking sudo. `rustup` is absent; installed Rust target management and native Windows builds need separate verification. Existing GitHub Actions uses `windows-latest` and `ubuntu-22.04` for Electron; it is a build host scaffold, not Windows 10/11 manual acceptance.
+Audited on Ubuntu 26.04.1 LTS x64. Rust 1.93.1, Cargo 1.93.1, Node 22.22.1, GTK 3.24.52, WebKitGTK 4.1 2.52.6, Ayatana AppIndicator 0.5.94 and librsvg 2.61.3 are installed. Wine 10 and MinGW x64 are available. `patchelf`, `libvips-dev`, and `xvfb` are absent; the user will install them later, without this agent invoking sudo. The shell `.deb` and AppImage did build without system `patchelf` on this host; `libvips-dev` is needed for the later image backend and `xvfb` for headless smoke tests. `rustup` and NSIS are absent; Windows cross-build support and native Windows builds need separate verification. Existing GitHub Actions uses `windows-latest` and `ubuntu-22.04` for Electron; it is a build host scaffold, not Windows 10/11 manual acceptance.
 
 Measured existing Electron artifacts with `stat -c %s` and `du -sb` (bytes):
 
@@ -61,6 +61,6 @@ The Linux deb declares `Installed-Size: 346121` KiB. The unpacked folders are **
 
 ## Gate and open evidence
 
-The scope, typed interface, current dependencies, size method, and build-host limitations are recorded here and in `docs/TAURI_PARITY_MATRIX.md`. Electron files remain untouched. Phase 1 implementation may begin after these decisions are reviewed in the integrated tree. Its platform smoke gate remains open until Windows 10/11 native and Ubuntu LTS tests pass; Wine is only a build/protocol aid. Phase 7 cleanup remains forbidden until the full native release gates pass.
+The scope, typed interface, current dependencies, size method, and build-host limitations are recorded here and in `docs/TAURI_PARITY_MATRIX.md`. Phase checks are tracked in `docs/TAURI_VALIDATION_CHECKLIST.md` and run together in Phase 8. Wine is only a build/protocol aid; native Windows 10/11 and Ubuntu LTS acceptance is still required before release.
 
 Tauri references: [Linux prerequisites](https://tauri.app/start/prerequisites/), [commands](https://tauri.app/develop/calling-rust/), [Windows WebView2 installer modes](https://tauri.app/distribute/windows-installer/).

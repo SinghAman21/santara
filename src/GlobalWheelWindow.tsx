@@ -84,6 +84,17 @@ export default function GlobalWheelWindow() {
     });
   }, []);
 
+  useEffect(() => {
+    const cancel = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        void api.finishGlobalWheel?.('converter');
+      }
+    };
+    window.addEventListener('keydown', cancel);
+    return () => window.removeEventListener('keydown', cancel);
+  }, []);
+
   const selectedCategories: Set<string> = new Set(externalFiles.map(knownCategory).filter(Boolean));
   const items: WheelItem[] = mode === 'actions'
     ? actions.map(action => ({ ...action, detail: 'Local file action' }))
