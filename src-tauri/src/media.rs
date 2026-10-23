@@ -94,12 +94,13 @@ impl MediaBackend {
         let inputs = if category == "video" { VIDEO_INPUTS } else if category == "audio" { AUDIO_INPUTS } else { return false };
         if !inputs.contains(&input) || !has(&self.demuxers, demuxer(input)) { return false }
         let output_spec = if operation == "snapshot" && category == "video" && output == "png" { Some(("png", "image2pipe")) }
+            else if operation == "gif" && category == "video" && output == "gif" { Some(("gif", "gif")) }
             else if operation == "extract-audio" && category == "video" { AUDIO_OUTPUTS.iter().find(|entry| entry.0 == output).map(|entry| (entry.1, entry.2)) }
             else if category == "video" { VIDEO_OUTPUTS.iter().find(|entry| entry.0 == output).map(|entry| (entry.1, entry.2)) }
             else { AUDIO_OUTPUTS.iter().find(|entry| entry.0 == output).map(|entry| (entry.1, entry.2)) };
         let Some((encoder, muxer)) = output_spec else { return false };
         if !has(&self.encoders, encoder) || !has(&self.muxers, muxer) { return false }
-        if category == "video" && !["snapshot", "extract-audio", "mute"].contains(&operation) {
+        if category == "video" && !["snapshot", "extract-audio", "mute", "gif"].contains(&operation) {
             let audio_encoder = video_audio_encoder(output);
             if !has(&self.encoders, audio_encoder) { return false }
         }
@@ -107,7 +108,7 @@ impl MediaBackend {
             "convert" | "compress" | "trim" | "strip-metadata" | "extract-audio" | "mute" | "snapshot" => &[][..],
             "resize" => &["scale"][..], "crop" => &["crop"][..],
             "flip" => &["hflip", "vflip"][..], "rotate" => &["hflip", "vflip", "transpose"][..],
-            "speed" => &["setpts", "atempo"][..],
+            "speed" => &["setpts", "atempo"][..], "gif" => &["fps", "scale"][..],
             "normalize" => &["loudnorm", "aresample"][..], "channels" => &["aresample"][..],
             _ => return false,
         };
@@ -119,10 +120,11 @@ impl MediaBackend {
         for category in ["video", "audio"] {
             let inputs = if category == "video" { VIDEO_INPUTS } else { AUDIO_INPUTS };
             let mut operations = vec!["convert", "compress", "trim", "strip-metadata"];
-            if category == "video" { operations.extend(["resize", "crop", "rotate", "flip", "mute", "speed", "snapshot", "extract-audio"]); }
+            if category == "video" { operations.extend(["resize", "crop", "rotate", "flip", "mute", "speed", "snapshot", "extract-audio", "gif"]); }
             else { operations.extend(["normalize", "channels"]); }
             for operation in operations {
                 let outputs = if operation == "snapshot" { vec!["png"] }
+                    else if operation == "gif" { vec!["gif"] }
                     else if operation == "extract-audio" || category == "audio" { AUDIO_OUTPUTS.iter().map(|entry| entry.0).collect() }
                     else { VIDEO_OUTPUTS.iter().map(|entry| entry.0).collect() };
                 let available_inputs = inputs.iter().filter(|input| outputs.iter().any(|output| self.supports(category, operation, input, output))).copied().collect::<Vec<_>>();
@@ -130,7 +132,7 @@ impl MediaBackend {
                 result.push(json!({ "id": format!("{category}:{operation}"), "operation": operation,
                     "label": format!("{} {category}", operation.replace('-', " ")), "category": category,
                     "inputs": available_inputs, "outputs": available_outputs, "backend": "ffmpeg",
-                    "available": !available_outputs.is_empty(), "batch": true, "preservesMetadata": operation != "strip-metadata" && operation != "snapshot",
+                    "available": !available_outputs.is_empty(), "batch": true, "preservesMetadata": !["strip-metadata", "snapshot", "gif"].contains(&operation),
                     "options": {}, "warning": "Uses the first media streams. Codec and container metadata support varies; compression can increase size." }));
             }
         }
@@ -163,7 +165,12 @@ impl MediaBackend {
             command.args(["-ss", &numeric("start", 0.0, 0.0, 604_800.0)?.to_string(), "-t", &numeric("duration", 10.0, 0.01, 604_800.0)?.to_string()]);
         }
         if operation == "snapshot" {
-            command.args(["-map", "0:v:0", "-frames:v", "1", "-an", "-sn", "-dn", "-c:v", "png"]);
+            command.args(["-ss", &numeric("time", 0.0, 0.0, 604_800.0)?.to_string(), "-map", "0:v:0", "-frames:v", "1", "-an", "-sn", "-dn", "-c:v", "png"]);
+        } else if operation == "gif" {
+            let fps = numeric("fps", 12.0, 1.0, 60.0)?;
+            let width = numeric("width", 480.0, 2.0, 2048.0)?;
+            if fps.fract() != 0.0 || width.fract() != 0.0 { return Err("Invalid GIF dimensions or frame rate".into()); }
+            command.args(["-map", "0:v:0", "-an", "-sn", "-dn", "-c:v", "gif", "-vf", &format!("fps={fps},scale={width}:-1")]);
         } else if category == "audio" || operation == "extract-audio" {
             let encoder = AUDIO_OUTPUTS.iter().find(|entry| entry.0 == format).ok_or("Invalid audio format")?.1;
             command.args(["-map", "0:a:0", "-vn", "-sn", "-dn", "-c:a", encoder]);
@@ -204,7 +211,7 @@ impl MediaBackend {
         let strip = operation == "strip-metadata" || options.get("stripMetadata").and_then(Value::as_bool).unwrap_or(false);
         if strip { command.args(["-map_metadata", "-1", "-map_metadata:s", "-1", "-map_chapters", "-1"]); }
         else { command.args(["-map_metadata", "0", "-map_chapters", "0"]); }
-        let muxer = if operation == "snapshot" { "image2pipe" } else if category == "audio" || operation == "extract-audio" { AUDIO_OUTPUTS.iter().find(|entry| entry.0 == format).ok_or("Invalid output")?.2 } else { VIDEO_OUTPUTS.iter().find(|entry| entry.0 == format).ok_or("Invalid output")?.2 };
+        let muxer = if operation == "snapshot" { "image2pipe" } else if operation == "gif" { "gif" } else if category == "audio" || operation == "extract-audio" { AUDIO_OUTPUTS.iter().find(|entry| entry.0 == format).ok_or("Invalid output")?.2 } else { VIDEO_OUTPUTS.iter().find(|entry| entry.0 == format).ok_or("Invalid output")?.2 };
         command.args(["-f", muxer]).arg(output);
         captured(command, Duration::from_secs(3600), cancelled).map_err(safe_media_error)?;
         Ok(())
@@ -256,6 +263,24 @@ mod tests {
         std::fs::write(&input, bytes).unwrap();
         backend.run(&input, &output, "audio", "convert", "mp3", &json!({}), || false).unwrap();
         assert!(std::fs::metadata(&output).unwrap().len() > 100);
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn exports_local_video_frame_and_gif_when_available() {
+        let backend = detect(&Default::default());
+        if !backend.supports("video", "snapshot", "mp4", "png") || !backend.supports("video", "gif", "mp4", "gif") { return; }
+        let directory = std::env::temp_dir().join(format!("santara-video-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&directory).unwrap();
+        let input = directory.join("input.mp4");
+        let status = Command::new(backend.ffmpeg.as_ref().unwrap()).args(["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=red:s=64x64:d=1:r=2", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-y"]).arg(&input).status().unwrap();
+        if !status.success() { std::fs::remove_dir_all(directory).unwrap(); return; }
+        let frame = directory.join("frame.tmp");
+        backend.run(&input, &frame, "video", "snapshot", "png", &json!({"time": 0.5}), || false).unwrap();
+        assert!(frame.metadata().unwrap().len() > 100);
+        let gif = directory.join("out.tmp");
+        backend.run(&input, &gif, "video", "gif", "gif", &json!({"fps": 2, "width": 64}), || false).unwrap();
+        assert!(gif.metadata().unwrap().len() > 100);
         std::fs::remove_dir_all(directory).unwrap();
     }
 }
