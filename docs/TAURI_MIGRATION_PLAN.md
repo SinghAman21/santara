@@ -4,7 +4,7 @@
 
 Replace Electron with Tauri 2 while preserving Santara’s Windows x64 and Linux x64 behavior, especially the global citrus wheel, local processing, floating editors, and optional native integrations. Reuse the existing React/Vite interface where practical. Do not add macOS support or weaken privacy, safety, accessibility, or offline behavior to meet a size target.
 
-This file is a plan only. No runtime migration has started. Keep the current Electron implementation intact until Tauri reaches the parity and release gates below.
+Phase 0 is recorded in [ADR 0001](adr/0001-tauri-runtime-boundaries.md) and the [parity matrix](TAURI_PARITY_MATRIX.md). Phase 1 has an isolated Tauri shell prototype; its cross-platform gate remains open. Keep the current Electron implementation intact until Tauri reaches the parity and release gates below.
 
 ## Baseline and constraints
 

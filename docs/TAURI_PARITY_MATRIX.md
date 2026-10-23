@@ -1,10 +1,10 @@
 # Tauri parity matrix
 
-Status as of 2026-10-23: Phase 0 inventory. `Pending` means the Tauri implementation and its gate have not passed. Electron behavior is a baseline, not a Tauri claim.
+Status as of 2026-10-23: Phase 0 inventory and Phase 1 shell prototype. `Pending` means the Tauri implementation and its gate have not passed. Electron behavior is a baseline, not a Tauri claim. See [shell validation](TAURI_SHELL_VALIDATION.md).
 
 | Area | Electron baseline | Tauri proof required | Status |
 | --- | --- | --- | --- |
-| Host and fallback | Hidden background host, optional tray, main workspace for settings/history/queue | Native startup, single instance, tray/menu, quit, host accessibility fallback on Ubuntu and Windows | Pending |
+| Host and fallback | Hidden background host, optional tray, main workspace for settings/history/queue | Native startup, single instance, tray/menu, quit, host accessibility fallback on Ubuntu and Windows | Ubuntu shell process launched; interactions pending |
 | Windows | Main workspace, transparent nonfocusable citrus wheel, compact image/video editor | Window creation, close/reopen, topmost, pointer positioning, focus, drag/drop, multi-monitor and mixed DPI | Pending |
 | Renderer | React/Vite workspace and wheel, image/video editor hosts, PDF workspace | Same layout/fonts/high contrast and keyboard behavior in WebKitGTK and WebView2 | Pending |
 | Bridge | Context-isolated preload with validated IPC and sender checks | Typed Tauri adapter, command permissions, per-window session checks and event cleanup | Pending |

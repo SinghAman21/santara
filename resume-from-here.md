@@ -1,5 +1,9 @@
 # Santara — resume from here
 
+## Tauri migration, 2026-10-23
+
+On branch `tauri-rt`, Phase 0 is recorded in `docs/adr/0001-tauri-runtime-boundaries.md` and `docs/TAURI_PARITY_MATRIX.md`. An isolated Phase 1 Tauri shell is in `src-tauri/`; it passes `cargo check` and launches on Ubuntu 26.04.1 LTS, but the Phase 1 platform and workflow gate remains open. See `docs/TAURI_SHELL_VALIDATION.md` for evidence and blockers. Electron remains the working runtime and its files/scripts must stay until Phase 7. The user will install missing `patchelf`, `libvips-dev`, and `xvfb` themselves and will later verify native Windows 10/11 behavior. Do not claim Wine checks as native Windows acceptance.
+
 ## Interaction refactor, 2026-10-20
 
 The current source is being refactored around the segmented citrus wheel. See `docs/IMAGE_WHEEL_ARCHITECTURE.md` for the active image-flow implementation map and limits. Rebuild artifacts before distributing this refactor.

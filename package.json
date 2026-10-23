@@ -12,6 +12,8 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "desktop": "npm run build:windows-hook && node scripts/desktop.mjs",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
     "build:windows-hook": "node scripts/build-windows-hook.mjs",
     "build:windows-hook:cross": "node scripts/build-windows-hook.mjs --cross",
     "build": "tsc --noEmit && vite build",
@@ -44,6 +46,7 @@
   "devDependencies": {
     "@playwright/test": "^1.56.0",
     "@tailwindcss/vite": "^4.3.3",
+    "@tauri-apps/cli": "^2.12.4",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.4.0",
