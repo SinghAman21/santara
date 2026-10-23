@@ -192,7 +192,7 @@ impl AppState {
             Ok(contents) if contents.len() <= 20_000_000 => match serde_json::from_str::<Vec<Job>>(&contents) {
                 Ok(mut jobs) if jobs.len() <= 10_000 => {
                     for job in &mut jobs {
-                        if ["queued", "preparing", "processing"].contains(&job.status.as_str()) {
+                        if ["queued", "preparing", "processing", "publishing"].contains(&job.status.as_str()) {
                             job.status = "failed".into();
                             job.error = Some("Interrupted when Santara closed".into());
                         }
@@ -233,7 +233,7 @@ impl AppState {
     fn update_job(&self, app: &AppHandle, id: &str, status: &str, output: Option<String>, error: Option<String>) -> Result<(), String> {
         let mut data = self.lock()?;
         let job = data.jobs.iter_mut().find(|job| job.id == id).ok_or("Unknown job")?;
-        if job.status == "cancelled" { return Ok(()); }
+        if job.status == "cancelled" { return Err("Cancelled".into()); }
         job.status = status.into();
         job.progress = if status == "completed" { 100 } else { 0 };
         job.output = output.clone();
@@ -800,6 +800,7 @@ fn run_local_job(app: &AppHandle, job: &Job, settings: &Settings) -> Result<Opti
         if app.state::<AppState>().lock()?.jobs.iter().any(|entry| entry.id == job.id && entry.status == "cancelled") {
             return Err("Cancelled".into());
         }
+        app.state::<AppState>().update_job(app, &job.id, "publishing", None, None)?;
         for number in 0..10_000 {
             let suffix = if number == 0 { String::new() } else { format!(" ({number})") };
             let output = if archive_extract { directory.join(format!("{base}{suffix}")) }
