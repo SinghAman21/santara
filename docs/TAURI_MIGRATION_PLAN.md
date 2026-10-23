@@ -105,7 +105,7 @@ Use agents only after Phase 0 defines stable interfaces. Keep each phase sequent
 - **Linux agent:** owns Linux integration, XDG paths, GNOME extension bridge, `.deb`/AppImage behavior in isolated folders; does not alter Windows helper or shared UI.
 - **Verification agent:** independently maps Electron parity/tests and tests integrated results; read-only until a concrete test patch is requested.
 
-Every task must name allowed files, expected output, and a verification command. Agents must not run broad deletion or edit the same files concurrently. Merge each phase’s changes, resolve conflicts, validate the integrated tree, and pass the gate before starting the next phase.
+Every task must name allowed files, expected output, and a verification command. Agents must not run broad deletion or edit the same files concurrently. Merge each phase’s changes and resolve conflicts before the next code phase; Phase 8 runs the deferred platform gates against the integrated tree.
 
 ## Acceptance criteria
 
@@ -115,4 +115,4 @@ Every task must name allowed files, expected output, and a verification command.
 - Missing converters/WebViews produce actionable setup guidance rather than a broken launch.
 - Linux paths follow XDG conventions; Windows paths and Explorer behavior remain native and safe.
 - CI builds/tests Windows and Linux artifacts; release notes state installed dependencies, offline limitations, and measured artifact sizes.
-- Old Electron files are removed only after the corresponding replacement passes the relevant gate.
+- On `tauri-rt`, old Electron files are removed in Phase 7 after their code replacements are implemented; Phase 8 determines whether the replacement passes release gates.

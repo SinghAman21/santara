@@ -5,6 +5,9 @@ compile_error!("Santara supports only Linux and Windows desktop targets");
 
 mod services;
 mod processing;
+mod subtitles;
+mod media;
+mod archives;
 
 use serde::Serialize;
 use tauri::{

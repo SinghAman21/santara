@@ -53,6 +53,7 @@ export default function GlobalWheelWindow() {
   const [choice, setChoice] = useState('');
   const [working, setWorking] = useState(false);
   const choiceRef = useRef('');
+  const nativeDropHandler = useRef<(files: LocalFile[]) => void>(() => {});
   const seenDrag = useRef(false);
   const externalFiles = hints.length ? hints : [{ id: 'provisional-image', name: 'Dragged image', path: '', size: 0, ext: '', category: 'image' as const }];
 
@@ -176,7 +177,8 @@ export default function GlobalWheelWindow() {
     await processIncoming(incoming, target?.dataset.wheelItem);
   }
 
-  useEffect(() => api.onNativeDrop?.(files => { void processIncoming(files); }), [mode, snapshot, working, items]);
+  nativeDropHandler.current = files => { void processIncoming(files); };
+  useEffect(() => api.onNativeDrop?.(files => nativeDropHandler.current(files)), []);
 
   return <main className="global-wheel-shell" aria-label="Santara global drop wheel" onDragEnter={event => {
     event.preventDefault();

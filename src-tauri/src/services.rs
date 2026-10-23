@@ -132,6 +132,7 @@ struct Data {
 pub struct AppState {
     data: Mutex<Data>,
     semaphore: Mutex<Arc<Semaphore>>,
+    media: Mutex<crate::media::MediaBackend>,
     settings_file: PathBuf,
     jobs_file: PathBuf,
 }
@@ -179,9 +180,11 @@ impl AppState {
             Err(_) => data.persistence_errors.push("Saved jobs are unavailable".into()),
         }
         let concurrency = data.settings.concurrency;
+        let media = crate::media::detect(&data.settings.backend_paths);
         Ok(Self {
             data: Mutex::new(data),
             semaphore: Mutex::new(Arc::new(Semaphore::new(usize::from(concurrency)))),
+            media: Mutex::new(media),
             settings_file,
             jobs_file,
         })
@@ -209,12 +212,23 @@ impl AppState {
 
     fn snapshot(&self) -> Result<Snapshot, String> {
         let data = self.lock()?;
+        let media = self.media.lock().map_err(|_| "Media backend is unavailable")?;
+        let mut capabilities = crate::processing::capabilities();
+        capabilities.push(crate::subtitles::capabilities());
+        capabilities.extend(crate::archives::capabilities());
+        capabilities.extend(media.capabilities());
         Ok(Snapshot {
             files: data.files.clone(),
             jobs: data.jobs.clone(),
             settings: data.settings.clone(),
-            backends: HashMap::from([("rust-image".into(), serde_json::json!({ "available": true, "version": "0.25" }))]),
-            capabilities: crate::processing::capabilities(),
+            backends: HashMap::from([
+                ("rust-image".into(), serde_json::json!({ "available": true, "version": "0.25" })),
+                ("rust-subtitles".into(), serde_json::json!({ "available": true })),
+                ("rust-archive".into(), serde_json::json!({ "available": true })),
+                ("ffmpeg".into(), media.info()),
+                ("ffprobe".into(), serde_json::json!({ "available": media.available() }))
+            ]),
+            capabilities,
             platform: if cfg!(windows) { "win32" } else { "linux" },
             persistence_errors: data.persistence_errors.clone(),
         })
@@ -297,9 +311,9 @@ fn check_no_symlink(path: &Path) -> Result<fs::Metadata, String> {
 
 fn category(ext: &str) -> &'static str {
     match ext {
-        "jpg" | "jpeg" | "png" | "webp" | "heic" | "tiff" | "tif" | "avif" | "bmp" | "svg" => "image",
+        "jpg" | "jpeg" | "png" | "webp" | "heic" | "tiff" | "tif" | "avif" | "bmp" | "svg" | "gif" => "image",
         "mp3" | "m4a" | "wav" | "flac" | "ogg" | "opus" | "aiff" | "wma" => "audio",
-        "mp4" | "mov" | "mkv" | "webm" | "avi" | "wmv" | "gif" => "video",
+        "mp4" | "mov" | "mkv" | "webm" | "avi" | "wmv" => "video",
         "pdf" => "pdf",
         "srt" | "vtt" => "subtitle",
         "zip" | "tar" | "gz" | "rar" => "archive",
@@ -533,13 +547,19 @@ pub async fn save_settings(app: AppHandle, state: State<'_, AppState>, patch: Va
         }).await.map_err(|error| error.to_string())?;
         if !approved { return Ok(previous); }
     }
+    let next_media = if changing_backend && updated.backend_paths != previous.backend_paths {
+        let overrides = updated.backend_paths.clone();
+        Some(tauri::async_runtime::spawn_blocking(move || crate::media::detect(&overrides)).await.map_err(|error| error.to_string())?)
+    } else { None };
     let mut data = state.lock()?;
     if data.settings != previous { return Err("Settings changed while the dialog was open; please retry".into()); }
     persist_json(&state.settings_file, &updated)?;
     data.settings = updated.clone();
     drop(data);
+    if let Some(media) = next_media { *state.media.lock().map_err(|_| "Media backend is unavailable")? = media; }
     *state.semaphore.lock().map_err(|_| "Santara queue is unavailable")? = Arc::new(Semaphore::new(usize::from(updated.concurrency)));
-    let _ = app.emit("santara:update", serde_json::json!({ "settings": updated }));
+    let snapshot = state.snapshot()?;
+    let _ = app.emit("santara:update", serde_json::json!({ "settings": updated, "backends": snapshot.backends, "capabilities": snapshot.capabilities }));
     Ok(updated)
 }
 
@@ -580,7 +600,7 @@ fn schedule_job(app: AppHandle, id: String) -> Result<(), String> {
         if state.update_job(&app, &id, "processing", None, None).is_err() { return }
         let settings = match state.lock() { Ok(data) => data.settings.clone(), Err(_) => return };
         let work_app = app.clone();
-        let work = tauri::async_runtime::spawn_blocking(move || run_image_job(&work_app, &job, &settings)).await;
+        let work = tauri::async_runtime::spawn_blocking(move || run_local_job(&work_app, &job, &settings)).await;
         let result = match work {
             Ok(value) => value,
             Err(error) => Err(error.to_string()),
@@ -595,16 +615,26 @@ fn schedule_job(app: AppHandle, id: String) -> Result<(), String> {
     Ok(())
 }
 
-fn run_image_job(app: &AppHandle, job: &Job, settings: &Settings) -> Result<Option<String>, String> {
+fn run_local_job(app: &AppHandle, job: &Job, settings: &Settings) -> Result<Option<String>, String> {
     let source = checked_path(&job.input)?;
-    if !check_no_symlink(&source)?.is_file() { return Err("Input must be a regular file".into()); }
+    let source_info = check_no_symlink(&source)?;
+    if !source_info.is_file() && !(job.operation == "create-archive" && source_info.is_dir()) {
+        return Err("Input must be a regular file or selected archive folder".into());
+    }
     let directory = job.options.get("outputFolder").and_then(Value::as_str).filter(|value| !value.is_empty())
         .or_else(|| (!settings.output_folder.is_empty()).then_some(settings.output_folder.as_str()))
         .map(checked_path).transpose()?.unwrap_or_else(|| source.parent().unwrap_or(&source).to_path_buf());
     if !check_no_symlink(&directory)?.is_dir() { return Err("Output folder is unavailable".into()); }
     let quality = job.options.get("quality").and_then(Value::as_u64).unwrap_or(u64::from(settings.quality));
     if !(1..=100).contains(&quality) { return Err("Invalid quality".into()); }
-    let bytes = crate::processing::convert_image(&source, &job.operation, &job.format, &job.options, quality as u8)?;
+    let input_ext = source.extension().and_then(|value| value.to_str()).unwrap_or_default().to_ascii_lowercase();
+    let media_category = if ["mp4", "mov", "mkv", "webm", "avi", "wmv"].contains(&input_ext.as_str()) { Some("video") }
+        else if ["mp3", "wav", "flac", "ogg", "opus", "m4a", "aiff", "wma"].contains(&input_ext.as_str()) { Some("audio") } else { None };
+    let archive_create = job.operation == "create-archive";
+    let archive_extract = job.operation == "extract";
+    let bytes = if media_category.is_some() || archive_create || archive_extract { None }
+        else if ["srt", "vtt"].contains(&input_ext.as_str()) { Some(crate::subtitles::convert(&source, &job.format)?) }
+        else { Some(crate::processing::convert_image(&source, &job.operation, &job.format, &job.options, quality as u8)?) };
     if app.state::<AppState>().lock()?.jobs.iter().any(|entry| entry.id == job.id && entry.status == "cancelled") {
         return Err("Cancelled".into());
     }
@@ -615,19 +645,35 @@ fn run_image_job(app: &AppHandle, job: &Job, settings: &Settings) -> Result<Opti
     }
     let temp = directory.join(format!(".santara-{}.tmp", Uuid::new_v4()));
     let result = (|| {
-        let mut options = OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)] options.mode(0o600);
-        let mut file = options.open(&temp).map_err(|error| error.to_string())?;
-        file.write_all(&bytes).map_err(|error| error.to_string())?;
-        file.sync_all().map_err(|error| error.to_string())?;
+        if let Some(bytes) = bytes {
+            let mut options = OpenOptions::new();
+            options.write(true).create_new(true);
+            #[cfg(unix)] options.mode(0o600);
+            let mut file = options.open(&temp).map_err(|error| error.to_string())?;
+            file.write_all(&bytes).map_err(|error| error.to_string())?;
+            file.sync_all().map_err(|error| error.to_string())?;
+        } else if let Some(category) = media_category {
+            let backend = app.state::<AppState>().media.lock().map_err(|_| "Media backend is unavailable")?.clone();
+            backend.run(&source, &temp, category, &job.operation, &job.format, &job.options,
+                || app.state::<AppState>().lock().is_ok_and(|data| data.jobs.iter().any(|entry| entry.id == job.id && entry.status == "cancelled")))?;
+            File::open(&temp).map_err(|error| error.to_string())?.sync_all().map_err(|error| error.to_string())?;
+        } else if archive_create {
+            let inputs = job.options.get("inputs").and_then(Value::as_array).ok_or("Missing archive sources")?
+                .iter().map(|value| value.as_str().ok_or_else(|| "Invalid archive source".to_string()).and_then(checked_path))
+                .collect::<Result<Vec<_>, _>>()?;
+            crate::archives::create(&inputs, &temp, &job.format)?;
+        } else if archive_extract {
+            crate::archives::extract(&source, &temp, &input_ext)?;
+        }
         if app.state::<AppState>().lock()?.jobs.iter().any(|entry| entry.id == job.id && entry.status == "cancelled") {
             return Err("Cancelled".into());
         }
         for number in 0..10_000 {
             let suffix = if number == 0 { String::new() } else { format!(" ({number})") };
-            let output = directory.join(format!("{base}{suffix}.{}", job.format));
-            match fs::hard_link(&temp, &output) {
+            let output = if archive_extract { directory.join(format!("{base}{suffix}")) }
+                else { directory.join(format!("{base}{suffix}.{}", job.format)) };
+            let publication = if archive_extract { publish_directory(&temp, &output) } else { fs::hard_link(&temp, &output) };
+            match publication {
                 Ok(()) => return Ok(Some(output.to_string_lossy().to_string())),
                 Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
                     let policy = job.options.get("collision").and_then(Value::as_str).unwrap_or(&settings.collision);
@@ -639,31 +685,63 @@ fn run_image_job(app: &AppHandle, job: &Job, settings: &Settings) -> Result<Opti
         }
         Err("Too many output name collisions".into())
     })();
-    let _ = fs::remove_file(temp);
+    if archive_extract { let _ = fs::remove_dir_all(temp); } else { let _ = fs::remove_file(temp); }
     result
+}
+
+fn publish_directory(source: &Path, destination: &Path) -> std::io::Result<()> {
+    #[cfg(target_os = "linux")]
+    { rustix::fs::renameat_with(rustix::fs::CWD, source, rustix::fs::CWD, destination, rustix::fs::RenameFlags::NOREPLACE).map_err(std::io::Error::from) }
+    #[cfg(target_os = "windows")]
+    { if destination.exists() { return Err(std::io::Error::new(std::io::ErrorKind::AlreadyExists, "Destination exists")); } fs::rename(source, destination) }
 }
 
 #[tauri::command]
 pub fn enqueue(app: AppHandle, state: State<'_, AppState>, request: EnqueueRequest) -> Result<Vec<Job>, String> {
     if request.files.is_empty() || request.files.len() > 1_000 { return Err("Select 1–1,000 files".into()); }
     if !request.options.is_object() || request.options.to_string().len() > 100_000 { return Err("Invalid conversion options".into()); }
-    if !["convert", "compress", "resize", "crop", "rotate", "flip", "strip-metadata"].contains(&request.operation.as_str()) {
-        return Err("Unsupported image operation".into());
+    if !["convert", "compress", "resize", "crop", "rotate", "flip", "strip-metadata", "trim", "mute", "speed", "snapshot", "extract-audio", "normalize", "channels", "create-archive", "extract"].contains(&request.operation.as_str()) {
+        return Err("Unsupported operation".into());
     }
-    if !["jpg", "jpeg", "png", "webp", "tif", "tiff", "bmp", "gif", "avif"].contains(&request.format.as_str()) {
+    if !["jpg", "jpeg", "png", "webp", "tif", "tiff", "bmp", "gif", "avif", "srt", "vtt", "txt", "mp4", "mkv", "mov", "avi", "wmv", "mp3", "wav", "flac", "ogg", "opus", "m4a", "aiff", "wma", "zip", "tar", "gz", "directory"].contains(&request.format.as_str()) {
         return Err("Unsupported output format".into());
     }
     let now = OffsetDateTime::now_utc().format(&Rfc3339).map_err(|error| error.to_string())?;
     let mut jobs = Vec::new();
+    if request.operation == "create-archive" {
+        if !["zip", "tar", "gz"].contains(&request.format.as_str()) { return Err("Unsupported archive format".into()); }
+        let mut paths = Vec::new();
+        for file in &request.files { paths.push(state.known_path(&file.path, false)?); }
+        paths.sort();
+        paths.dedup();
+        let roots = paths.iter().filter(|path| !paths.iter().any(|other| *path != other && path.starts_with(other)))
+            .cloned().collect::<Vec<_>>();
+        if roots.is_empty() { return Err("Select archive sources".into()); }
+        let mut options = request.options.clone();
+        options.as_object_mut().ok_or("Invalid archive options")?.insert("inputs".into(), serde_json::json!(roots));
+        let first = roots[0].to_string_lossy().to_string();
+        jobs.push(Job { id: Uuid::new_v4().to_string(), input: first.clone(), name: roots[0].file_name().unwrap_or_default().to_string_lossy().to_string(),
+            operation: request.operation.clone(), format: request.format.clone(), status: "queued".into(), progress: 0,
+            output: None, error: None, created_at: now.clone(), options });
+    } else {
     for file in &request.files {
         let path = state.known_path(&file.path, false)?;
         let inspected = state.lock()?.files.iter().find(|entry| entry.path == file.path).cloned().ok_or("Inspect input files before enqueueing")?;
-        if inspected.category != "image" || !["jpg", "jpeg", "png", "webp", "tif", "tiff", "bmp", "gif", "avif"].contains(&inspected.ext.as_str()) || !check_no_symlink(&path)?.is_file() {
-            return Err("Select supported, inspected image files".into());
+        let image = inspected.category == "image" && ["jpg", "jpeg", "png", "webp", "tif", "tiff", "bmp", "gif", "avif"].contains(&inspected.ext.as_str())
+            && ["jpg", "jpeg", "png", "webp", "tif", "tiff", "bmp", "gif", "avif"].contains(&request.format.as_str());
+        let subtitle = inspected.category == "subtitle" && ["srt", "vtt"].contains(&inspected.ext.as_str())
+            && request.operation == "convert" && ["srt", "vtt", "txt"].contains(&request.format.as_str());
+        let media = ["video", "audio"].contains(&inspected.category.as_str()) && state.media.lock().map_err(|_| "Media backend is unavailable")?
+            .supports(&inspected.category, &request.operation, &inspected.ext, &request.format);
+        let archive = inspected.category == "archive" && ["zip", "tar", "gz"].contains(&inspected.ext.as_str())
+            && request.operation == "extract" && request.format == "directory";
+        if !(image || subtitle || media || archive) || !check_no_symlink(&path)?.is_file() {
+            return Err("Select files supported by this local route".into());
         }
         jobs.push(Job { id: Uuid::new_v4().to_string(), input: inspected.path, name: inspected.name,
             operation: request.operation.clone(), format: request.format.clone(), status: "queued".into(), progress: 0,
             output: None, error: None, created_at: now.clone(), options: request.options.clone() });
+    }
     }
     {
         let mut data = state.lock()?;
