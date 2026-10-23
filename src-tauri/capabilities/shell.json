@@ -2,6 +2,6 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "shell",
   "description": "Minimum core permission for the isolated Tauri shell.",
-  "windows": ["workspace", "wheel", "image", "video"],
+  "windows": ["workspace", "wheel", "image", "video", "preview-*"],
   "permissions": ["core:default"]
 }

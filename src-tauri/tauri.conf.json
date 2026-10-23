@@ -17,7 +17,7 @@
       { "label": "video", "title": "Santara video editor", "url": "index.html?santara-video-tool=1", "width": 1040, "height": 760, "minWidth": 720, "minHeight": 540, "visible": false }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' ws://127.0.0.1:*; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: santara-media: http://santara-media.localhost; media-src 'self' blob: santara-media: http://santara-media.localhost; connect-src 'self' ws://127.0.0.1:* santara-media: http://santara-media.localhost; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'"
     }
   },
   "bundle": {

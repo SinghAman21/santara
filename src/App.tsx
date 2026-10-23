@@ -158,6 +158,10 @@ export default function App() {
       if (isDesktop && api.openImageTool) void runSafe(() => api.openImageTool!({ capabilityId: cap.id, files: compatibleFiles.map(file => file.path), format: target, options: nextOptions }));
       else setImageEditor({ capability: normalized, files: compatibleFiles, format: target, options: nextOptions });
     }
+    else if (cap.category === 'video' && id !== 'convert' && api.openVideoTool) {
+      const compatibleFiles = source.filter(file => compatible(cap, file));
+      void runSafe(() => api.openVideoTool!({ capabilityId: cap.id, files: compatibleFiles.map(file => file.path), format: target, options: nextOptions }));
+    }
   }
   useEffect(() => {
     const removeOperation = api.onGlobalOperation?.(({ capabilityId, format, files: incoming }) => {

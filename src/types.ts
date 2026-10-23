@@ -20,12 +20,15 @@ export interface Bridge {
   openOutput(path: string): Promise<unknown>;
   fileAction(request: { action: string; files: LocalFile[]; destination?: string }): Promise<unknown>;
   preview?(path: string): Promise<{ url: string; width?: number; height?: number; duration?: number; waveform?: number[]; waveformDuration?: number; metadata?: Record<string, unknown> }>;
+  previewContext?(): Promise<LocalFile>;
+  closePreview?(): Promise<void>;
   imagePreview?(path: string, operation: string, options: Record<string, string>): Promise<{ url: string; width?: number; height?: number; sourceWidth?: number; sourceHeight?: number }>;
   openImageTool?(request: { capabilityId: string; files: string[]; format: string; options: Record<string, string> }): Promise<unknown>;
   imageToolContext?(): Promise<{ capability: Capability; files: LocalFile[]; format: string; options: Record<string, string> }>;
   applyImageTool?(request: { options: Record<string, string> }): Promise<unknown>;
   closeImageTool?(): Promise<unknown>;
   videoToolContext?(): Promise<{ capability: Capability; files: LocalFile[]; format: string; options: Record<string, unknown> }>;
+  openVideoTool?(request: { capabilityId: string; files: string[]; format: string; options: Record<string, string> }): Promise<unknown>;
   applyVideoTool?(request: { format?: string; files?: string[]; options: Record<string, unknown> }): Promise<unknown>;
   closeVideoTool?(): Promise<unknown>;
   onWheelMode?(callback: (mode: string, newDrag?: boolean) => void): () => void;

@@ -79,6 +79,10 @@ fn place_wheel(window: &WebviewWindow) -> Result<(), String> {
 
 fn main() {
     tauri::Builder::default()
+        .register_uri_scheme_protocol("santara-media", |context, request| {
+            let state = context.app_handle().state::<services::AppState>();
+            state.serve_preview(context.webview_label(), request)
+        })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -96,6 +100,19 @@ fn main() {
             services::cancel,
             services::retry,
             services::image_preview,
+            services::preview,
+            services::preview_context,
+            services::close_preview,
+            services::open_image_tool,
+            services::open_video_tool,
+            services::image_tool_context,
+            services::apply_image_tool,
+            services::close_image_tool,
+            services::video_tool_context,
+            services::apply_video_tool,
+            services::close_video_tool,
+            services::select_global_operation,
+            services::finish_global_wheel,
             services::reveal,
             services::open_output,
             services::file_action,
@@ -134,8 +151,13 @@ fn main() {
         .on_window_event(|window, event| {
             match event {
                 WindowEvent::CloseRequested { api, .. } => {
-                    api.prevent_close();
-                    let _ = window.hide();
+                    if !window.label().starts_with("preview-") {
+                        api.prevent_close();
+                        let _ = window.hide();
+                    }
+                }
+                WindowEvent::Destroyed => {
+                    window.app_handle().state::<services::AppState>().forget_window(window.label());
                 }
                 WindowEvent::DragDrop(DragDropEvent::Enter { paths, .. }) => {
                     eprintln!("Santara shell drag entered {} ({} entries)", window.label(), paths.len());

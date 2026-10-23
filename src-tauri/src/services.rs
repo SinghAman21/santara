@@ -1,10 +1,11 @@
 use std::{
     collections::{HashMap, HashSet},
     fs::{self, File, OpenOptions},
-    io::Write,
+    io::{Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::{Arc, Mutex},
+    time::{Duration, Instant, SystemTime},
 };
 
 #[cfg(unix)]
@@ -125,8 +126,32 @@ struct Data {
     jobs: Vec<Job>,
     outputs: HashSet<PathBuf>,
     pending_drops: HashMap<String, Vec<String>>,
+    previews: HashMap<String, PreviewEntry>,
+    image_context: Option<EditorContext>,
+    video_context: Option<EditorContext>,
+    preview_windows: HashMap<String, LocalFile>,
     settings: Settings,
     persistence_errors: Vec<String>,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EditorContext {
+    capability: Value,
+    files: Vec<LocalFile>,
+    format: String,
+    options: Value,
+}
+
+#[derive(Clone)]
+struct PreviewEntry {
+    path: PathBuf,
+    mime: &'static str,
+    size: u64,
+    modified: Option<SystemTime>,
+    window: String,
+    expires: Instant,
+    cached: bool,
 }
 
 pub struct AppState {
@@ -295,6 +320,65 @@ impl AppState {
         self.lock()?.pending_drops.insert(window.into(), accepted);
         Ok(())
     }
+
+    pub fn serve_preview(&self, window: &str, request: tauri::http::Request<Vec<u8>>) -> tauri::http::Response<Vec<u8>> {
+        let token = request.uri().path().trim_start_matches('/');
+        let entry = self.lock().ok().and_then(|data| data.previews.get(token).cloned());
+        let Some(entry) = entry else { return preview_error(404) };
+        if entry.window != window || entry.expires < Instant::now() { return preview_error(404); }
+        let Ok(metadata) = check_no_symlink(&entry.path) else { return preview_error(404) };
+        if !metadata.is_file() || metadata.len() != entry.size || metadata.modified().ok() != entry.modified { return preview_error(404); }
+        let range = request.headers().get(tauri::http::header::RANGE).and_then(|value| value.to_str().ok());
+        let (start, end, partial) = match parse_range(range, entry.size) {
+            Ok(value) => value,
+            Err(_) => return preview_error(416),
+        };
+        let Ok(mut file) = File::open(&entry.path) else { return preview_error(404) };
+        if file.seek(SeekFrom::Start(start)).is_err() { return preview_error(404); }
+        let mut bytes = Vec::new();
+        if file.take(end - start + 1).read_to_end(&mut bytes).is_err() || bytes.len() as u64 != end - start + 1 { return preview_error(404); }
+        let mut builder = tauri::http::Response::builder()
+            .status(if partial { 206 } else { 200 })
+            .header("Content-Type", entry.mime)
+            .header("Accept-Ranges", "bytes")
+            .header("Content-Length", bytes.len().to_string())
+            .header("Cache-Control", "no-store")
+            .header("X-Content-Type-Options", "nosniff")
+            .header("Access-Control-Allow-Origin", "*");
+        if partial { builder = builder.header("Content-Range", format!("bytes {start}-{end}/{}", entry.size)); }
+        builder.body(bytes).unwrap_or_else(|_| preview_error(500))
+    }
+
+    pub fn forget_window(&self, label: &str) {
+        if let Ok(mut data) = self.lock() {
+            data.preview_windows.remove(label);
+            let tokens = data.previews.iter().filter(|(_, entry)| entry.window == label).map(|(key, _)| key.clone()).collect::<Vec<_>>();
+            for token in tokens {
+                if let Some(entry) = data.previews.remove(&token) { if entry.cached { let _ = fs::remove_file(entry.path); } }
+            }
+        }
+    }
+}
+
+fn preview_error(status: u16) -> tauri::http::Response<Vec<u8>> {
+    tauri::http::Response::builder().status(status).header("Cache-Control", "no-store").body(Vec::new()).unwrap()
+}
+
+fn parse_range(header: Option<&str>, size: u64) -> Result<(u64, u64, bool), String> {
+    if size == 0 { return Err("Empty media".into()); }
+    let Some(header) = header else { return Ok((0, size - 1, false)) };
+    let range = header.strip_prefix("bytes=").ok_or("Invalid range")?;
+    if range.contains(',') { return Err("Multiple ranges are unsupported".into()); }
+    let (start, end) = range.split_once('-').ok_or("Invalid range")?;
+    let start = if start.is_empty() {
+        let suffix = end.parse::<u64>().map_err(|_| "Invalid range")?;
+        size.saturating_sub(suffix)
+    } else { start.parse::<u64>().map_err(|_| "Invalid range")? };
+    if start >= size { return Err("Range exceeds media".into()); }
+    let end = if end.is_empty() || header.starts_with("bytes=-") { size - 1 }
+        else { end.parse::<u64>().map_err(|_| "Invalid range")?.min(size - 1) };
+    if end < start { return Err("Invalid range".into()); }
+    Ok((start, end.min(start.saturating_add(4 * 1024 * 1024 - 1)), true))
 }
 
 fn checked_path(value: &str) -> Result<PathBuf, String> {
@@ -842,6 +926,257 @@ pub async fn image_preview(state: State<'_, AppState>, path: String, operation: 
         .await.map_err(|error| error.to_string())?
 }
 
+#[tauri::command]
+pub async fn preview(app: AppHandle, window: tauri::WebviewWindow, state: State<'_, AppState>, path: String) -> Result<Value, String> {
+    let source = state.known_path(&path, false)?;
+    let metadata = check_no_symlink(&source)?;
+    if !metadata.is_file() || metadata.len() > 32 * 1024 * 1024 { return Err("Quick Preview supports files up to 32 MiB".into()); }
+    let mime = preview_mime(&source)?;
+    let (prepared, mime, cached) = if mime == "application/pdf" {
+        let backend = state.pdf.lock().map_err(|_| "PDF backend is unavailable")?.clone();
+        if !backend.supports("render", "png") { return Err("PDF preview requires local Poppler".into()); }
+        let directory = app.path().app_cache_dir().map_err(|error| error.to_string())?;
+        fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
+        let output = directory.join(format!("santara-preview-{}.png", Uuid::new_v4()));
+        let source = source.clone();
+        let output_copy = output.clone();
+        tauri::async_runtime::spawn_blocking(move || backend.run(&source, &output_copy, "render", "png", &serde_json::json!({ "page": 1, "dpi": 144 }), || false))
+            .await.map_err(|error| error.to_string())??;
+        (output, "image/png", true)
+    } else { (source, mime, false) };
+    let prepared_info = check_no_symlink(&prepared)?;
+    if !prepared_info.is_file() || prepared_info.len() > 32 * 1024 * 1024 {
+        if cached { let _ = fs::remove_file(&prepared); }
+        return Err("Quick Preview output exceeds 32 MiB".into());
+    }
+    let token = Uuid::new_v4().to_string();
+    {
+        let mut data = state.lock()?;
+        let expired = data.previews.iter().filter(|(_, entry)| entry.expires < Instant::now()).map(|(key, _)| key.clone()).collect::<Vec<_>>();
+        for key in expired { if let Some(entry) = data.previews.remove(&key) { if entry.cached { let _ = fs::remove_file(entry.path); } } }
+        if data.previews.len() >= 32 { return Err("Close an older preview before opening another".into()); }
+        data.previews.insert(token.clone(), PreviewEntry { path: prepared, mime, size: prepared_info.len(), modified: prepared_info.modified().ok(),
+            window: window.label().into(), expires: Instant::now() + Duration::from_secs(3600), cached });
+    }
+    let url = if cfg!(windows) { format!("http://santara-media.localhost/{token}") } else { format!("santara-media://localhost/{token}") };
+    Ok(serde_json::json!({ "url": url }))
+}
+
+#[tauri::command]
+pub fn preview_context(window: tauri::WebviewWindow, state: State<'_, AppState>) -> Result<LocalFile, String> {
+    if !window.label().starts_with("preview-") { return Err("Preview context is private".into()); }
+    state.lock()?.preview_windows.get(window.label()).cloned().ok_or("Preview is no longer available".into())
+}
+
+#[tauri::command]
+pub fn close_preview(window: tauri::WebviewWindow) -> Result<(), String> {
+    if !window.label().starts_with("preview-") { return Err("Only a preview can close itself".into()); }
+    window.close().map_err(|error| error.to_string())
+}
+
+fn preview_mime(path: &Path) -> Result<&'static str, String> {
+    let extension = path.extension().and_then(|value| value.to_str()).unwrap_or_default().to_ascii_lowercase();
+    let mut file = File::open(path).map_err(|error| error.to_string())?;
+    let mut header = [0_u8; 32];
+    let count = file.read(&mut header).map_err(|error| error.to_string())?;
+    let data = &header[..count];
+    let branded = data.len() >= 12 && &data[4..8] == b"ftyp";
+    let media = match extension.as_str() {
+        "png" if data.starts_with(b"\x89PNG\r\n\x1a\n") => "image/png",
+        "jpg" | "jpeg" if data.starts_with(b"\xff\xd8\xff") => "image/jpeg",
+        "gif" if data.starts_with(b"GIF87a") || data.starts_with(b"GIF89a") => "image/gif",
+        "webp" if data.starts_with(b"RIFF") && data.get(8..12) == Some(b"WEBP") => "image/webp",
+        "bmp" if data.starts_with(b"BM") => "image/bmp",
+        "avif" if branded && data[8..].windows(4).any(|part| part == b"avif" || part == b"avis") => "image/avif",
+        "mp3" if data.starts_with(b"ID3") || data.first() == Some(&0xff) => "audio/mpeg",
+        "wav" if data.starts_with(b"RIFF") && data.get(8..12) == Some(b"WAVE") => "audio/wav",
+        "ogg" | "opus" if data.starts_with(b"OggS") => "audio/ogg",
+        "flac" if data.starts_with(b"fLaC") => "audio/flac",
+        "m4a" | "aac" if branded => "audio/mp4",
+        "mp4" | "m4v" if branded => "video/mp4",
+        "webm" if data.starts_with(b"\x1a\x45\xdf\xa3") => "video/webm",
+        "pdf" if data.windows(5).any(|part| part == b"%PDF-") => "application/pdf",
+        _ => return Err("Quick Preview does not support this file signature".into()),
+    };
+    Ok(media)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EditorRequest {
+    capability_id: String,
+    files: Vec<String>,
+    format: String,
+    options: Value,
+}
+
+fn editor_context(state: &AppState, request: EditorRequest, category: &str) -> Result<EditorContext, String> {
+    if request.files.is_empty() || request.files.len() > 100 || !request.options.is_object() || request.options.to_string().len() > 100_000 {
+        return Err("Invalid editor selection or options".into());
+    }
+    let capability = state.snapshot()?.capabilities.into_iter().find(|capability| capability["id"] == request.capability_id && capability["category"] == category && capability["available"] == true)
+        .ok_or("Editor operation is unavailable")?;
+    if capability["operation"] == "convert" { return Err("Conversion does not require an editor".into()); }
+    if !capability["outputs"].as_array().is_some_and(|outputs| outputs.iter().any(|output| output == &request.format)) {
+        return Err("Editor output format is unsupported".into());
+    }
+    let mut files = Vec::new();
+    let mut seen = HashSet::new();
+    for path in request.files {
+        state.known_path(&path, false)?;
+        let file = state.lock()?.files.iter().find(|file| file.path == path).cloned().ok_or("Inspect editor files first")?;
+        if file.category != category || !capability["inputs"].as_array().is_some_and(|inputs| inputs.iter().any(|input| input == &file.ext)) {
+            return Err("Editor operation does not support a selected file".into());
+        }
+        if !seen.insert(path) { return Err("Duplicate editor file".into()); }
+        files.push(file);
+    }
+    Ok(EditorContext { capability, files, format: request.format, options: request.options })
+}
+
+#[tauri::command]
+pub fn open_image_tool(app: AppHandle, state: State<'_, AppState>, request: EditorRequest) -> Result<Value, String> {
+    let context = editor_context(&state, request, "image")?;
+    state.lock()?.image_context = Some(context);
+    let window = app.get_webview_window("image").ok_or("Image editor window is unavailable")?;
+    window.show().map_err(|error| error.to_string())?;
+    window.set_focus().map_err(|error| error.to_string())?;
+    Ok(serde_json::json!({ "opened": true }))
+}
+
+#[tauri::command]
+pub fn open_video_tool(app: AppHandle, state: State<'_, AppState>, request: EditorRequest) -> Result<Value, String> {
+    let context = editor_context(&state, request, "video")?;
+    state.lock()?.video_context = Some(context);
+    let window = app.get_webview_window("video").ok_or("Video editor window is unavailable")?;
+    window.show().map_err(|error| error.to_string())?;
+    window.set_focus().map_err(|error| error.to_string())?;
+    Ok(serde_json::json!({ "opened": true }))
+}
+
+#[tauri::command]
+pub fn image_tool_context(window: tauri::WebviewWindow, state: State<'_, AppState>) -> Result<Value, String> {
+    if window.label() != "image" { return Err("Image editor context is private".into()); }
+    let context = state.lock()?.image_context.clone().ok_or("Image editor is no longer available")?;
+    serde_json::to_value(context).map_err(|error| error.to_string())
+}
+
+#[derive(Deserialize)]
+pub struct ApplyImageRequest { options: Value }
+
+#[tauri::command]
+pub fn apply_image_tool(app: AppHandle, window: tauri::WebviewWindow, state: State<'_, AppState>, request: ApplyImageRequest) -> Result<Vec<Job>, String> {
+    if window.label() != "image" { return Err("Only the image editor can apply this recipe".into()); }
+    if !request.options.is_object() || request.options.to_string().len() > 100_000 { return Err("Invalid image recipe".into()); }
+    let context = state.lock()?.image_context.clone().ok_or("Image editor is no longer available")?;
+    let mut options = context.options.as_object().cloned().ok_or("Invalid image context")?;
+    options.extend(request.options.as_object().ok_or("Invalid image recipe")?.clone());
+    let operation = context.capability["operation"].as_str().ok_or("Invalid image operation")?.to_string();
+    let jobs = enqueue(app.clone(), state, EnqueueRequest { files: context.files, operation, format: context.format, options: Value::Object(options) })?;
+    app.state::<AppState>().lock()?.image_context = None;
+    window.hide().map_err(|error| error.to_string())?;
+    Ok(jobs)
+}
+
+#[tauri::command]
+pub fn close_image_tool(window: tauri::WebviewWindow, state: State<'_, AppState>) -> Result<bool, String> {
+    if window.label() != "image" { return Err("Only the image editor can close itself".into()); }
+    state.lock()?.image_context = None;
+    window.hide().map_err(|error| error.to_string())?;
+    Ok(true)
+}
+
+#[tauri::command]
+pub fn video_tool_context(window: tauri::WebviewWindow, state: State<'_, AppState>) -> Result<Value, String> {
+    if window.label() != "video" { return Err("Video editor context is private".into()); }
+    let context = state.lock()?.video_context.clone().ok_or("Video editor is no longer available")?;
+    serde_json::to_value(context).map_err(|error| error.to_string())
+}
+
+#[derive(Deserialize)]
+pub struct ApplyVideoRequest {
+    format: Option<String>,
+    files: Option<Vec<String>>,
+    options: Value,
+}
+
+#[tauri::command]
+pub fn apply_video_tool(app: AppHandle, window: tauri::WebviewWindow, state: State<'_, AppState>, request: ApplyVideoRequest) -> Result<Vec<Job>, String> {
+    if window.label() != "video" { return Err("Only the video editor can apply this recipe".into()); }
+    if !request.options.is_object() || request.options.to_string().len() > 100_000 { return Err("Invalid video recipe".into()); }
+    let context = state.lock()?.video_context.clone().ok_or("Video editor is no longer available")?;
+    let format = request.format.unwrap_or_else(|| context.format.clone());
+    if !context.capability["outputs"].as_array().is_some_and(|outputs| outputs.iter().any(|output| output == &format)) {
+        return Err("Unsupported video output".into());
+    }
+    let files = if let Some(order) = request.files {
+        if order.len() != context.files.len() || order.iter().collect::<HashSet<_>>().len() != order.len() {
+            return Err("Invalid video clip order".into());
+        }
+        order.iter().map(|path| context.files.iter().find(|file| &file.path == path).cloned().ok_or("Invalid video clip order".into())).collect::<Result<Vec<_>, String>>()?
+    } else { context.files.clone() };
+    let mut options = context.options.as_object().cloned().ok_or("Invalid video context")?;
+    options.extend(request.options.as_object().ok_or("Invalid video recipe")?.clone());
+    let operation = context.capability["operation"].as_str().ok_or("Invalid video operation")?.to_string();
+    let jobs = enqueue(app.clone(), state, EnqueueRequest { files, operation, format, options: Value::Object(options) })?;
+    app.state::<AppState>().lock()?.video_context = None;
+    window.hide().map_err(|error| error.to_string())?;
+    Ok(jobs)
+}
+
+#[tauri::command]
+pub fn close_video_tool(window: tauri::WebviewWindow, state: State<'_, AppState>) -> Result<bool, String> {
+    if window.label() != "video" { return Err("Only the video editor can close itself".into()); }
+    state.lock()?.video_context = None;
+    window.hide().map_err(|error| error.to_string())?;
+    Ok(true)
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlobalOperationRequest {
+    capability_id: String,
+    format: String,
+    files: Vec<LocalFile>,
+}
+
+#[tauri::command]
+pub fn select_global_operation(app: AppHandle, window: tauri::WebviewWindow, state: State<'_, AppState>, request: GlobalOperationRequest) -> Result<Value, String> {
+    if window.label() != "wheel" { return Err("Only the wheel can select a global operation".into()); }
+    let capability = state.snapshot()?.capabilities.into_iter().find(|item| item["id"] == request.capability_id && item["available"] == true)
+        .ok_or("Selected operation is unavailable")?;
+    let category = capability["category"].as_str().ok_or("Invalid capability")?;
+    let files = request.files.iter().map(|file| file.path.clone()).collect::<Vec<_>>();
+    if category == "image" || category == "video" {
+        let editor = EditorRequest { capability_id: request.capability_id, files, format: request.format, options: serde_json::json!({}) };
+        if category == "image" { open_image_tool(app, state, editor)?; }
+        else { open_video_tool(app, state, editor)?; }
+    } else {
+        for file in &request.files { state.known_path(&file.path, false)?; }
+        let workspace = app.get_webview_window("workspace").ok_or("Workspace window is unavailable")?;
+        workspace.show().map_err(|error| error.to_string())?;
+        workspace.set_focus().map_err(|error| error.to_string())?;
+        app.emit_to("workspace", "santara:global-operation", &request).map_err(|error| error.to_string())?;
+    }
+    window.hide().map_err(|error| error.to_string())?;
+    Ok(serde_json::json!({ "opened": true }))
+}
+
+#[tauri::command]
+pub fn finish_global_wheel(app: AppHandle, window: tauri::WebviewWindow, page: Option<String>) -> Result<(), String> {
+    if window.label() != "wheel" { return Err("Only the wheel can finish itself".into()); }
+    let page = page.as_deref().unwrap_or("converter");
+    if !["converter", "activity", "background"].contains(&page) { return Err("Invalid workspace page".into()); }
+    window.hide().map_err(|error| error.to_string())?;
+    if page == "activity" {
+        let workspace = app.get_webview_window("workspace").ok_or("Workspace window is unavailable")?;
+        workspace.show().map_err(|error| error.to_string())?;
+        workspace.set_focus().map_err(|error| error.to_string())?;
+        app.emit_to("workspace", "santara:global-page", "activity").map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
 #[derive(Deserialize)]
 pub struct FileActionRequest {
     action: String,
@@ -849,7 +1184,8 @@ pub struct FileActionRequest {
 }
 
 #[tauri::command]
-pub async fn file_action(app: AppHandle, state: State<'_, AppState>, request: FileActionRequest) -> Result<Value, String> {
+pub async fn file_action(app: AppHandle, window: tauri::WebviewWindow, state: State<'_, AppState>, request: FileActionRequest) -> Result<Value, String> {
+    if !["workspace", "wheel"].contains(&window.label()) { return Err("File actions are unavailable in this window".into()); }
     if request.files.is_empty() || request.files.len() > 1_000 {
         return Err("Select at least one known file".into());
     }
@@ -860,7 +1196,22 @@ pub async fn file_action(app: AppHandle, state: State<'_, AppState>, request: Fi
             app.clipboard().write_text(text).map_err(|error| error.to_string())?;
             Ok(serde_json::json!({ "ok": true }))
         }
-        "preview" => Err("Quick preview will be available after the Tauri preview service is implemented".into()),
+        "preview" => {
+            if paths.len() != 1 { return Err("Select one file to preview".into()); }
+            let file = state.lock()?.files.iter().find(|file| file.path == paths[0].to_string_lossy()).cloned().ok_or("Select a known file")?;
+            let label = format!("preview-{}", Uuid::new_v4());
+            state.lock()?.preview_windows.insert(label.clone(), file.clone());
+            let result = tauri::WebviewWindowBuilder::new(&app, &label, tauri::WebviewUrl::App("index.html?santara-preview=1".into()))
+                .title(format!("Quick Preview — {}", file.name))
+                .inner_size(860.0, 640.0)
+                .always_on_top(true)
+                .build();
+            if let Err(error) = result {
+                state.forget_window(&label);
+                return Err(error.to_string());
+            }
+            Ok(serde_json::json!({ "ok": true }))
+        }
         "copy" | "move" => {
             let action = request.action.clone();
             let dialog_app = app.clone();
@@ -984,5 +1335,13 @@ mod tests {
         assert!(checked_path("relative/file.png").is_err());
         assert!(checked_path("//server/share/file.png").is_err());
         assert!(checked_path("/tmp/bad\nfile.png").is_err());
+    }
+
+    #[test]
+    fn preview_ranges_are_bounded_and_invalid_ranges_fail() {
+        assert_eq!(parse_range(Some("bytes=0-"), 10_000_000).unwrap(), (0, 4 * 1024 * 1024 - 1, true));
+        assert_eq!(parse_range(Some("bytes=-5"), 100).unwrap(), (95, 99, true));
+        assert!(parse_range(Some("bytes=100-"), 100).is_err());
+        assert!(parse_range(Some("bytes=0-1,4-5"), 100).is_err());
     }
 }
