@@ -26,7 +26,7 @@ const AUDIO_OUTPUTS: &[(&str, &str, &str)] = &[
 
 fn has(text: &str, token: &str) -> bool { text.split(|part: char| part.is_whitespace() || part == ',').any(|part| part == token) }
 
-fn captured(mut command: Command, timeout: Duration, cancelled: impl Fn() -> bool) -> Result<String, String> {
+pub(crate) fn captured(mut command: Command, timeout: Duration, cancelled: impl Fn() -> bool) -> Result<String, String> {
     command.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = command.spawn().map_err(|_| "Local media backend could not start".to_string())?;
     let stdout = child.stdout.take().ok_or("Media output unavailable")?;

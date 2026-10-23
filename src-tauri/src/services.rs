@@ -133,6 +133,8 @@ pub struct AppState {
     data: Mutex<Data>,
     semaphore: Mutex<Arc<Semaphore>>,
     media: Mutex<crate::media::MediaBackend>,
+    pdf: Mutex<crate::pdf::PdfBackend>,
+    documents: Mutex<crate::documents::DocumentBackend>,
     settings_file: PathBuf,
     jobs_file: PathBuf,
 }
@@ -181,10 +183,14 @@ impl AppState {
         }
         let concurrency = data.settings.concurrency;
         let media = crate::media::detect(&data.settings.backend_paths);
+        let pdf = crate::pdf::detect(&data.settings.backend_paths);
+        let documents = crate::documents::detect(&data.settings.backend_paths);
         Ok(Self {
             data: Mutex::new(data),
             semaphore: Mutex::new(Arc::new(Semaphore::new(usize::from(concurrency)))),
             media: Mutex::new(media),
+            pdf: Mutex::new(pdf),
+            documents: Mutex::new(documents),
             settings_file,
             jobs_file,
         })
@@ -213,21 +219,28 @@ impl AppState {
     fn snapshot(&self) -> Result<Snapshot, String> {
         let data = self.lock()?;
         let media = self.media.lock().map_err(|_| "Media backend is unavailable")?;
+        let pdf = self.pdf.lock().map_err(|_| "PDF backend is unavailable")?;
+        let documents = self.documents.lock().map_err(|_| "Document backend is unavailable")?;
         let mut capabilities = crate::processing::capabilities();
         capabilities.push(crate::subtitles::capabilities());
         capabilities.extend(crate::archives::capabilities());
         capabilities.extend(media.capabilities());
+        capabilities.extend(pdf.capabilities());
+        capabilities.extend(documents.capabilities());
+        let mut backends = HashMap::from([
+            ("rust-image".into(), serde_json::json!({ "available": true, "version": "0.25" })),
+            ("rust-subtitles".into(), serde_json::json!({ "available": true })),
+            ("rust-archive".into(), serde_json::json!({ "available": true })),
+            ("ffmpeg".into(), media.info()),
+            ("ffprobe".into(), serde_json::json!({ "available": media.available() }))
+        ]);
+        backends.extend(pdf.info());
+        backends.insert("pandoc".into(), documents.info());
         Ok(Snapshot {
             files: data.files.clone(),
             jobs: data.jobs.clone(),
             settings: data.settings.clone(),
-            backends: HashMap::from([
-                ("rust-image".into(), serde_json::json!({ "available": true, "version": "0.25" })),
-                ("rust-subtitles".into(), serde_json::json!({ "available": true })),
-                ("rust-archive".into(), serde_json::json!({ "available": true })),
-                ("ffmpeg".into(), media.info()),
-                ("ffprobe".into(), serde_json::json!({ "available": media.available() }))
-            ]),
+            backends,
             capabilities,
             platform: if cfg!(windows) { "win32" } else { "linux" },
             persistence_errors: data.persistence_errors.clone(),
@@ -551,12 +564,22 @@ pub async fn save_settings(app: AppHandle, state: State<'_, AppState>, patch: Va
         let overrides = updated.backend_paths.clone();
         Some(tauri::async_runtime::spawn_blocking(move || crate::media::detect(&overrides)).await.map_err(|error| error.to_string())?)
     } else { None };
+    let next_pdf = if changing_backend && updated.backend_paths != previous.backend_paths {
+        let overrides = updated.backend_paths.clone();
+        Some(tauri::async_runtime::spawn_blocking(move || crate::pdf::detect(&overrides)).await.map_err(|error| error.to_string())?)
+    } else { None };
+    let next_documents = if changing_backend && updated.backend_paths != previous.backend_paths {
+        let overrides = updated.backend_paths.clone();
+        Some(tauri::async_runtime::spawn_blocking(move || crate::documents::detect(&overrides)).await.map_err(|error| error.to_string())?)
+    } else { None };
     let mut data = state.lock()?;
     if data.settings != previous { return Err("Settings changed while the dialog was open; please retry".into()); }
     persist_json(&state.settings_file, &updated)?;
     data.settings = updated.clone();
     drop(data);
     if let Some(media) = next_media { *state.media.lock().map_err(|_| "Media backend is unavailable")? = media; }
+    if let Some(pdf) = next_pdf { *state.pdf.lock().map_err(|_| "PDF backend is unavailable")? = pdf; }
+    if let Some(documents) = next_documents { *state.documents.lock().map_err(|_| "Document backend is unavailable")? = documents; }
     *state.semaphore.lock().map_err(|_| "Santara queue is unavailable")? = Arc::new(Semaphore::new(usize::from(updated.concurrency)));
     let snapshot = state.snapshot()?;
     let _ = app.emit("santara:update", serde_json::json!({ "settings": updated, "backends": snapshot.backends, "capabilities": snapshot.capabilities }));
@@ -632,7 +655,9 @@ fn run_local_job(app: &AppHandle, job: &Job, settings: &Settings) -> Result<Opti
         else if ["mp3", "wav", "flac", "ogg", "opus", "m4a", "aiff", "wma"].contains(&input_ext.as_str()) { Some("audio") } else { None };
     let archive_create = job.operation == "create-archive";
     let archive_extract = job.operation == "extract";
-    let bytes = if media_category.is_some() || archive_create || archive_extract { None }
+    let pdf_job = input_ext == "pdf";
+    let document_job = ["txt", "md", "html", "docx", "epub", "rtf"].contains(&input_ext.as_str());
+    let bytes = if media_category.is_some() || archive_create || archive_extract || pdf_job || document_job { None }
         else if ["srt", "vtt"].contains(&input_ext.as_str()) { Some(crate::subtitles::convert(&source, &job.format)?) }
         else { Some(crate::processing::convert_image(&source, &job.operation, &job.format, &job.options, quality as u8)?) };
     if app.state::<AppState>().lock()?.jobs.iter().any(|entry| entry.id == job.id && entry.status == "cancelled") {
@@ -664,6 +689,22 @@ fn run_local_job(app: &AppHandle, job: &Job, settings: &Settings) -> Result<Opti
             crate::archives::create(&inputs, &temp, &job.format)?;
         } else if archive_extract {
             crate::archives::extract(&source, &temp, &input_ext)?;
+        } else if pdf_job {
+            if job.operation == "pdf-merge" {
+                for value in job.options.get("inputs").and_then(Value::as_array).ok_or("Missing PDF inputs")? {
+                    let path = checked_path(value.as_str().ok_or("Invalid PDF input")?)?;
+                    if !check_no_symlink(&path)?.is_file() { return Err("Merge inputs must be regular PDFs".into()); }
+                }
+            }
+            let backend = app.state::<AppState>().pdf.lock().map_err(|_| "PDF backend is unavailable")?.clone();
+            backend.run(&source, &temp, &job.operation, &job.format, &job.options,
+                || app.state::<AppState>().lock().is_ok_and(|data| data.jobs.iter().any(|entry| entry.id == job.id && entry.status == "cancelled")))?;
+            File::open(&temp).map_err(|error| error.to_string())?.sync_all().map_err(|error| error.to_string())?;
+        } else if document_job {
+            let backend = app.state::<AppState>().documents.lock().map_err(|_| "Document backend is unavailable")?.clone();
+            backend.run(&source, &temp, &job.format,
+                || app.state::<AppState>().lock().is_ok_and(|data| data.jobs.iter().any(|entry| entry.id == job.id && entry.status == "cancelled")))?;
+            File::open(&temp).map_err(|error| error.to_string())?.sync_all().map_err(|error| error.to_string())?;
         }
         if app.state::<AppState>().lock()?.jobs.iter().any(|entry| entry.id == job.id && entry.status == "cancelled") {
             return Err("Cancelled".into());
@@ -700,23 +741,33 @@ fn publish_directory(source: &Path, destination: &Path) -> std::io::Result<()> {
 pub fn enqueue(app: AppHandle, state: State<'_, AppState>, request: EnqueueRequest) -> Result<Vec<Job>, String> {
     if request.files.is_empty() || request.files.len() > 1_000 { return Err("Select 1–1,000 files".into()); }
     if !request.options.is_object() || request.options.to_string().len() > 100_000 { return Err("Invalid conversion options".into()); }
-    if !["convert", "compress", "resize", "crop", "rotate", "flip", "strip-metadata", "trim", "mute", "speed", "snapshot", "extract-audio", "normalize", "channels", "create-archive", "extract"].contains(&request.operation.as_str()) {
+    if !["convert", "compress", "resize", "crop", "rotate", "flip", "strip-metadata", "trim", "mute", "speed", "snapshot", "extract-audio", "normalize", "channels", "create-archive", "extract", "pdf-extract", "pdf-merge", "pdf-rotate", "render"].contains(&request.operation.as_str()) {
         return Err("Unsupported operation".into());
     }
-    if !["jpg", "jpeg", "png", "webp", "tif", "tiff", "bmp", "gif", "avif", "srt", "vtt", "txt", "mp4", "mkv", "mov", "avi", "wmv", "mp3", "wav", "flac", "ogg", "opus", "m4a", "aiff", "wma", "zip", "tar", "gz", "directory"].contains(&request.format.as_str()) {
+    if !["jpg", "jpeg", "png", "webp", "tif", "tiff", "bmp", "gif", "avif", "srt", "vtt", "txt", "md", "html", "docx", "epub", "mp4", "mkv", "mov", "avi", "wmv", "mp3", "wav", "flac", "ogg", "opus", "m4a", "aiff", "wma", "zip", "tar", "gz", "directory", "pdf"].contains(&request.format.as_str()) {
         return Err("Unsupported output format".into());
     }
     let now = OffsetDateTime::now_utc().format(&Rfc3339).map_err(|error| error.to_string())?;
     let mut jobs = Vec::new();
-    if request.operation == "create-archive" {
-        if !["zip", "tar", "gz"].contains(&request.format.as_str()) { return Err("Unsupported archive format".into()); }
+    if request.operation == "create-archive" || request.operation == "pdf-merge" {
+        if request.operation == "create-archive" && !["zip", "tar", "gz"].contains(&request.format.as_str()) { return Err("Unsupported archive format".into()); }
+        if request.operation == "pdf-merge" && (request.format != "pdf" || !state.pdf.lock().map_err(|_| "PDF backend is unavailable")?.supports("pdf-merge", "pdf")) {
+            return Err("PDF merge is unavailable".into());
+        }
         let mut paths = Vec::new();
-        for file in &request.files { paths.push(state.known_path(&file.path, false)?); }
-        paths.sort();
-        paths.dedup();
+        for file in &request.files {
+            let path = state.known_path(&file.path, false)?;
+            if request.operation == "pdf-merge" && (path.extension().and_then(|value| value.to_str()) != Some("pdf") || !check_no_symlink(&path)?.is_file()) {
+                return Err("Select inspected PDFs to merge".into());
+            }
+            paths.push(path);
+        }
+        if request.operation == "create-archive" { paths.sort(); paths.dedup(); }
+        else { let mut seen = HashSet::new(); paths.retain(|path| seen.insert(path.clone())); }
         let roots = paths.iter().filter(|path| !paths.iter().any(|other| *path != other && path.starts_with(other)))
             .cloned().collect::<Vec<_>>();
         if roots.is_empty() { return Err("Select archive sources".into()); }
+        if request.operation == "pdf-merge" && roots.len() < 2 { return Err("Select at least two PDFs".into()); }
         let mut options = request.options.clone();
         options.as_object_mut().ok_or("Invalid archive options")?.insert("inputs".into(), serde_json::json!(roots));
         let first = roots[0].to_string_lossy().to_string();
@@ -735,7 +786,11 @@ pub fn enqueue(app: AppHandle, state: State<'_, AppState>, request: EnqueueReque
             .supports(&inspected.category, &request.operation, &inspected.ext, &request.format);
         let archive = inspected.category == "archive" && ["zip", "tar", "gz"].contains(&inspected.ext.as_str())
             && request.operation == "extract" && request.format == "directory";
-        if !(image || subtitle || media || archive) || !check_no_symlink(&path)?.is_file() {
+        let pdf = inspected.category == "pdf" && state.pdf.lock().map_err(|_| "PDF backend is unavailable")?
+            .supports(&request.operation, &request.format);
+        let document = inspected.category == "document" && request.operation == "convert"
+            && state.documents.lock().map_err(|_| "Document backend is unavailable")?.supports(&inspected.ext, &request.format);
+        if !(image || subtitle || media || archive || pdf || document) || !check_no_symlink(&path)?.is_file() {
             return Err("Select files supported by this local route".into());
         }
         jobs.push(Job { id: Uuid::new_v4().to_string(), input: inspected.path, name: inspected.name,

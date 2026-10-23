@@ -8,6 +8,8 @@ mod processing;
 mod subtitles;
 mod media;
 mod archives;
+mod pdf;
+mod documents;
 
 use serde::Serialize;
 use tauri::{

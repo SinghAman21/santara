@@ -1,6 +1,6 @@
 # Implementation status and next work
 
-The `tauri-rt` migration follows `TAURI_MIGRATION_PLAN.md`. Its bridge, local settings, native drops, and initial Rust image, subtitle, archive, and detected FFmpeg jobs are in progress; Phase 8 holds the deferred platform validation. Electron remains in this branch until replacement code is ready for Phase 7 cleanup.
+The `tauri-rt` migration follows `TAURI_MIGRATION_PLAN.md`. Its bridge, local settings, native drops, and initial Rust image, subtitle, archive, and detected FFmpeg/Poppler/qpdf/Pandoc jobs are in progress; Phase 8 holds the deferred platform validation. Electron remains in this branch until replacement code is ready for Phase 7 cleanup.
 
 This is a one-session continuation plan. Implemented means code exists; optional tools and tests determine availability on a particular machine. Library support is not automatically an enabled Santara route. The format overview is not a compatibility guarantee.
 
