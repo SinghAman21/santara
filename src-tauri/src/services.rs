@@ -825,7 +825,7 @@ fn publish_directory(source: &Path, destination: &Path) -> std::io::Result<()> {
 pub fn enqueue(app: AppHandle, state: State<'_, AppState>, request: EnqueueRequest) -> Result<Vec<Job>, String> {
     if request.files.is_empty() || request.files.len() > 1_000 { return Err("Select 1–1,000 files".into()); }
     if !request.options.is_object() || request.options.to_string().len() > 100_000 { return Err("Invalid conversion options".into()); }
-    if !["convert", "compress", "resize", "crop", "rotate", "flip", "strip-metadata", "trim", "mute", "speed", "snapshot", "extract-audio", "normalize", "channels", "create-archive", "extract", "pdf-extract", "pdf-merge", "pdf-rotate", "render"].contains(&request.operation.as_str()) {
+    if !["convert", "compress", "resize", "crop", "rotate", "flip", "strip-metadata", "edit-image", "background", "trim", "mute", "speed", "snapshot", "extract-audio", "normalize", "channels", "create-archive", "extract", "pdf-extract", "pdf-merge", "pdf-rotate", "render"].contains(&request.operation.as_str()) {
         return Err("Unsupported operation".into());
     }
     if !["jpg", "jpeg", "png", "webp", "tif", "tiff", "bmp", "gif", "avif", "srt", "vtt", "txt", "md", "html", "docx", "epub", "mp4", "mkv", "mov", "avi", "wmv", "mp3", "wav", "flac", "ogg", "opus", "m4a", "aiff", "wma", "zip", "tar", "gz", "directory", "pdf"].contains(&request.format.as_str()) {
@@ -863,7 +863,8 @@ pub fn enqueue(app: AppHandle, state: State<'_, AppState>, request: EnqueueReque
         let path = state.known_path(&file.path, false)?;
         let inspected = state.lock()?.files.iter().find(|entry| entry.path == file.path).cloned().ok_or("Inspect input files before enqueueing")?;
         let image = inspected.category == "image" && ["jpg", "jpeg", "png", "webp", "tif", "tiff", "bmp", "gif", "avif"].contains(&inspected.ext.as_str())
-            && ["jpg", "jpeg", "png", "webp", "tif", "tiff", "bmp", "gif", "avif"].contains(&request.format.as_str());
+            && ["jpg", "jpeg", "png", "webp", "tif", "tiff", "bmp", "gif", "avif"].contains(&request.format.as_str())
+            && ["convert", "compress", "resize", "crop", "rotate", "flip", "strip-metadata", "edit-image", "background"].contains(&request.operation.as_str());
         let subtitle = inspected.category == "subtitle" && ["srt", "vtt"].contains(&inspected.ext.as_str())
             && request.operation == "convert" && ["srt", "vtt", "txt"].contains(&request.format.as_str());
         let media = ["video", "audio"].contains(&inspected.category.as_str()) && state.media.lock().map_err(|_| "Media backend is unavailable")?
