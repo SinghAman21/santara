@@ -4,7 +4,7 @@ Date: 2026-10-23. Phase 1 implementation is in progress; its gate is **not passe
 
 ## Implemented prototype
 
-`src-tauri/` contains a Tauri 2 Rust host. `npm run tauri:dev` and `npm run tauri:build` are separate from the Electron entry points and `npm run dist`. Four Tauri windows load the existing Vite renderer: `workspace`, `wheel`, `image`, and `video`. The wheel is configured as a transparent, undecorated, always-on-top window. A tray menu can show the prototype views and quit. The only Rust command is `runtime_info`; processing and the production renderer bridge are not migrated yet. No Electron file has been removed.
+`src-tauri/` contains a Tauri 2 Rust host. `npm run tauri:dev` and `npm run tauri:build` are separate from the Electron entry points and `npm run dist`. Four Tauri windows load the existing Vite renderer: `workspace`, `wheel`, `image`, and `video`. The wheel is configured as a transparent, undecorated, always-on-top window. A tray menu can show the prototype views and quit. Closing a window hides it so the tray can reopen it. The host logs only drag entry/drop counts and window labels for shell testing, never file paths or contents. The only Rust command is `runtime_info`; processing and the production renderer bridge are not migrated yet. No Electron file has been removed.
 
 ## Evidence collected on Ubuntu 26.04.1 LTS x64
 

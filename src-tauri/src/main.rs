@@ -7,7 +7,7 @@ use serde::Serialize;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
-    Manager,
+    DragDropEvent, Manager, WindowEvent,
 };
 
 #[derive(Serialize)]
@@ -53,6 +53,24 @@ fn main() {
                     .build(app)?;
             }
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            match event {
+                WindowEvent::CloseRequested { api, .. } => {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+                WindowEvent::DragDrop(DragDropEvent::Enter { paths, .. }) => {
+                    eprintln!("Santara shell drag entered {} ({} entries)", window.label(), paths.len());
+                }
+                WindowEvent::DragDrop(DragDropEvent::Drop { paths, .. }) => {
+                    eprintln!("Santara shell drop on {} ({} entries)", window.label(), paths.len());
+                }
+                WindowEvent::DragDrop(DragDropEvent::Leave) => {
+                    eprintln!("Santara shell drag left {}", window.label());
+                }
+                _ => {}
+            }
         })
         .run(tauri::generate_context!())
         .expect("Santara Tauri shell failed to start");
