@@ -1,8 +1,9 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Santara Tauri Shell",
+  "productName": "Santara",
+  "mainBinaryName": "santara",
   "version": "0.1.0",
-  "identifier": "app.santara.shell",
+  "identifier": "io.santara.app",
   "build": {
     "beforeDevCommand": "npm run dev -- --port 5173 --strictPort",
     "devUrl": "http://127.0.0.1:5173",

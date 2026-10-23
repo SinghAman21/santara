@@ -3500,7 +3500,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "santara-tauri"
+name = "santara"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",

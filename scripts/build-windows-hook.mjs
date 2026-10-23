@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -40,7 +40,7 @@ if (process.platform !== 'win32') {
   process.exit(0);
 }
 
-if (!existsSync(executable)) {
+if (!existsSync(executable) || statSync(source).mtimeMs > statSync(executable).mtimeMs || statSync(path.join(root, 'native/windows/build.ps1')).mtimeMs > statSync(executable).mtimeMs) {
   run('powershell.exe', [
     '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(root, 'native/windows/build.ps1'),
   ], { windowsHide: true });

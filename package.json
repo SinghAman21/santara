@@ -14,6 +14,8 @@
     "desktop": "npm run build:windows-hook && node scripts/desktop.mjs",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
+    "tauri:dist:linux": "tauri build --bundles deb,appimage",
+    "tauri:dist:windows": "node scripts/build-windows-hook.mjs && tauri build --bundles nsis",
     "build:windows-hook": "node scripts/build-windows-hook.mjs",
     "build:windows-hook:cross": "node scripts/build-windows-hook.mjs --cross",
     "build": "tsc --noEmit && vite build",
