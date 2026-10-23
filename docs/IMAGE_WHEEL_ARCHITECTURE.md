@@ -1,5 +1,7 @@
 # Santara Image Wheel Architecture
 
+Tauri migration note: `src-tauri/` now receives native file drops and has an initial Rust raster job path. Full floating editor recipes, metadata behavior, and native global drag hooks are still being ported; the feature descriptions below remain the Electron baseline until Phase 8 validation.
+
 ## Product direction
 
 Santara should feel like a desktop wheel utility, not a conventional converter window. The visible application window is not part of the normal drag workflow. A small background desktop host owns the global wheel, local workers, settings, notifications, and native integrations. The host may still use Electron internally, but the main Santara workspace stays hidden unless the user explicitly opens history, settings, or a full queue view.

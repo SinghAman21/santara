@@ -3,7 +3,8 @@ use std::{
     fs::{self, File, OpenOptions},
     io::Write,
     path::{Path, PathBuf},
-    sync::Mutex,
+    process::{Command, Stdio},
+    sync::{Arc, Mutex},
 };
 
 #[cfg(unix)]
@@ -16,6 +17,8 @@ use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tauri_plugin_opener::OpenerExt;
 use uuid::Uuid;
+use tokio::sync::Semaphore;
+use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -90,7 +93,7 @@ impl Default for Settings {
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {
     pub files: Vec<LocalFile>,
-    pub jobs: Vec<Value>,
+    pub jobs: Vec<Job>,
     pub settings: Settings,
     pub backends: HashMap<String, Value>,
     pub capabilities: Vec<Value>,
@@ -98,9 +101,28 @@ pub struct Snapshot {
     pub persistence_errors: Vec<String>,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Job {
+    pub id: String,
+    pub input: String,
+    pub name: String,
+    pub operation: String,
+    pub format: String,
+    pub status: String,
+    pub progress: u8,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub created_at: String,
+    pub options: Value,
+}
+
 #[derive(Default)]
 struct Data {
     files: Vec<LocalFile>,
+    jobs: Vec<Job>,
     outputs: HashSet<PathBuf>,
     pending_drops: HashMap<String, Vec<String>>,
     settings: Settings,
@@ -109,7 +131,9 @@ struct Data {
 
 pub struct AppState {
     data: Mutex<Data>,
+    semaphore: Mutex<Arc<Semaphore>>,
     settings_file: PathBuf,
+    jobs_file: PathBuf,
 }
 
 impl AppState {
@@ -119,6 +143,7 @@ impl AppState {
         #[cfg(unix)]
         fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).map_err(|error| error.to_string())?;
         let settings_file = directory.join("settings.json");
+        let jobs_file = directory.join("jobs.json");
         let mut data = Data::default();
         match fs::read_to_string(&settings_file) {
             Ok(contents) if contents.len() <= 1_000_000 => match serde_json::from_str::<Value>(&contents)
@@ -131,9 +156,34 @@ impl AppState {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(_) => data.persistence_errors.push("Saved settings are unavailable".into()),
         }
+        match fs::read_to_string(&jobs_file) {
+            Ok(contents) if contents.len() <= 20_000_000 => match serde_json::from_str::<Vec<Job>>(&contents) {
+                Ok(mut jobs) if jobs.len() <= 10_000 => {
+                    for job in &mut jobs {
+                        if ["queued", "preparing", "processing"].contains(&job.status.as_str()) {
+                            job.status = "failed".into();
+                            job.error = Some("Interrupted when Santara closed".into());
+                        }
+                    }
+                    for job in &jobs {
+                        if job.status == "completed" {
+                            if let Some(output) = &job.output { data.outputs.insert(PathBuf::from(output)); }
+                        }
+                    }
+                    data.jobs = jobs;
+                }
+                _ => data.persistence_errors.push("Saved jobs could not be read".into()),
+            },
+            Ok(_) => data.persistence_errors.push("Saved jobs exceed the size limit".into()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(_) => data.persistence_errors.push("Saved jobs are unavailable".into()),
+        }
+        let concurrency = data.settings.concurrency;
         Ok(Self {
             data: Mutex::new(data),
+            semaphore: Mutex::new(Arc::new(Semaphore::new(usize::from(concurrency)))),
             settings_file,
+            jobs_file,
         })
     }
 
@@ -141,14 +191,30 @@ impl AppState {
         self.data.lock().map_err(|_| "Santara state is unavailable".into())
     }
 
+    fn update_job(&self, app: &AppHandle, id: &str, status: &str, output: Option<String>, error: Option<String>) -> Result<(), String> {
+        let mut data = self.lock()?;
+        let job = data.jobs.iter_mut().find(|job| job.id == id).ok_or("Unknown job")?;
+        if job.status == "cancelled" { return Ok(()); }
+        job.status = status.into();
+        job.progress = if status == "completed" { 100 } else { 0 };
+        job.output = output.clone();
+        job.error = error;
+        if let Some(output) = output { data.outputs.insert(PathBuf::from(output)); }
+        persist_json(&self.jobs_file, &data.jobs)?;
+        let jobs = data.jobs.clone();
+        drop(data);
+        let _ = app.emit("santara:update", serde_json::json!({ "jobs": jobs }));
+        Ok(())
+    }
+
     fn snapshot(&self) -> Result<Snapshot, String> {
         let data = self.lock()?;
         Ok(Snapshot {
             files: data.files.clone(),
-            jobs: Vec::new(),
+            jobs: data.jobs.clone(),
             settings: data.settings.clone(),
-            backends: HashMap::new(),
-            capabilities: Vec::new(),
+            backends: HashMap::from([("rust-image".into(), serde_json::json!({ "available": true, "version": "0.25" }))]),
+            capabilities: crate::processing::capabilities(),
             platform: if cfg!(windows) { "win32" } else { "linux" },
             persistence_errors: data.persistence_errors.clone(),
         })
@@ -429,9 +495,9 @@ fn validate_settings(mut settings: Settings, patch: Value) -> Result<Settings, S
     Ok(settings)
 }
 
-fn persist_settings(path: &Path, settings: &Settings) -> Result<(), String> {
-    let temporary = path.with_file_name(format!(".settings-{}.tmp", Uuid::new_v4()));
-    let serialized = serde_json::to_vec_pretty(settings).map_err(|error| error.to_string())?;
+fn persist_json<T: Serialize + ?Sized>(path: &Path, value: &T) -> Result<(), String> {
+    let temporary = path.with_file_name(format!(".santara-{}.tmp", Uuid::new_v4()));
+    let serialized = serde_json::to_vec_pretty(value).map_err(|error| error.to_string())?;
     let result = (|| {
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
@@ -469,9 +535,10 @@ pub async fn save_settings(app: AppHandle, state: State<'_, AppState>, patch: Va
     }
     let mut data = state.lock()?;
     if data.settings != previous { return Err("Settings changed while the dialog was open; please retry".into()); }
-    persist_settings(&state.settings_file, &updated)?;
+    persist_json(&state.settings_file, &updated)?;
     data.settings = updated.clone();
     drop(data);
+    *state.semaphore.lock().map_err(|_| "Santara queue is unavailable")? = Arc::new(Semaphore::new(usize::from(updated.concurrency)));
     let _ = app.emit("santara:update", serde_json::json!({ "settings": updated }));
     Ok(updated)
 }
@@ -491,13 +558,165 @@ pub fn open_output(app: AppHandle, state: State<'_, AppState>, path: String) -> 
 }
 
 #[derive(Deserialize)]
+pub struct EnqueueRequest {
+    files: Vec<LocalFile>,
+    operation: String,
+    format: String,
+    options: Value,
+}
+
+fn schedule_job(app: AppHandle, id: String) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    let semaphore = state.semaphore.lock().map_err(|_| "Santara queue is unavailable")?.clone();
+    tauri::async_runtime::spawn(async move {
+        let Ok(_permit) = semaphore.acquire_owned().await else { return };
+        let job = {
+            let state = app.state::<AppState>();
+            let Ok(data) = state.lock() else { return };
+            data.jobs.iter().find(|job| job.id == id && job.status == "queued").cloned()
+        };
+        let Some(job) = job else { return };
+        let state = app.state::<AppState>();
+        if state.update_job(&app, &id, "processing", None, None).is_err() { return }
+        let settings = match state.lock() { Ok(data) => data.settings.clone(), Err(_) => return };
+        let work_app = app.clone();
+        let work = tauri::async_runtime::spawn_blocking(move || run_image_job(&work_app, &job, &settings)).await;
+        let result = match work {
+            Ok(value) => value,
+            Err(error) => Err(error.to_string()),
+        };
+        let state = app.state::<AppState>();
+        match result {
+            Ok(Some(output)) => { let _ = state.update_job(&app, &id, "completed", Some(output), None); }
+            Ok(None) => { let _ = state.update_job(&app, &id, "skipped", None, None); }
+            Err(error) => { let _ = state.update_job(&app, &id, "failed", None, Some(error)); }
+        }
+    });
+    Ok(())
+}
+
+fn run_image_job(app: &AppHandle, job: &Job, settings: &Settings) -> Result<Option<String>, String> {
+    let source = checked_path(&job.input)?;
+    if !check_no_symlink(&source)?.is_file() { return Err("Input must be a regular file".into()); }
+    let directory = job.options.get("outputFolder").and_then(Value::as_str).filter(|value| !value.is_empty())
+        .or_else(|| (!settings.output_folder.is_empty()).then_some(settings.output_folder.as_str()))
+        .map(checked_path).transpose()?.unwrap_or_else(|| source.parent().unwrap_or(&source).to_path_buf());
+    if !check_no_symlink(&directory)?.is_dir() { return Err("Output folder is unavailable".into()); }
+    let quality = job.options.get("quality").and_then(Value::as_u64).unwrap_or(u64::from(settings.quality));
+    if !(1..=100).contains(&quality) { return Err("Invalid quality".into()); }
+    let bytes = crate::processing::convert_image(&source, &job.operation, &job.format, &job.options, quality as u8)?;
+    if app.state::<AppState>().lock()?.jobs.iter().any(|entry| entry.id == job.id && entry.status == "cancelled") {
+        return Err("Cancelled".into());
+    }
+    let stem = source.file_stem().and_then(|value| value.to_str()).ok_or("Invalid source name")?;
+    let base = settings.naming_pattern.replace("{name}", stem).replace("{operation}", &job.operation).replace("{ext}", &job.format);
+    if base.is_empty() || base.len() > 240 || base.chars().any(|ch| ch.is_control() || ch == '/' || ch == '\\') {
+        return Err("Invalid output name".into());
+    }
+    let temp = directory.join(format!(".santara-{}.tmp", Uuid::new_v4()));
+    let result = (|| {
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)] options.mode(0o600);
+        let mut file = options.open(&temp).map_err(|error| error.to_string())?;
+        file.write_all(&bytes).map_err(|error| error.to_string())?;
+        file.sync_all().map_err(|error| error.to_string())?;
+        if app.state::<AppState>().lock()?.jobs.iter().any(|entry| entry.id == job.id && entry.status == "cancelled") {
+            return Err("Cancelled".into());
+        }
+        for number in 0..10_000 {
+            let suffix = if number == 0 { String::new() } else { format!(" ({number})") };
+            let output = directory.join(format!("{base}{suffix}.{}", job.format));
+            match fs::hard_link(&temp, &output) {
+                Ok(()) => return Ok(Some(output.to_string_lossy().to_string())),
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                    let policy = job.options.get("collision").and_then(Value::as_str).unwrap_or(&settings.collision);
+                    if policy == "skip" { return Ok(None); }
+                    if policy == "ask" { return Err("Output exists; choose Keep both or Skip before retrying".into()); }
+                }
+                Err(error) => return Err(error.to_string()),
+            }
+        }
+        Err("Too many output name collisions".into())
+    })();
+    let _ = fs::remove_file(temp);
+    result
+}
+
+#[tauri::command]
+pub fn enqueue(app: AppHandle, state: State<'_, AppState>, request: EnqueueRequest) -> Result<Vec<Job>, String> {
+    if request.files.is_empty() || request.files.len() > 1_000 { return Err("Select 1–1,000 files".into()); }
+    if !request.options.is_object() || request.options.to_string().len() > 100_000 { return Err("Invalid conversion options".into()); }
+    if !["convert", "compress", "resize", "crop", "rotate", "flip", "strip-metadata"].contains(&request.operation.as_str()) {
+        return Err("Unsupported image operation".into());
+    }
+    if !["jpg", "jpeg", "png", "webp", "tif", "tiff", "bmp", "gif", "avif"].contains(&request.format.as_str()) {
+        return Err("Unsupported output format".into());
+    }
+    let now = OffsetDateTime::now_utc().format(&Rfc3339).map_err(|error| error.to_string())?;
+    let mut jobs = Vec::new();
+    for file in &request.files {
+        let path = state.known_path(&file.path, false)?;
+        let inspected = state.lock()?.files.iter().find(|entry| entry.path == file.path).cloned().ok_or("Inspect input files before enqueueing")?;
+        if inspected.category != "image" || !["jpg", "jpeg", "png", "webp", "tif", "tiff", "bmp", "gif", "avif"].contains(&inspected.ext.as_str()) || !check_no_symlink(&path)?.is_file() {
+            return Err("Select supported, inspected image files".into());
+        }
+        jobs.push(Job { id: Uuid::new_v4().to_string(), input: inspected.path, name: inspected.name,
+            operation: request.operation.clone(), format: request.format.clone(), status: "queued".into(), progress: 0,
+            output: None, error: None, created_at: now.clone(), options: request.options.clone() });
+    }
+    {
+        let mut data = state.lock()?;
+        if data.jobs.len() + jobs.len() > 10_000 { return Err("Job history is full".into()); }
+        data.jobs.extend(jobs.clone());
+        persist_json(&state.jobs_file, &data.jobs)?;
+    }
+    let _ = app.emit("santara:update", serde_json::json!({ "jobs": state.lock()?.jobs }));
+    for job in &jobs { schedule_job(app.clone(), job.id.clone())?; }
+    Ok(jobs)
+}
+
+#[tauri::command]
+pub fn cancel(app: AppHandle, state: State<'_, AppState>, id: String) -> Result<Value, String> {
+    let mut data = state.lock()?;
+    let job = data.jobs.iter_mut().find(|job| job.id == id).ok_or("Unknown job")?;
+    if ["queued", "processing", "preparing"].contains(&job.status.as_str()) { job.status = "cancelled".into(); }
+    persist_json(&state.jobs_file, &data.jobs)?;
+    let _ = app.emit("santara:update", serde_json::json!({ "jobs": data.jobs }));
+    Ok(serde_json::json!({ "ok": true }))
+}
+
+#[tauri::command]
+pub fn retry(app: AppHandle, state: State<'_, AppState>, id: String) -> Result<Value, String> {
+    {
+        let mut data = state.lock()?;
+        let job = data.jobs.iter_mut().find(|job| job.id == id).ok_or("Unknown job")?;
+        if !["failed", "cancelled", "skipped"].contains(&job.status.as_str()) { return Err("Only failed or stopped jobs can be retried".into()); }
+        job.status = "queued".into();
+        job.error = None;
+        job.progress = 0;
+        persist_json(&state.jobs_file, &data.jobs)?;
+        let _ = app.emit("santara:update", serde_json::json!({ "jobs": data.jobs }));
+    }
+    schedule_job(app, id)?;
+    Ok(serde_json::json!({ "ok": true }))
+}
+
+#[tauri::command]
+pub async fn image_preview(state: State<'_, AppState>, path: String, operation: String, options: Value) -> Result<Value, String> {
+    let input = state.known_path(&path, false)?;
+    tauri::async_runtime::spawn_blocking(move || crate::processing::image_preview(&input, &operation, &options))
+        .await.map_err(|error| error.to_string())?
+}
+
+#[derive(Deserialize)]
 pub struct FileActionRequest {
     action: String,
     files: Vec<LocalFile>,
 }
 
 #[tauri::command]
-pub fn file_action(app: AppHandle, state: State<'_, AppState>, request: FileActionRequest) -> Result<Value, String> {
+pub async fn file_action(app: AppHandle, state: State<'_, AppState>, request: FileActionRequest) -> Result<Value, String> {
     if request.files.is_empty() || request.files.len() > 1_000 {
         return Err("Select at least one known file".into());
     }
@@ -509,8 +728,107 @@ pub fn file_action(app: AppHandle, state: State<'_, AppState>, request: FileActi
             Ok(serde_json::json!({ "ok": true }))
         }
         "preview" => Err("Quick preview will be available after the Tauri preview service is implemented".into()),
-        "copy" | "move" | "terminal" | "share" => Err("This file action is not implemented in the Tauri runtime yet".into()),
+        "copy" | "move" => {
+            let action = request.action.clone();
+            let dialog_app = app.clone();
+            let selected = tauri::async_runtime::spawn_blocking(move || dialog_app.dialog().file().blocking_pick_folder())
+                .await.map_err(|error| error.to_string())?;
+            let Some(selected) = selected else { return Ok(serde_json::json!({ "canceled": true })) };
+            let destination = selected.into_path().map_err(|error| error.to_string())?;
+            if !check_no_symlink(&destination)?.is_dir() { return Err("Choose a local directory".into()); }
+            for path in &paths {
+                if destination.starts_with(path) { return Err("Destination cannot be inside a selected source".into()); }
+                if paths.iter().any(|other| other != path && path.starts_with(other)) {
+                    return Err("Select the parent folder or its children, not both".into());
+                }
+            }
+            let mut names = HashSet::new();
+            for path in &paths {
+                let name = path.file_name().ok_or("Invalid source name")?;
+                if !names.insert(name.to_os_string()) || destination.join(name).exists() {
+                    return Err("Destination already contains a selected name".into());
+                }
+            }
+            let confirm_app = app.clone();
+            let action_label = action.clone();
+            let path_count = paths.len();
+            let destination_label = destination.to_string_lossy().to_string();
+            let approved = tauri::async_runtime::spawn_blocking(move || {
+                confirm_app.dialog().message(format!("{} {} selected entries to {}? Existing files will not be replaced.", if action_label == "move" { "Move" } else { "Copy" }, path_count, destination_label))
+                    .title("Confirm file action")
+                    .kind(MessageDialogKind::Warning)
+                    .buttons(MessageDialogButtons::OkCancelCustom("Continue".into(), "Cancel".into()))
+                    .blocking_show()
+            }).await.map_err(|error| error.to_string())?;
+            if !approved { return Ok(serde_json::json!({ "canceled": true })); }
+            let outcomes = tauri::async_runtime::spawn_blocking(move || {
+                paths.iter().map(|source| {
+                    let target = destination.join(source.file_name().ok_or("Invalid source name")?);
+                    let result = copy_entry(source, &target, 0, &mut 0);
+                    let result = if result.is_ok() && action == "move" { remove_source_tree(source) } else { result };
+                    Ok(serde_json::json!({ "ok": result.is_ok(), "input": source.to_string_lossy(), "output": target.to_string_lossy(), "error": result.err() }))
+                }).collect::<Result<Vec<Value>, String>>()
+            }).await.map_err(|error| error.to_string())??;
+            let ok = outcomes.iter().all(|item| item["ok"] == true);
+            {
+                let mut data = state.lock()?;
+                for item in &outcomes {
+                    if item["ok"] == true {
+                        if let Some(output) = item["output"].as_str() { data.outputs.insert(PathBuf::from(output)); }
+                    }
+                }
+            }
+            Ok(serde_json::json!({ "ok": ok, "results": outcomes }))
+        }
+        "share" => Ok(serde_json::json!({ "ok": false, "available": false, "reason": "Native sharing is unavailable here. Use Copy path or Reveal." })),
+        "terminal" => {
+            if paths.len() != 1 { return Err("Select one location".into()); }
+            let source = &paths[0];
+            let cwd = if check_no_symlink(source)?.is_dir() { source.as_path() } else { source.parent().ok_or("Invalid location")? };
+            #[cfg(target_os = "linux")]
+            let child = Command::new("x-terminal-emulator").current_dir(cwd).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn();
+            #[cfg(target_os = "windows")]
+            let child = Command::new("wt.exe").args(["-d", &cwd.to_string_lossy()]).current_dir(cwd).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn();
+            Ok(match child {
+                Ok(_) => serde_json::json!({ "ok": true }),
+                Err(_) => serde_json::json!({ "ok": false, "available": false, "reason": "No supported terminal is installed" }),
+            })
+        }
         _ => Err("Unknown file action".into()),
+    }
+}
+
+fn copy_entry(source: &Path, target: &Path, depth: u8, count: &mut usize) -> Result<(), String> {
+    if depth > 64 || *count >= 10_000 { return Err("Folder action limit exceeded".into()); }
+    *count += 1;
+    let before = check_no_symlink(source)?;
+    if before.is_dir() {
+        fs::create_dir(target).map_err(|error| error.to_string())?;
+        let mut entries = fs::read_dir(source).map_err(|error| error.to_string())?.collect::<Result<Vec<_>, _>>().map_err(|error| error.to_string())?;
+        entries.sort_by_key(|entry| entry.file_name());
+        for entry in entries { copy_entry(&entry.path(), &target.join(entry.file_name()), depth + 1, count)?; }
+    } else {
+        let mut input = File::open(source).map_err(|error| error.to_string())?;
+        let mut output = OpenOptions::new().write(true).create_new(true).open(target).map_err(|error| error.to_string())?;
+        std::io::copy(&mut input, &mut output).map_err(|error| error.to_string())?;
+        output.sync_all().map_err(|error| error.to_string())?;
+        let after = check_no_symlink(source)?;
+        if before.len() != after.len() || before.modified().ok() != after.modified().ok() {
+            return Err("Source changed during the file action".into());
+        }
+    }
+    Ok(())
+}
+
+fn remove_source_tree(path: &Path) -> Result<(), String> {
+    let metadata = check_no_symlink(path)?;
+    if metadata.is_dir() {
+        for entry in fs::read_dir(path).map_err(|error| error.to_string())? {
+            remove_source_tree(&entry.map_err(|error| error.to_string())?.path())?;
+        }
+        fs::remove_dir(path).map_err(|error| error.to_string())
+    } else {
+        fs::remove_file(path).map_err(|error| error.to_string())
     }
 }
 

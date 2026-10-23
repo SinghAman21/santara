@@ -34,5 +34,6 @@ export interface Bridge {
   onGlobalOperation?(callback: (request: { capabilityId: string; format: string; files: LocalFile[] }) => void): () => void;
   onGlobalPage?(callback: (page: 'converter' | 'activity') => void): () => void;
   onUpdate(callback: (update: Partial<Snapshot>) => void): () => void;
+  onNativeDrop?(callback: (files: LocalFile[]) => void): () => void;
 }
 declare global { interface Window { santara?: Bridge } }

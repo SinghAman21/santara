@@ -122,15 +122,11 @@ export default function GlobalWheelWindow() {
     setChoice(id);
   }
 
-  async function onDrop(event: DragEvent<HTMLElement>) {
-    event.preventDefault();
+  async function processIncoming(incoming: LocalFile[], targetChoice?: string) {
     if (working) return;
-    const target = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-wheel-item]') : null;
-    const targetChoice = target?.dataset.wheelItem;
     if (targetChoice && items.some(item => item.id === targetChoice && !item.disabled)) highlight(targetChoice);
     setWorking(true);
     try {
-      const incoming = await api.droppedFiles(Array.from(event.dataTransfer.files));
       if (!incoming.length) {
         await api.finishGlobalWheel?.('converter');
         return;
@@ -172,6 +168,15 @@ export default function GlobalWheelWindow() {
       setWorking(false);
     }
   }
+
+  async function onDrop(event: DragEvent<HTMLElement>) {
+    event.preventDefault();
+    const target = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-wheel-item]') : null;
+    const incoming = await api.droppedFiles(Array.from(event.dataTransfer.files));
+    await processIncoming(incoming, target?.dataset.wheelItem);
+  }
+
+  useEffect(() => api.onNativeDrop?.(files => { void processIncoming(files); }), [mode, snapshot, working, items]);
 
   return <main className="global-wheel-shell" aria-label="Santara global drop wheel" onDragEnter={event => {
     event.preventDefault();

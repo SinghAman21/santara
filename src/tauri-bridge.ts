@@ -44,4 +44,7 @@ export const tauriBridge: Bridge = {
   onGlobalOperation: callback => subscription('santara:global-operation', callback),
   onGlobalPage: callback => subscription('santara:global-page', callback),
   onUpdate: callback => subscription('santara:update', callback),
+  onNativeDrop: callback => subscription<void>('santara:native-drop', () => {
+    void invoke<LocalFile[]>('consume_drop').then(callback).catch(error => console.error('Native drop failed:', error));
+  }),
 };

@@ -97,6 +97,12 @@ export default function App() {
   const settings = data.settings;
 
   useEffect(() => { api.bootstrap().then(snapshot => { setData({ ...snapshot, settings: { ...defaultSettings, ...snapshot.settings, shortcuts: { ...defaultSettings.shortcuts, ...snapshot.settings?.shortcuts } } }); if (snapshot.files?.length) { setFiles(snapshot.files); setSelected(snapshot.files.map(file => file.id)); } }).catch(error => setNotice(String(error.message || error))); return api.onUpdate(update => { setData(previous => ({ ...previous, ...update })); if (update.files?.length) { setFiles(previous => [...new Map([...previous, ...update.files!].map(file => [file.path, file])).values()]); setSelected(previous => [...new Set([...previous, ...update.files!.map(file => file.id)])]); } }); }, []);
+  useEffect(() => api.onNativeDrop?.(incoming => {
+    if (!incoming.length) return;
+    appendFiles(incoming);
+    setSelected(incoming.map(file => file.id));
+    setPicker('convert');
+  }), []);
   useEffect(() => { const media = matchMedia('(prefers-color-scheme: dark)'); const apply = () => document.documentElement.dataset.theme = settings.theme === 'system' ? media.matches ? 'dark' : 'light' : settings.theme; apply(); media.addEventListener('change', apply); return () => media.removeEventListener('change', apply); }, [settings.theme]);
   useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(''), 7000); return () => clearTimeout(timer); }, [notice]);
   useEffect(() => {

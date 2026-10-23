@@ -4,12 +4,13 @@
 compile_error!("Santara supports only Linux and Windows desktop targets");
 
 mod services;
+mod processing;
 
 use serde::Serialize;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
-    DragDropEvent, Manager, PhysicalPosition, WebviewWindow, WindowEvent,
+    DragDropEvent, Emitter, Manager, PhysicalPosition, WebviewWindow, WindowEvent,
 };
 
 #[derive(Serialize)]
@@ -86,6 +87,10 @@ fn main() {
             services::choose_folder,
             services::pick_output,
             services::save_settings,
+            services::enqueue,
+            services::cancel,
+            services::retry,
+            services::image_preview,
             services::reveal,
             services::open_output,
             services::file_action,
@@ -135,6 +140,8 @@ fn main() {
                     let state = app.state::<services::AppState>();
                     if let Err(error) = state.record_drop(window.label(), paths) {
                         eprintln!("Santara drop rejected: {error}");
+                    } else {
+                        let _ = window.emit("santara:native-drop", ());
                     }
                 }
                 WindowEvent::DragDrop(DragDropEvent::Leave) => {

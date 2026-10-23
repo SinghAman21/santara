@@ -2,7 +2,7 @@
 
 ## Tauri migration, 2026-10-23
 
-On branch `tauri-rt`, Phase 0 is recorded in `docs/adr/0001-tauri-runtime-boundaries.md` and `docs/TAURI_PARITY_MATRIX.md`. An isolated Phase 1 Tauri shell is in `src-tauri/`; it passes `cargo check` and launches on Ubuntu 26.04.1 LTS, but the Phase 1 platform and workflow gate remains open. See `docs/TAURI_SHELL_VALIDATION.md` for evidence and blockers. Electron remains the working runtime and its files/scripts must stay until Phase 7. The user will install missing `patchelf`, `libvips-dev`, and `xvfb` themselves and will later verify native Windows 10/11 behavior. Do not claim Wine checks as native Windows acceptance.
+On branch `tauri-rt`, Phase 0 and the isolated Phase 1 Tauri shell are recorded in `docs/adr/0001-tauri-runtime-boundaries.md`, `docs/TAURI_PARITY_MATRIX.md`, and `docs/TAURI_SHELL_VALIDATION.md`. Native bridge/settings/file actions, a bounded Rust raster processor, initial persisted jobs, and native drop handoff are now being implemented. The Rust image path is provisional: background/editing and metadata parity, all optional engines, platform global-wheel helpers, packaging cutover, and accessibility checks remain. The user authorized code-first Phases 1–7, Electron cleanup after replacements are implemented on this branch, and all platform checks in Phase 8. Do not claim parity from compilation or Wine; native Windows 10/11 and Ubuntu LTS acceptance are still required. The user will install sudo packages themselves later.
 
 ## Interaction refactor, 2026-10-20
 

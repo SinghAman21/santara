@@ -1,5 +1,7 @@
 # Capability specification and source registry
 
+The `tauri-rt` branch has a provisional Rust raster route set. The support claims below describe the retained Electron baseline until the Tauri parity matrix and Phase 8 checks pass; see `TAURI_PARITY_MATRIX.md`. The provisional image route currently removes metadata and does not cover every editor recipe.
+
 Research date: 2026-10-19. Only the public [Tangerine website](https://tangerineformac.com/) was read. No application binary was downloaded, run, decompiled, or reverse engineered. Public marketing is evidence of advertised behavior, not a tested technical implementation or Santara compatibility.
 
 ## Public reference observations
