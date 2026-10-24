@@ -154,6 +154,8 @@ export default class SantaraWheelExtension extends Extension {
             ['tools', this._settings.get_string('tools-modifier')],
             ['convert', this._settings.get_string('convert-modifier')],
         ];
+        // A configured Ctrl+Shift binding must win over a Ctrl or Shift binding.
+        bindings.sort((a, b) => Number(b[1] === 'ctrl-shift') - Number(a[1] === 'ctrl-shift'));
 
         for (const [mode, keyName] of bindings) {
             const mask = getModifierMask(keyName);

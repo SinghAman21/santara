@@ -43,7 +43,7 @@ Modifier defaults are Shift for conversions, Alt for tools, and Ctrl for actions
 gsettings --schemadir "$EXT_DIR/schemas" set org.gnome.shell.extensions.santara-wheel tools-modifier 'ctrl-shift'
 ```
 
-If multiple bindings overlap, file actions take precedence, then tools, then conversion.
+Ctrl+Shift takes priority over either of its single modifiers. For equal-specificity bindings, file actions take precedence, then tools, then conversion.
 
 ## Remove
 
