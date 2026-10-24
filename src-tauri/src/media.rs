@@ -151,6 +151,44 @@ impl MediaBackend {
         Ok(())
     }
 
+    pub fn preview_details(&self, input: &Path) -> Option<Value> {
+        let (video, audio) = self.merge_streams(input, &|| false).ok()?;
+        if video.is_null() && audio.is_none() { return None; }
+        let mut command = Command::new(self.ffprobe.as_ref()?);
+        command.args(["-v", "error", "-protocol_whitelist", "file", "-show_entries", "format=duration:format_tags=title,artist,album,date,comment,description", "-of", "json", "-i"]).arg(input);
+        let output = captured(command, Duration::from_secs(10), || false).ok()?;
+        let data: Value = serde_json::from_str(&output).ok()?;
+        let duration = data["format"]["duration"].as_str().and_then(|value| value.parse::<f64>().ok())
+            .filter(|value| value.is_finite() && *value >= 0.0 && *value <= 604_800.0);
+        let mut metadata = serde_json::Map::new();
+        if let Some(tags) = data["format"]["tags"].as_object() {
+            for (key, value) in tags.iter().take(20) {
+                if key.len() <= 64 && value.as_str().is_some_and(|text| text.len() <= 256 && !text.chars().any(char::is_control)) {
+                    metadata.insert(key.clone(), value.clone());
+                }
+            }
+        }
+        Some(json!({ "duration": duration, "width": video["width"], "height": video["height"], "metadata": metadata }))
+    }
+
+    pub fn preview_video(&self, input: &Path, output: &Path) -> Result<(), String> {
+        let extension = input.extension().and_then(|part| part.to_str()).unwrap_or_default().to_ascii_lowercase();
+        if !self.supports("video", "convert", &extension, "mp4") || !has(&self.filters, "scale") || !has(&self.filters, "format") {
+            return Err("Video editor preview requires a local H.264/AAC FFmpeg route".into());
+        }
+        let (video, _) = self.merge_streams(input, &|| false)?;
+        if video.is_null() { return Err("Video stream is missing".into()); }
+        let mut command = Command::new(self.ffmpeg.as_ref().ok_or("FFmpeg is unavailable")?);
+        command.args(["-hide_banner", "-nostdin", "-v", "error", "-n", "-protocol_whitelist", "file", "-f", demuxer(&extension), "-i"])
+            .arg(input).args(["-t", "30", "-map", "0:v:0", "-map", "0:a:0?", "-sn", "-dn",
+                "-vf", "scale=w=640:h=640:force_original_aspect_ratio=decrease:force_divisible_by=2,format=yuv420p",
+                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "30", "-c:a", "aac", "-b:a", "96k",
+                "-movflags", "+faststart", "-f", "mp4"])
+            .arg(output);
+        captured(command, Duration::from_secs(90), || false).map_err(safe_media_error)?;
+        Ok(())
+    }
+
     pub fn supports(&self, category: &str, operation: &str, input: &str, output: &str) -> bool {
         if !self.available() { return false }
         if (operation == "visualize" && category != "audio") || (["redact", "gif", "snapshot", "extract-audio", "mute", "speed", "resize", "crop", "rotate", "flip"].contains(&operation) && category != "video") { return false }
@@ -214,7 +252,7 @@ impl MediaBackend {
         if !self.supports(category, operation, &extension, format) { return Err("Media route is unavailable".into()); }
         let ffprobe = self.ffprobe.as_ref().ok_or("FFprobe is unavailable")?;
         let mut inspect = Command::new(ffprobe);
-        inspect.args(["-v", "error", "-show_entries", "format=format_name", "-of", "default=noprint_wrappers=1:nokey=1", "-i"]).arg(input);
+        inspect.args(["-v", "error", "-protocol_whitelist", "file", "-show_entries", "format=format_name", "-of", "default=noprint_wrappers=1:nokey=1", "-i"]).arg(input);
         let probe_output = captured(inspect, Duration::from_secs(10), &cancelled).map_err(safe_media_error)?;
         if !probe_output.split([',', '\n']).any(|part| part.trim() == demuxer(&extension)) {
             return Err("Media signature does not match its supported container".into());
@@ -281,7 +319,7 @@ impl MediaBackend {
                 },
                 "redact" => {
                     let mut dimensions = Command::new(ffprobe);
-                    dimensions.args(["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", "-i"]).arg(input);
+                    dimensions.args(["-v", "error", "-protocol_whitelist", "file", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", "-i"]).arg(input);
                     let output = captured(dimensions, Duration::from_secs(10), &cancelled).map_err(safe_media_error)?;
                     let parts = output.trim().split(',').collect::<Vec<_>>();
                     if parts.len() != 2 { return Err("Cannot inspect video dimensions for redaction".into()); }
@@ -309,7 +347,7 @@ impl MediaBackend {
         let extension = input.extension().and_then(|value| value.to_str()).unwrap_or_default().to_ascii_lowercase();
         let ffprobe = self.ffprobe.as_ref().ok_or("FFprobe is unavailable")?;
         let mut command = Command::new(ffprobe);
-        command.args(["-v", "error", "-show_data_hash", "sha256", "-show_entries",
+        command.args(["-v", "error", "-protocol_whitelist", "file", "-show_data_hash", "sha256", "-show_entries",
             "format=format_name:stream=codec_type,codec_name,width,height,pix_fmt,sample_rate,channels,channel_layout,time_base,extradata_hash",
             "-of", "json", "-i"]).arg(input);
         let output = captured(command, Duration::from_secs(15), cancelled).map_err(safe_media_error)?;
@@ -450,6 +488,8 @@ mod tests {
         bytes.extend_from_slice(&16_000_u32.to_le_bytes());
         bytes.resize(bytes.len() + 16_000, 0);
         std::fs::write(&input, bytes).unwrap();
+        let details = backend.preview_details(&input).unwrap();
+        assert!(details["duration"].as_f64().is_some_and(|duration| duration > 0.4));
         backend.run(&input, &output, "audio", "convert", "mp3", &json!({}), || false).unwrap();
         assert!(std::fs::metadata(&output).unwrap().len() > 100);
         if backend.supports("audio", "split", "wav", "mp3") {
@@ -489,6 +529,12 @@ mod tests {
         let input = directory.join("input.mp4");
         let status = Command::new(backend.ffmpeg.as_ref().unwrap()).args(["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=red:s=64x64:d=1:r=2", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-y"]).arg(&input).status().unwrap();
         if !status.success() { std::fs::remove_dir_all(directory).unwrap(); return; }
+        assert_eq!(backend.preview_details(&input).unwrap()["width"], 64);
+        if backend.supports("video", "convert", "mp4", "mp4") {
+            let preview = directory.join("preview.mp4");
+            backend.preview_video(&input, &preview).unwrap();
+            assert!(preview.metadata().unwrap().len() > 100);
+        }
         let frame = directory.join("frame.tmp");
         backend.run(&input, &frame, "video", "snapshot", "png", &json!({"time": 0.5}), || false).unwrap();
         assert!(frame.metadata().unwrap().len() > 100);

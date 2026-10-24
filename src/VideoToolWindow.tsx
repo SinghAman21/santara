@@ -4,7 +4,7 @@ import type { Capability, LocalFile } from './types';
 import { api } from './bridge';
 
 type Mask = { x: number; y: number; width: number; height: number; start: number; end: number; color: string };
-type Preview = { url: string; duration?: number; width?: number; height?: number; metadata?: Record<string, unknown> };
+type Preview = { url: string; duration?: number; previewDuration?: number; width?: number; height?: number; metadata?: Record<string, unknown> };
 type Props = { capability: Capability; files: LocalFile[]; format: string; initialOptions: Record<string, unknown>; onClose: () => void; onApply: (format: string, options: Record<string, unknown>, orderedFiles: string[]) => Promise<unknown> };
 
 const operationTitle: Record<string, string> = {
@@ -99,7 +99,7 @@ export default function VideoToolWindow({ capability, files: originalFiles, form
   }, [preview?.url]);
 
   function set(key: string, value: string) { setValues(current => ({ ...current, [key]: value })); }
-  function seek(value: number) { if (videoRef.current && Number.isFinite(value)) videoRef.current.currentTime = Math.max(0, Math.min(duration || value, value)); }
+  function seek(value: number) { if (videoRef.current && Number.isFinite(value)) videoRef.current.currentTime = Math.max(0, Math.min(preview?.previewDuration || duration || value, value)); }
 
   function point(event: PointerEvent<HTMLDivElement>) {
     const video = videoRef.current;
@@ -183,13 +183,14 @@ export default function VideoToolWindow({ capability, files: originalFiles, form
       <div className="video-tool-body">
         <div className="video-tool-main">
           <div className="video-tool-stage" ref={stageRef} onPointerDown={beginMask} onPointerUp={finishMask} onPointerCancel={() => { pointerRef.current = null; }}>
-            {preview?.url ? <video ref={videoRef} src={preview.url} playsInline preload="metadata" aria-label={`Local video preview of ${file?.name}`} onLoadedMetadata={event => { const current = event.currentTarget; if (Number.isFinite(current.duration)) setDuration(current.duration); setPlayhead(current.currentTime); }} onTimeUpdate={event => setPlayhead(event.currentTarget.currentTime)}/> : <div className="video-tool-preview-empty">{previewError || 'Preparing local preview…'}</div>}
+            {preview?.url ? <video ref={videoRef} src={preview.url} playsInline preload="metadata" aria-label={`Local video preview of ${file?.name}`} onLoadedMetadata={event => { const current = event.currentTarget; if (Number.isFinite(current.duration) && !preview.duration) setDuration(current.duration); setPlayhead(current.currentTime); }} onTimeUpdate={event => setPlayhead(event.currentTarget.currentTime)}/> : <div className="video-tool-preview-empty">{previewError || 'Preparing local preview…'}</div>}
             {operation === 'crop' && videoWidth && videoHeight && bounds.width > 0 && <div className="video-tool-box video-tool-crop" style={selectionStyle({ x: cropX, y: cropY, width: cropWidth, height: cropHeight })} aria-label="Crop area"/>}
             {operation === 'redact' && masks.map((mask, index) => <div className="video-tool-box video-tool-mask" key={`${index}-${mask.x}-${mask.y}`} style={{ ...selectionStyle(mask), backgroundColor: mask.color }} aria-label={`Redaction mask ${index + 1}`}>{index + 1}</div>)}
             {preview?.width && preview.height && <span className="video-tool-dimensions">{preview.width} × {preview.height} px</span>}
           </div>
           <div className="video-tool-transport"><button aria-label="Seek backward one second" onClick={() => seek(playhead - 1)}><RotateCcw size={15}/></button><button aria-label="Play video" onClick={() => void videoRef.current?.play()}><Play size={15}/></button><button aria-label="Pause video" onClick={() => videoRef.current?.pause()}><Pause size={15}/></button><span>{clock(playhead)} / {clock(duration)}</span></div>
-          <input className="video-tool-seek" aria-label="Video timeline" type="range" min="0" max={Math.max(duration, 0.01)} step="0.01" value={Math.min(playhead, duration || playhead)} onChange={event => seek(Number(event.target.value))} disabled={!duration}/>
+          <input className="video-tool-seek" aria-label="Video preview timeline" type="range" min="0" max={Math.max(Math.min(duration, preview?.previewDuration || duration), 0.01)} step="0.01" value={Math.min(playhead, preview?.previewDuration || duration || playhead)} onChange={event => seek(Number(event.target.value))} disabled={!duration}/>
+          {preview?.previewDuration && <p className="video-tool-fileinfo">Playback previews the first 30 seconds. Time fields can target the full source.</p>}
           <p className="video-tool-fileinfo">{file?.size ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : ''}{preview?.width && preview.height ? ` · ${preview.width} × ${preview.height}` : ''}{duration ? ` · ${clock(duration)}` : ''}</p>
         </div>
         <div className="video-tool-controls">

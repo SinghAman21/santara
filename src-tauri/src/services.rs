@@ -882,6 +882,19 @@ fn split_segments(options: &Value) -> Result<Vec<(f64, f64)>, String> {
 #[tauri::command]
 pub fn enqueue(app: AppHandle, window: tauri::WebviewWindow, state: State<'_, AppState>, request: EnqueueRequest) -> Result<Vec<Job>, String> {
     require_window(&window, &["workspace", "wheel", "image", "video"])?;
+    if ["image", "video"].contains(&window.label()) {
+        let data = state.lock()?;
+        let context = if window.label() == "image" { data.image_context.as_ref() } else { data.video_context.as_ref() }
+            .ok_or("Editor context is unavailable")?;
+        let expected = context.capability["operation"].as_str().ok_or("Invalid editor operation")?;
+        let format_ok = if window.label() == "image" { request.format == context.format }
+            else { context.capability["outputs"].as_array().is_some_and(|outputs| outputs.iter().any(|output| output == &request.format)) };
+        let requested = request.files.iter().map(|file| file.path.as_str()).collect::<HashSet<_>>();
+        let expected_files = context.files.iter().map(|file| file.path.as_str()).collect::<HashSet<_>>();
+        if request.operation != expected || !format_ok || request.files.len() != context.files.len() || requested != expected_files {
+            return Err("Editor request does not match its context".into());
+        }
+    }
     if request.files.is_empty() || request.files.len() > 1_000 { return Err("Select 1–1,000 files".into()); }
     if !request.options.is_object() || request.options.to_string().len() > 100_000 { return Err("Invalid conversion options".into()); }
     if !["convert", "compress", "resize", "crop", "rotate", "flip", "strip-metadata", "edit-image", "background", "metadata", "trim", "split", "merge", "mute", "speed", "snapshot", "gif", "redact", "visualize", "extract-audio", "normalize", "channels", "create-archive", "extract", "pdf-extract", "pdf-merge", "pdf-rotate", "render"].contains(&request.operation.as_str()) {
@@ -1033,6 +1046,9 @@ pub fn copy_diagnostic(app: AppHandle, window: tauri::WebviewWindow, state: Stat
 #[tauri::command]
 pub async fn image_preview(window: tauri::WebviewWindow, state: State<'_, AppState>, path: String, operation: String, options: Value) -> Result<Value, String> {
     require_window(&window, &["image", "workspace"])?;
+    if window.label() == "image" && !state.lock()?.image_context.as_ref().is_some_and(|context| context.files.iter().any(|file| file.path == path)) {
+        return Err("Image preview is outside its editor context".into());
+    }
     let input = state.known_path(&path, false)?;
     tauri::async_runtime::spawn_blocking(move || crate::processing::image_preview(&input, &operation, &options))
         .await.map_err(|error| error.to_string())?
@@ -1044,9 +1060,21 @@ pub async fn preview(app: AppHandle, window: tauri::WebviewWindow, state: State<
         return Err("Preview is unavailable in this window".into());
     }
     let source = state.known_path(&path, false)?;
+    if window.label().starts_with("preview-") && !state.lock()?.preview_windows.get(window.label()).is_some_and(|file| file.path == path) {
+        return Err("Quick Preview is outside its window context".into());
+    }
+    if window.label() == "video" && !state.lock()?.video_context.as_ref().is_some_and(|context| context.files.iter().any(|file| file.path == path)) {
+        return Err("Video preview is outside its editor context".into());
+    }
     let metadata = check_no_symlink(&source)?;
-    if !metadata.is_file() || metadata.len() > 32 * 1024 * 1024 { return Err("Quick Preview supports files up to 32 MiB".into()); }
-    let mime = preview_mime(&source)?;
+    let extension = source.extension().and_then(|part| part.to_str()).unwrap_or_default().to_ascii_lowercase();
+    let editor_video = window.label() == "video" && category(&extension) == "video";
+    let source_limit = if editor_video { 2 * 1024 * 1024 * 1024 } else { 32 * 1024 * 1024 };
+    if !metadata.is_file() || metadata.len() > source_limit { return Err("Preview input exceeds its size limit".into()); }
+    let mime = if editor_video { "video/mp4" } else { preview_mime(&source)? };
+    let details = if mime.starts_with("audio/") || mime.starts_with("video/") {
+        state.media.lock().map_err(|_| "Media backend is unavailable")?.preview_details(&source)
+    } else { None };
     let waveform = if mime.starts_with("audio/") {
         let backend = state.media.lock().map_err(|_| "Media backend is unavailable")?.clone();
         let directory = app.path().app_cache_dir().map_err(|error| error.to_string())?;
@@ -1059,7 +1087,20 @@ pub async fn preview(app: AppHandle, window: tauri::WebviewWindow, state: State<
             result.ok().map(|bytes| format!("data:image/png;base64,{}", STANDARD.encode(bytes)))
         }).await.ok().flatten()
     } else { None };
-    let (prepared, mime, cached) = if mime == "application/pdf" {
+    let (prepared, mime, cached) = if editor_video {
+        let backend = state.media.lock().map_err(|_| "Media backend is unavailable")?.clone();
+        let directory = app.path().app_cache_dir().map_err(|error| error.to_string())?;
+        fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
+        let output = directory.join(format!("santara-video-preview-{}.mp4", Uuid::new_v4()));
+        let input = source.clone();
+        let preview = output.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            let result = backend.preview_video(&input, &preview);
+            if result.is_err() { let _ = fs::remove_file(&preview); }
+            result
+        }).await.map_err(|error| error.to_string())??;
+        (output, "video/mp4", true)
+    } else if mime == "application/pdf" {
         let backend = state.pdf.lock().map_err(|_| "PDF backend is unavailable")?.clone();
         if !backend.supports("render", "png") { return Err("PDF preview requires local Poppler".into()); }
         let directory = app.path().app_cache_dir().map_err(|error| error.to_string())?;
@@ -1081,12 +1122,19 @@ pub async fn preview(app: AppHandle, window: tauri::WebviewWindow, state: State<
         let mut data = state.lock()?;
         let expired = data.previews.iter().filter(|(_, entry)| entry.expires < Instant::now()).map(|(key, _)| key.clone()).collect::<Vec<_>>();
         for key in expired { if let Some(entry) = data.previews.remove(&key) { if entry.cached { let _ = fs::remove_file(entry.path); } } }
-        if data.previews.len() >= 32 { return Err("Close an older preview before opening another".into()); }
+        if data.previews.len() >= 32 {
+            if cached { let _ = fs::remove_file(&prepared); }
+            return Err("Close an older preview before opening another".into());
+        }
         data.previews.insert(token.clone(), PreviewEntry { path: prepared, mime, size: prepared_info.len(), modified: prepared_info.modified().ok(),
             window: window.label().into(), expires: Instant::now() + Duration::from_secs(3600), cached });
     }
     let url = if cfg!(windows) { format!("http://santara-media.localhost/{token}") } else { format!("santara-media://localhost/{token}") };
-    Ok(serde_json::json!({ "url": url, "waveform": waveform }))
+    let mut result = details.unwrap_or_else(|| serde_json::json!({}));
+    result["url"] = serde_json::json!(url);
+    result["waveform"] = serde_json::json!(waveform);
+    if editor_video { result["previewDuration"] = serde_json::json!(30); }
+    Ok(result)
 }
 
 #[tauri::command]

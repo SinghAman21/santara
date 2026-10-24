@@ -20,7 +20,7 @@ export interface Bridge {
   reveal(path: string): Promise<unknown>;
   openOutput(path: string): Promise<unknown>;
   fileAction(request: { action: string; files: LocalFile[]; destination?: string }): Promise<unknown>;
-  preview?(path: string): Promise<{ url: string; width?: number; height?: number; duration?: number; waveform?: string; waveformDuration?: number; metadata?: Record<string, unknown> }>;
+  preview?(path: string): Promise<{ url: string; width?: number; height?: number; duration?: number; previewDuration?: number; waveform?: string; waveformDuration?: number; metadata?: Record<string, unknown> }>;
   previewContext?(): Promise<LocalFile>;
   closePreview?(): Promise<void>;
   imagePreview?(path: string, operation: string, options: Record<string, string>): Promise<{ url: string; width?: number; height?: number; sourceWidth?: number; sourceHeight?: number }>;

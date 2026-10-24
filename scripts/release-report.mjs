@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { readFile, readdir, mkdir, writeFile } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import { readFile, readdir, mkdir, writeFile, stat } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -7,14 +8,18 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const bundle = path.join(root, 'src-tauri/target/release/bundle');
 const packages = [];
+async function sha256(filename) {
+  const hash = createHash('sha256');
+  for await (const chunk of createReadStream(filename)) hash.update(chunk);
+  return hash.digest('hex');
+}
 for (const [folder, extension] of [['nsis', '.exe'], ['deb', '.deb'], ['appimage', '.AppImage']]) {
   let names = [];
   try { names = await readdir(path.join(bundle, folder)); } catch {}
   for (const name of names.filter(value => value.startsWith('Santara_') && value.endsWith(extension))) {
     const filename = path.join(bundle, folder, name);
-    const bytes = await readFile(filename);
-    packages.push({ file: path.relative(root, filename), installerBytes: bytes.length,
-      sha256: createHash('sha256').update(bytes).digest('hex'),
+    packages.push({ file: path.relative(root, filename), installerBytes: (await stat(filename)).size,
+      sha256: await sha256(filename),
       installedBytes: null, installValidation: 'Phase 8 pending' });
   }
 }
