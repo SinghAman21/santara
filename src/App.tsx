@@ -22,7 +22,7 @@ const families = [
   { id: 'subtitle', label: 'Subtitles', icon: FileSliders, color: 'lavender', formats: ['SRT', 'VTT', 'TXT'], engine: 'Built in', detail: 'Every word, right on time.' },
   { id: 'archive', label: 'Archives', icon: FileArchive, color: 'sand', formats: ['ZIP', 'TAR', 'GZIP', 'RAR'], engine: 'Optional safe archive backend', detail: 'Good things, neatly wrapped.' }
 ];
-const actionItems = [ { id: 'copy', label: t.copy, icon: Copy }, { id: 'move', label: t.move, icon: FolderOpen }, { id: 'copy-path', label: t.copyPath, icon: Clipboard }, { id: 'terminal', label: t.terminal, icon: Terminal }, { id: 'share', label: t.share, icon: ArrowUpRight }, { id: 'preview', label: t.quickPreview, icon: ScanLine } ];
+const actionItems = [ { id: 'copy', label: t.copy, icon: Copy }, { id: 'move', label: t.move, icon: FolderOpen }, { id: 'copy-path', label: t.copyPath, icon: Clipboard }, { id: 'terminal', label: t.terminal, icon: Terminal }, { id: 'preview', label: t.quickPreview, icon: ScanLine } ];
 const operationName = (cap: Capability) => cap.operation || cap.id.split(':').pop()!;
 const compatible = (cap: Capability, file: LocalFile) => cap.inputs.includes('*') || cap.inputs.includes(file.isDirectory ? 'directory' : file.ext.toLowerCase());
 const toolLabels: Record<string, string> = { 'edit-image': 'Edit photo', background: 'Add background', compress: 'Compress', crop: 'Crop', resize: 'Resize', rotate: 'Rotate', flip: 'Flip', metadata: 'Edit metadata', 'strip-metadata': 'Delete metadata', trim: 'Trim', visualize: 'Visualize', normalize: 'Normalize', channels: 'Channels', speed: 'Speed', mute: 'Mute', snapshot: 'Snapshot', gif: 'Create GIF', 'extract-audio': 'Extract audio', 'pdf-extract': 'Extract pages', 'pdf-merge': 'Merge PDFs', 'pdf-rotate': 'Rotate pages', render: 'Render pages', extract: 'Extract archive', 'create-archive': 'Create archive' };
@@ -108,7 +108,7 @@ export default function App() {
     appendFiles(incoming);
     setSelected(incoming.map(file => file.id));
     setPicker(mode);
-  }), []);
+  }, message => setNotice(`Could not inspect dropped files: ${message}`)), []);
   useEffect(() => { const media = matchMedia('(prefers-color-scheme: dark)'); const apply = () => document.documentElement.dataset.theme = settings.theme === 'system' ? media.matches ? 'dark' : 'light' : settings.theme; apply(); media.addEventListener('change', apply); return () => media.removeEventListener('change', apply); }, [settings.theme]);
   useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(''), 7000); return () => clearTimeout(timer); }, [notice]);
   useEffect(() => {
@@ -182,10 +182,11 @@ export default function App() {
     }
   }
   useEffect(() => {
-    const removeFiles = api.onGlobalFiles?.(({ files: incoming, mode }) => {
+    const removeFiles = api.onGlobalFiles?.(({ files: incoming, mode, notice: message }) => {
       appendFiles(incoming);
       setSelected(incoming.map(file => file.id));
       setPicker(mode);
+      if (message) setNotice(message);
     });
     const removeOperation = api.onGlobalOperation?.(({ capabilityId, format, files: incoming }) => {
       setFiles(previous => [...new Map([...previous, ...incoming].map(file => [file.path, file])).values()]);
@@ -195,7 +196,8 @@ export default function App() {
       else setNotice('That operation is no longer available for the selected files.');
     });
     const removePage = api.onGlobalPage?.(destination => setPage(destination));
-    return () => { removeFiles?.(); removeOperation?.(); removePage?.(); };
+    const removeNotice = api.onGlobalNotice?.(message => setNotice(message));
+    return () => { removeFiles?.(); removeOperation?.(); removePage?.(); removeNotice?.(); };
   }, [data.capabilities]);
   async function queueOperation(cap: Capability, format: string, values: Record<string, string>, source = selectedFiles) {
     const options: Record<string, unknown> = { quality: settings.quality, stripMetadata: settings.stripMetadata, outputFolder: settings.outputFolder, collision: settings.collision, recursive: settings.recursive, preserveStructure: settings.preserveStructure, ...values };
@@ -311,7 +313,7 @@ export default function App() {
         const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
         const direction = ['ArrowDown','ArrowRight'].includes(event.key) ? 1 : -1;
         event.preventDefault(); buttons[(current + direction + buttons.length) % buttons.length]?.focus();
-      }}>{picker === 'actions' ? actionItems.map(item => <button className="operation-choice" key={item.id} onClick={() => void fileAction(item.id)}><span className="tool-icon sand"><item.icon size={21}/></span><span><strong>{item.label}</strong><small>{item.id === 'share' ? 'Native provider, where available' : item.id === 'preview' ? 'Always-on-top local preview' : 'Local file action'}</small></span><ChevronRight size={17}/></button>) : validRoutes(picker).length ? validRoutes(picker).flatMap(cap => (picker === 'convert' ? cap.outputs : ['']).map(format => <button className="operation-choice" key={`${cap.id}-${cap.backend}-${format}-${cap.category}`} onClick={() => pickRoute(cap, format || undefined)}><span className="tool-icon peach">{picker === 'convert' ? <File size={21}/> : <WandSparkles size={21}/>}</span><span><strong>{picker === 'convert' ? `${cap.label} · ${format.toUpperCase()}` : cap.label}</strong><small>{selectedFiles.filter(file => compatible(cap, file)).length} of {selectedFiles.length} files · {cap.backend}{cap.warning ? ' · Review fidelity warning' : ' · Processed locally'}</small></span><ChevronRight size={17}/></button>)) : <div className="picker-empty"><Package size={32}/><h3>{t.noRoutes}</h3><p>{!isDesktop ? t.previewNotice : t.noRoutesHint}</p><button className="button" onClick={() => { setPicker(null); setPage('settings'); setSettingsTab('engines'); }}>{t.viewSettings}<ArrowRight size={15}/></button></div>}</div>
+      }}>{picker === 'actions' ? actionItems.map(item => <button className="operation-choice" key={item.id} onClick={() => void fileAction(item.id)}><span className="tool-icon sand"><item.icon size={21}/></span><span><strong>{item.label}</strong><small>{item.id === 'preview' ? 'Always-on-top local preview' : 'Local file action'}</small></span><ChevronRight size={17}/></button>) : validRoutes(picker).length ? validRoutes(picker).flatMap(cap => (picker === 'convert' ? cap.outputs : ['']).map(format => <button className="operation-choice" key={`${cap.id}-${cap.backend}-${format}-${cap.category}`} onClick={() => pickRoute(cap, format || undefined)}><span className="tool-icon peach">{picker === 'convert' ? <File size={21}/> : <WandSparkles size={21}/>}</span><span><strong>{picker === 'convert' ? `${cap.label} · ${format.toUpperCase()}` : cap.label}</strong><small>{selectedFiles.filter(file => compatible(cap, file)).length} of {selectedFiles.length} files · {cap.backend}{cap.warning ? ' · Review fidelity warning' : ' · Processed locally'}</small></span><ChevronRight size={17}/></button>)) : <div className="picker-empty"><Package size={32}/><h3>{t.noRoutes}</h3><p>{!isDesktop ? t.previewNotice : t.noRoutesHint}</p><button className="button" onClick={() => { setPicker(null); setPage('settings'); setSettingsTab('engines'); }}>{t.viewSettings}<ArrowRight size={15}/></button></div>}</div>
       <footer className="picker-footer"><span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span><span><kbd>Enter</kbd> Choose</span><span><kbd>Esc</kbd> Close</span></footer>
     </Modal>}
     {pdfEditor && <PdfWorkspace files={pdfEditor.files.filter(file => compatible(pdfEditor.capability, file))} capability={pdfEditor.capability} format={pdfEditor.format} initialOptions={pdfEditor.options} onClose={() => setPdfEditor(null)} loadPreview={file => api.preview ? api.preview(file.path) : Promise.reject(new Error('PDF preview needs the desktop app and Poppler.'))} onApply={async (format, values) => { await queueOperation(pdfEditor.capability, format, values, pdfEditor.files); setPdfEditor(null); }}/ >}

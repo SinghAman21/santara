@@ -9,7 +9,7 @@ type WheelMode = 'convert' | 'tools' | 'actions';
 const actions = [
   { id: 'copy', label: 'Copy' }, { id: 'move', label: 'Move' },
   { id: 'copy-path', label: 'Copy Path' }, { id: 'terminal', label: 'Open Terminal' },
-  { id: 'share', label: 'Share' }, { id: 'preview', label: 'Quick Preview' },
+  { id: 'preview', label: 'Quick Preview' },
 ];
 const mimeFormats: Record<string, string> = {
   'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/avif': 'avif',
@@ -19,6 +19,7 @@ const mimeFormats: Record<string, string> = {
   'video/quicktime': 'mov', 'application/pdf': 'pdf', 'application/zip': 'zip', 'text/vtt': 'vtt',
 };
 const operationName = (capability: Capability) => capability.operation || capability.id.split(':').pop()!;
+const noticeText = (value: string) => value.replace(/[\x00-\x1f\x7f]/g, ' ').slice(0, 256);
 const supports = (capability: Capability, file: LocalFile) => capability.inputs.includes('*') || (file.ext ? capability.inputs.includes(file.isDirectory ? 'directory' : file.ext.toLowerCase()) : capability.category === file.category);
 const knownCategory = (file: LocalFile) => file.category !== 'other' ? file.category : '';
 const videoToolLabels: Record<string, string> = {
@@ -51,6 +52,7 @@ export default function GlobalWheelWindow() {
   });
   const [hints, setHints] = useState<LocalFile[]>([]);
   const [choice, setChoice] = useState('');
+  const [failure, setFailure] = useState('');
   const processing = useRef(false);
   const choiceRef = useRef('');
   const nativeDropHandler = useRef<(files: LocalFile[]) => void>(() => {});
@@ -75,6 +77,7 @@ export default function GlobalWheelWindow() {
     });
     return api.onWheelMode?.((value, newDrag) => {
       if (newDrag) {
+        setFailure('');
         setHints([]);
         setChoice('');
         choiceRef.current = '';
@@ -139,8 +142,9 @@ export default function GlobalWheelWindow() {
       }
       if (mode === 'actions') {
         const action = selectedChoice;
-        await api.fileAction({ action, files: incoming });
-        await api.finishGlobalWheel?.('converter');
+        const result = await api.fileAction({ action, files: incoming }) as { ok?: boolean; canceled?: boolean; reason?: string };
+        if (result?.ok === false) throw new Error(result.reason || 'The file action could not be completed.');
+        await api.finishGlobalWheel?.('converter', result?.canceled ? 'File action canceled.' : action === 'copy-path' ? 'Paths copied to clipboard.' : 'File action completed.');
         return;
       }
       const [capabilityId, format] = selectedChoice.split('|');
@@ -157,14 +161,19 @@ export default function GlobalWheelWindow() {
           format,
           options: { quality: settings.quality, stripMetadata: settings.stripMetadata, outputFolder: settings.outputFolder, collision: settings.collision, recursive: settings.recursive, preserveStructure: settings.preserveStructure },
         });
-        await api.finishGlobalWheel?.('background');
+        await api.finishGlobalWheel?.('activity', 'Your files are in the local queue.');
       } else {
         const compatibleDefault = capability.outputs.includes(incoming[0]?.ext) ? incoming[0].ext : capability.outputs[0] || '';
         await api.selectGlobalOperation?.({ capabilityId, format: format || compatibleDefault, files: incoming });
       }
     } catch (error) {
       console.error('Global wheel drop failed:', error);
-      await api.finishGlobalWheel?.('converter');
+      const message = error instanceof Error ? error.message : String(error);
+      try {
+        await api.handoffGlobalFiles?.({ files: incoming, mode, notice: noticeText(`Could not start the selected operation: ${message}`) });
+      } catch {
+        setFailure(message);
+      }
     } finally {
       processing.current = false;
     }
@@ -173,12 +182,21 @@ export default function GlobalWheelWindow() {
   async function onDrop(event: DragEvent<HTMLElement>) {
     event.preventDefault();
     const target = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-wheel-item]') : null;
-    const incoming = await api.droppedFiles(Array.from(event.dataTransfer.files));
-    if (incoming.length) await processIncoming(incoming, target?.dataset.wheelItem);
+    try {
+      const incoming = await api.droppedFiles(Array.from(event.dataTransfer.files));
+      if (incoming.length) await processIncoming(incoming, target?.dataset.wheelItem);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setFailure(message);
+      await api.finishGlobalWheel?.('converter', noticeText(`Could not inspect dropped files: ${message}`));
+    }
   }
 
   nativeDropHandler.current = files => { void processIncoming(files); };
-  useEffect(() => api.onNativeDrop?.(files => nativeDropHandler.current(files)), []);
+  useEffect(() => api.onNativeDrop?.(files => nativeDropHandler.current(files), message => {
+    setFailure(message);
+    void api.finishGlobalWheel?.('converter', noticeText(`Could not inspect dropped files: ${message}`));
+  }), []);
 
   return <main className="global-wheel-shell" aria-label="Santara global drop wheel" onDragEnter={event => {
     event.preventDefault();
@@ -192,6 +210,7 @@ export default function GlobalWheelWindow() {
     event.dataTransfer.dropEffect = 'copy';
   }} onDrop={event => void onDrop(event)}>
     <div className="global-wheel-card">
+      {failure && <p role="alert" className="global-wheel-error">{failure}</p>}
       <RadialWheel
         label={mode === 'convert' ? 'Convert' : mode === 'tools' ? 'Tools' : 'File actions'}
         subtitle={externalFiles.some(file => !file.ext) ? 'Image routes are shown provisionally · drop to verify' : 'Hold the drag · hover a slice · release to apply'}

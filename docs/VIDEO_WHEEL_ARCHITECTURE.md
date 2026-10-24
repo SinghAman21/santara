@@ -107,7 +107,7 @@ Start with locally inspected stream/container fields and readable field names. O
 
 ## Implemented behavior and remaining verification
 
-The current wheel/editor includes capability-gated conversion and these local tools: compress, trim, split, compatible merge with re-encode choice and clip ordering, crop, resize, rotate, flip, speed, snapshot frames, mute, GIF creation, audio extraction, solid time-ranged redaction, and metadata deletion. Outputs are new files dispatched to the local engine; originals remain untouched. The editor uses the primary streams and reports re-encoding/metadata limitations.
+The current wheel/editor includes capability-gated conversion and these local tools: compress, trim, split, compatible merge with re-encode choice and clip ordering, crop, resize, rotate, flip, speed, snapshot frames, mute, GIF creation, audio extraction, solid time-ranged redaction, and metadata deletion. The preloaded editor receives a fresh context on each open. Outputs are new files dispatched to the local engine; originals remain untouched. The editor uses the primary streams and reports re-encoding/metadata limitations.
 
 Redaction is a fixed-position solid color `drawbox`, not blur, face detection, or motion tracking. It must not be treated as recovery-proof privacy redaction when content moves. Metadata deletion removes copied tags and chapters where FFmpeg supports it; encoder/container-generated tags may remain. Compression may make an output larger. Merge validates stream compatibility and defaults to re-encoding; direct stream-copy is opt-in and may reject differing stream layouts/settings.
 

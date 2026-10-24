@@ -252,6 +252,7 @@ fn main() {
                     let state = app.state::<services::AppState>();
                     if let Err(error) = state.record_drop(window.label(), paths) {
                         eprintln!("Santara drop rejected: {error}");
+                        let _ = window.emit("santara:native-drop-error", error);
                     } else {
                         let _ = window.emit("santara:native-drop", ());
                     }

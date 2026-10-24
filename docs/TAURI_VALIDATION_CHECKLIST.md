@@ -32,12 +32,14 @@ Status: deferred integrated validation. Check boxes are evidence requirements, n
 ## Phase 4 wheel and integrations
 
 - [ ] Configurable double-tap Shift, Alt/Ctrl+Shift and Ctrl modes (400 ms); single press must not open the wheel; shortcut conflicts, drop handoff and keyboard fallback.
+- [ ] Drop the same file twice; both selections retain a usable stable ID. Confirm successful conversion opens Activity and failed routes retain the files with visible feedback.
 - [ ] Real Explorer drags on Windows 10/11 and real GNOME Files drags on Ubuntu LTS, with optional helper/extension present and absent.
 - [ ] Pointer position, focus, Escape, drag ordering, mixed DPI and no stale-window callbacks.
 
 ## Phase 5 UI and accessibility
 
 - [ ] Wheel, quick preview, image/video/PDF editors, settings, queue and history on both webviews.
+- [ ] Open image and video editors after their hidden windows have loaded, close and reopen with another operation, and verify each receives a fresh file/recipe context.
 - [ ] Screen-reader names, tab/arrow/Enter/Escape navigation, focus recovery, scalable text, high contrast and reduced motion.
 - [ ] Light/dark/system themes, multi-monitor, screen lock/resume and close/reopen.
 

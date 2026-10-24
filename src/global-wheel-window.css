@@ -32,6 +32,7 @@ html.global-wheel-document body { min-width: 0; }
 }
 
 .global-wheel-card .citrus-wheel { width: 360px; margin: auto; }
+.global-wheel-error { margin: 8px 12px; color: #9c3021; font-size: 12px; line-height: 1.4; }
 .global-wheel-cancel {
   position: absolute;
   top: 4px;

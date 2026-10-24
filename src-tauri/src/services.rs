@@ -138,6 +138,7 @@ struct Data {
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct EditorContext {
+    id: String,
     capability: Value,
     files: Vec<LocalFile>,
     format: String,
@@ -281,21 +282,13 @@ impl AppState {
 
     fn add_files(&self, app: &AppHandle, files: Vec<LocalFile>) -> Result<Vec<LocalFile>, String> {
         let mut data = self.lock()?;
-        let mut seen: HashSet<String> = data.files.iter().map(|file| file.path.clone()).collect();
-        let mut added = Vec::new();
-        for file in files {
-            if seen.insert(file.path.clone()) {
-                if seen.len() > 10_000 {
-                    return Err("At most 10,000 files may be selected".into());
-                }
-                added.push(file.clone());
-                data.files.push(file);
-            }
-        }
+        let selected = merge_selected_files(&mut data.files, files)?;
         drop(data);
-        let update = serde_json::json!({ "files": added });
-        let _ = app.emit("santara:update", update);
-        Ok(added)
+        if !selected.is_empty() {
+            let update = serde_json::json!({ "files": selected });
+            let _ = app.emit("santara:update", update);
+        }
+        Ok(selected)
     }
 
     pub fn known_path(&self, value: &str, output_only: bool) -> Result<PathBuf, String> {
@@ -365,6 +358,26 @@ impl AppState {
             }
         }
     }
+}
+
+fn merge_selected_files(known: &mut Vec<LocalFile>, incoming: Vec<LocalFile>) -> Result<Vec<LocalFile>, String> {
+    let mut positions = known.iter().enumerate().map(|(index, file)| (file.path.clone(), index)).collect::<HashMap<_, _>>();
+    let distinct_new = incoming.iter().filter(|file| !positions.contains_key(&file.path)).map(|file| &file.path).collect::<HashSet<_>>().len();
+    if positions.len() + distinct_new > 10_000 { return Err("At most 10,000 files may be selected".into()); }
+    let mut selected = Vec::with_capacity(incoming.len());
+    let mut selection_seen = HashSet::new();
+    for mut file in incoming {
+        if !selection_seen.insert(file.path.clone()) { continue; }
+        if let Some(&index) = positions.get(&file.path) {
+            file.id = known[index].id.clone();
+            known[index] = file.clone();
+        } else {
+            positions.insert(file.path.clone(), known.len());
+            known.push(file.clone());
+        }
+        selected.push(file);
+    }
+    Ok(selected)
 }
 
 fn preview_error(status: u16) -> tauri::http::Response<Vec<u8>> {
@@ -1206,16 +1219,17 @@ fn editor_context(state: &AppState, request: EditorRequest, category: &str) -> R
         if !seen.insert(path) { return Err("Duplicate editor file".into()); }
         files.push(file);
     }
-    Ok(EditorContext { capability, files, format: request.format, options: request.options })
+    Ok(EditorContext { id: Uuid::new_v4().to_string(), capability, files, format: request.format, options: request.options })
 }
 
 #[tauri::command]
 pub fn open_image_tool(app: AppHandle, window: tauri::WebviewWindow, state: State<'_, AppState>, request: EditorRequest) -> Result<Value, String> {
     require_window(&window, &["workspace", "wheel"])?;
     let context = editor_context(&state, request, "image")?;
-    state.lock()?.image_context = Some(context);
+    state.lock()?.image_context = Some(context.clone());
     let window = app.get_webview_window("image").ok_or("Image editor window is unavailable")?;
     window.show().map_err(|error| error.to_string())?;
+    let _ = app.emit_to("image", "santara:editor-context", &context);
     window.set_focus().map_err(|error| error.to_string())?;
     Ok(serde_json::json!({ "opened": true }))
 }
@@ -1224,9 +1238,10 @@ pub fn open_image_tool(app: AppHandle, window: tauri::WebviewWindow, state: Stat
 pub fn open_video_tool(app: AppHandle, window: tauri::WebviewWindow, state: State<'_, AppState>, request: EditorRequest) -> Result<Value, String> {
     require_window(&window, &["workspace", "wheel"])?;
     let context = editor_context(&state, request, "video")?;
-    state.lock()?.video_context = Some(context);
+    state.lock()?.video_context = Some(context.clone());
     let window = app.get_webview_window("video").ok_or("Video editor window is unavailable")?;
     window.show().map_err(|error| error.to_string())?;
+    let _ = app.emit_to("video", "santara:editor-context", &context);
     window.set_focus().map_err(|error| error.to_string())?;
     Ok(serde_json::json!({ "opened": true }))
 }
@@ -1322,6 +1337,7 @@ pub struct GlobalOperationRequest {
 pub struct GlobalFilesRequest {
     files: Vec<LocalFile>,
     mode: String,
+    notice: Option<String>,
 }
 
 #[tauri::command]
@@ -1329,6 +1345,7 @@ pub fn handoff_global_files(app: AppHandle, window: tauri::WebviewWindow, state:
     if window.label() != "wheel" { return Err("Only the wheel can hand off dropped files".into()); }
     if !["convert", "tools", "actions"].contains(&request.mode.as_str()) { return Err("Invalid wheel mode".into()); }
     if request.files.is_empty() { return Err("No dropped files".into()); }
+    if request.notice.as_ref().is_some_and(|notice| notice.len() > 256 || notice.chars().any(char::is_control)) { return Err("Invalid wheel notice".into()); }
     for file in &request.files { state.known_path(&file.path, false)?; }
     let workspace = app.get_webview_window("workspace").ok_or("Workspace window is unavailable")?;
     workspace.show().map_err(|error| error.to_string())?;
@@ -1361,16 +1378,18 @@ pub fn select_global_operation(app: AppHandle, window: tauri::WebviewWindow, sta
 }
 
 #[tauri::command]
-pub fn finish_global_wheel(app: AppHandle, window: tauri::WebviewWindow, page: Option<String>) -> Result<(), String> {
+pub fn finish_global_wheel(app: AppHandle, window: tauri::WebviewWindow, page: Option<String>, notice: Option<String>) -> Result<(), String> {
     if window.label() != "wheel" { return Err("Only the wheel can finish itself".into()); }
     let page = page.as_deref().unwrap_or("converter");
     if !["converter", "activity", "background"].contains(&page) { return Err("Invalid workspace page".into()); }
+    if notice.as_ref().is_some_and(|value| value.len() > 256 || value.chars().any(char::is_control)) { return Err("Invalid wheel notice".into()); }
     window.hide().map_err(|error| error.to_string())?;
-    if page == "activity" {
+    if page != "background" {
         let workspace = app.get_webview_window("workspace").ok_or("Workspace window is unavailable")?;
         workspace.show().map_err(|error| error.to_string())?;
         workspace.set_focus().map_err(|error| error.to_string())?;
-        app.emit_to("workspace", "santara:global-page", "activity").map_err(|error| error.to_string())?;
+        app.emit_to("workspace", "santara:global-page", page).map_err(|error| error.to_string())?;
+        if let Some(notice) = notice { app.emit_to("workspace", "santara:global-notice", notice).map_err(|error| error.to_string())?; }
     }
     Ok(())
 }
@@ -1517,6 +1536,20 @@ fn remove_source_tree(path: &Path) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reselected_files_keep_their_ids_and_refresh_metadata() {
+        let original = LocalFile { id: "original-id".into(), path: "/tmp/photo.png".into(), name: "photo.png".into(), size: 10, ext: "png".into(), category: "image".into(), is_directory: None };
+        let mut known = vec![original.clone()];
+        let mut refreshed = original.clone();
+        refreshed.id = "new-inspection-id".into();
+        refreshed.size = 20;
+        let selected = merge_selected_files(&mut known, vec![refreshed.clone(), refreshed]).unwrap();
+        assert_eq!(selected.len(), 1);
+        assert_eq!(selected[0].id, original.id);
+        assert_eq!(selected[0].size, 20);
+        assert_eq!(known, selected);
+    }
 
     #[test]
     fn rejects_unsafe_settings_and_colliding_shortcuts() {

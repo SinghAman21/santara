@@ -1,6 +1,6 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { Bridge, LocalFile, Settings, Snapshot } from './types';
+import type { Bridge, ImageEditorContext, LocalFile, Settings, Snapshot, VideoEditorContext } from './types';
 
 export const isTauriRuntime = isTauri();
 
@@ -36,22 +36,29 @@ export const tauriBridge: Bridge = {
   imagePreview: (path, operation, options) => invoke('image_preview', { path, operation, options }),
   openImageTool: request => invoke('open_image_tool', { request }),
   imageToolContext: () => invoke('image_tool_context'),
+  onImageToolContext: callback => subscription<ImageEditorContext>('santara:editor-context', callback),
   applyImageTool: request => invoke('apply_image_tool', { request }),
   closeImageTool: () => invoke('close_image_tool'),
   videoToolContext: () => invoke('video_tool_context'),
+  onVideoToolContext: callback => subscription<VideoEditorContext>('santara:editor-context', callback),
   openVideoTool: request => invoke('open_video_tool', { request }),
   applyVideoTool: request => invoke('apply_video_tool', { request }),
   closeVideoTool: () => invoke('close_video_tool'),
-  finishGlobalWheel: async page => { await invoke('finish_global_wheel', { page }); },
+  finishGlobalWheel: async (page, notice) => { await invoke('finish_global_wheel', { page, notice }); },
   selectGlobalOperation: request => invoke('select_global_operation', { request }),
   handoffGlobalFiles: request => invoke('handoff_global_files', { request }),
   onWheelMode: callback => subscription<{ mode: string; newDrag: boolean }>('santara:wheel-mode', payload => callback(payload.mode, payload.newDrag)),
   currentWheelMode: () => invoke<string>('shell_wheel_mode'),
   onGlobalOperation: callback => subscription('santara:global-operation', callback),
   onGlobalFiles: callback => subscription('santara:global-files', callback),
+  onGlobalNotice: callback => subscription('santara:global-notice', callback),
   onGlobalPage: callback => subscription('santara:global-page', callback),
   onUpdate: callback => subscription('santara:update', callback),
-  onNativeDrop: callback => subscription<void>('santara:native-drop', () => {
-    void invoke<LocalFile[]>('consume_drop').then(callback).catch(error => console.error('Native drop failed:', error));
-  }),
+  onNativeDrop: (callback, onError) => {
+    const stopDrop = subscription<void>('santara:native-drop', () => {
+      void invoke<LocalFile[]>('consume_drop').then(callback).catch(error => onError?.(error instanceof Error ? error.message : String(error)));
+    });
+    const stopError = subscription<string>('santara:native-drop-error', message => onError?.(message));
+    return () => { stopDrop(); stopError(); };
+  },
 };

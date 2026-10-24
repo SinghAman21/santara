@@ -55,7 +55,7 @@ The live Tauri `bootstrap` snapshot contains backend availability and capability
 
 ## Drag and keyboard boundaries
 
-The in-app action wheel, accessible post-drop conversion picker, and Tauri global overlay code are implemented. Shift, Alt, and Ctrl modes require two presses of the same modifier within 400 ms during a drag; single presses have no wheel action. Unselected global drops are handed to the workspace. During an external drag, a WebView cannot read source filenames/paths until the OS delivers the drop. Santara chooses file-specific routes after inspection. The optional GNOME bridge and Windows watcher can request the overlay, but real Explorer and GNOME Files handoff remains a Phase 8 gate.
+The in-app action wheel, accessible post-drop conversion picker, and Tauri global overlay code are implemented. Shift, Alt, and Ctrl modes require two presses of the same modifier within 400 ms during a drag; single presses have no wheel action. Unselected or failed global drops are handed to the workspace with feedback, and repeated drops keep the file selection. Native Share has no provider and is hidden. During an external drag, a WebView cannot read source filenames/paths until the OS delivers the drop. Santara chooses file-specific routes after inspection. The optional GNOME bridge and Windows watcher can request the overlay, but real Explorer and GNOME Files handoff remains a Phase 8 gate.
 
 Many primary strings are centralized, but details remain hardcoded. Full localization is a roadmap requirement, not a delivered internationalization guarantee. The Tauri image route removes metadata during raster processing; detected ExifTool adds JPEG metadata editing as a separate copy operation.
 

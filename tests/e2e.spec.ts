@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import type { Bridge, Job, Snapshot } from '../src/types';
+import type { Bridge, ImageEditorContext, Job, Snapshot, VideoEditorContext } from '../src/types';
 
 interface MockControl {
   state: Snapshot;
@@ -7,6 +7,8 @@ interface MockControl {
   emit(update: Partial<Snapshot>): void;
   emitWheelMode(mode: string, newDrag?: boolean): void;
   emitGlobalFiles(files: Snapshot['files'], mode: 'convert' | 'tools' | 'actions'): void;
+  emitImageContext(context: ImageEditorContext): void;
+  emitVideoContext(context: VideoEditorContext): void;
 }
 
 declare global { interface Window { __santaraTest: MockControl } }
@@ -51,6 +53,10 @@ test.beforeEach(async ({ page }) => {
     const listeners = new Set<(update: Partial<Snapshot>) => void>();
     const wheelModeListeners = new Set<(mode: string, newDrag?: boolean) => void>();
     const globalFilesListeners = new Set<(request: { files: Snapshot['files']; mode: 'convert' | 'tools' | 'actions' }) => void>();
+    const imageContextListeners = new Set<(context: ImageEditorContext) => void>();
+    const videoContextListeners = new Set<(context: VideoEditorContext) => void>();
+    let imageContext: ImageEditorContext | null = null;
+    let videoContext: VideoEditorContext | null = null;
     const calls: MockControl['calls'] = [];
     const emit = (update: Partial<Snapshot>) => {
       Object.assign(state, structuredClone(update));
@@ -90,17 +96,21 @@ test.beforeEach(async ({ page }) => {
         return { url: `data:image/svg+xml,${encodeURIComponent(artwork)}`, width: 800, height: 600, duration: 4, waveform };
       },
       imagePreview: async () => ({ url: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="800" height="600" fill="#ee8844"/></svg>')}`, width: 800, height: 600, sourceWidth: 800, sourceHeight: 600 }),
+      imageToolContext: async () => { if (!imageContext) throw new Error('Image editor is no longer available'); return structuredClone(imageContext); },
+      onImageToolContext: callback => { imageContextListeners.add(callback); return () => { imageContextListeners.delete(callback); }; },
       videoToolContext: async () => {
+        if (new URLSearchParams(location.search).has('late-context')) { if (!videoContext) throw new Error('Video editor is no longer available'); return structuredClone(videoContext); }
         const merge = new URLSearchParams(location.search).get('operation') === 'merge';
         return { capability: structuredClone(state.capabilities.find(capability => capability.id === (merge ? 'video:merge' : 'video:trim'))!), files: structuredClone(merge ? mergeVideos : droppedVideo), format: 'mp4', options: { quality: '85', stripMetadata: 'false' } };
       },
+      onVideoToolContext: callback => { videoContextListeners.add(callback); return () => { videoContextListeners.delete(callback); }; },
       applyVideoTool: async request => { record('applyVideoTool', request); return { queued: true }; },
       closeVideoTool: async () => { record('closeVideoTool', null); },
       onWheelMode: callback => { wheelModeListeners.add(callback); return () => { wheelModeListeners.delete(callback); }; },
       onGlobalFiles: callback => { globalFilesListeners.add(callback); return () => { globalFilesListeners.delete(callback); }; },
       onUpdate: callback => { listeners.add(callback); return () => { listeners.delete(callback); }; },
     };
-    window.__santaraTest = { state, calls, emit, emitWheelMode: (mode, newDrag) => { for (const listener of wheelModeListeners) listener(mode, newDrag); }, emitGlobalFiles: (files, mode) => { for (const listener of globalFilesListeners) listener({ files, mode }); } };
+    window.__santaraTest = { state, calls, emit, emitWheelMode: (mode, newDrag) => { for (const listener of wheelModeListeners) listener(mode, newDrag); }, emitGlobalFiles: (files, mode) => { for (const listener of globalFilesListeners) listener({ files, mode }); }, emitImageContext: context => { imageContext = structuredClone(context); for (const listener of imageContextListeners) listener(structuredClone(context)); }, emitVideoContext: context => { videoContext = structuredClone(context); for (const listener of videoContextListeners) listener(structuredClone(context)); } };
     Object.defineProperty(window, 'santara', { configurable: true, value: api });
   });
 });
@@ -248,7 +258,7 @@ test('global citrus overlay accepts and queues a drop directly on a wheel slice'
     await expect(slice).toHaveClass(/chosen/);
     await slice.dispatchEvent('drop', { dataTransfer: transfer });
     await expect.poll(() => page.evaluate(() => window.__santaraTest.calls.find(call => call.method === 'enqueue')?.value)).toMatchObject({ operation: 'convert', format: 'jpg' });
-    expect(await page.evaluate(() => window.__santaraTest.calls.find(call => call.method === 'finishGlobalWheel')?.value)).toBe('background');
+    expect(await page.evaluate(() => window.__santaraTest.calls.find(call => call.method === 'finishGlobalWheel')?.value)).toBe('activity');
     await page.evaluate(() => window.__santaraTest.emitWheelMode('convert', true));
     const nextTransfer = await page.evaluateHandle(() => {
       const value = new DataTransfer();
@@ -274,6 +284,21 @@ test('global wheel hands off files when no slice was selected', async ({ page })
     await page.locator('.global-wheel-shell').dispatchEvent('drop', { dataTransfer: transfer });
     await expect.poll(() => page.evaluate(() => window.__santaraTest.calls.find(call => call.method === 'handoffGlobalFiles')?.value)).toMatchObject({ mode: 'convert' });
     expect(await page.evaluate(() => (window.__santaraTest.calls.find(call => call.method === 'handoffGlobalFiles')?.value as { files: Snapshot['files'] }).files.map(file => file.path))).toContain('/fixtures/pixel.png');
+  } finally { await transfer.dispose(); }
+});
+
+test('global wheel keeps files available when a selected route fails', async ({ page }) => {
+  await page.goto('/?santara-wheel=1&mode=convert');
+  await page.evaluate(() => { window.santara!.enqueue = async () => { throw new Error('Local encoder unavailable'); }; });
+  const transfer = await page.evaluateHandle(() => {
+    const value = new DataTransfer();
+    value.items.add(new File(['synthetic image fixture'], 'pixel.png', { type: 'image/png' }));
+    return value;
+  });
+  try {
+    const slice = page.locator('.citrus-segments [data-wheel-item="image:convert|jpg"]');
+    await slice.dispatchEvent('drop', { dataTransfer: transfer });
+    await expect.poll(() => page.evaluate(() => (window.__santaraTest.calls.find(call => call.method === 'handoffGlobalFiles')?.value as { notice?: string })?.notice)).toContain('Local encoder unavailable');
   } finally { await transfer.dispose(); }
 });
 
@@ -341,6 +366,33 @@ test('compact video editor provides exact trim values and submits a non-destruct
   });
 });
 
+test('preloaded image editor opens and refreshes its context on each tool launch', async ({ page }) => {
+  await page.goto('/?santara-image-tool=1');
+  await expect(page.getByText('Preparing local image preview…')).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await page.evaluate(() => window.__santaraTest.emitImageContext({
+    id: 'first', capability: window.__santaraTest.state.capabilities.find(item => item.id === 'image:edit-image')!,
+    files: [{ id: 'image', path: '/fixtures/pixel.png', name: 'pixel.png', ext: 'png', size: 120, category: 'image' }], format: 'png', options: {},
+  }));
+  await expect(page.getByRole('dialog', { name: 'Edit photo' })).toBeVisible();
+  await page.evaluate(() => window.__santaraTest.emitImageContext({
+    id: 'second', capability: window.__santaraTest.state.capabilities.find(item => item.id === 'image:background')!,
+    files: [{ id: 'image', path: '/fixtures/pixel.png', name: 'pixel.png', ext: 'png', size: 120, category: 'image' }], format: 'png', options: { padding: '32' },
+  }));
+  await expect(page.getByRole('dialog', { name: 'Add background' })).toBeVisible();
+});
+
+test('preloaded video editor recovers when its context arrives after startup', async ({ page }) => {
+  await page.goto('/?santara-video-tool=1&late-context=1');
+  await expect(page.getByText('Preparing local video preview…')).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await page.evaluate(() => window.__santaraTest.emitVideoContext({
+    id: 'late', capability: window.__santaraTest.state.capabilities.find(item => item.id === 'video:trim')!,
+    files: [{ id: 'video', path: '/fixtures/clip.mp4', name: 'clip.mp4', ext: 'mp4', size: 4096, category: 'video' }], format: 'mp4', options: {},
+  }));
+  await expect(page.getByRole('dialog', { name: 'Trim video' })).toBeVisible();
+});
+
 test('video merge editor sends the selected clip order to the local job queue', async ({ page }) => {
   await page.goto('/?santara-video-tool=1&operation=merge');
   const editor = page.getByRole('dialog', { name: 'Join videos' });
@@ -358,6 +410,12 @@ test('global wheel shows provisional image routes without extra helper captions'
   await expect(page.getByRole('menuitem', { name: /^Add background/ })).toBeVisible();
   await expect(page.locator('.wheel-description')).toHaveCount(0);
   await expect(page.getByText('Drop on a slice')).toHaveCount(0);
+});
+
+test('file actions wheel hides the unavailable native share route', async ({ page }) => {
+  await page.goto('/?santara-wheel=1&mode=actions');
+  await expect(page.getByRole('menuitem', { name: /^Copy Path/ })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: /^Share/ })).toHaveCount(0);
 });
 
 test('keyboard wheel switches groups and highlights partial selection coverage', async ({ page }) => {
