@@ -1,4 +1,4 @@
-use std::{fs, io::{Cursor, Read}, path::Path};
+use std::{fs, io::{Cursor, Read}, path::Path, process::Command, sync::OnceLock, time::Duration};
 
 use base64::{engine::general_purpose::STANDARD, Engine};
 use image::{codecs::jpeg::JpegEncoder, imageops::{self, FilterType}, DynamicImage, GenericImageView, ImageDecoder, ImageFormat, ImageReader, Rgba, RgbaImage};
@@ -11,7 +11,7 @@ const IMAGE_INPUTS: &[&str] = &["jpg", "jpeg", "png", "webp", "tif", "tiff", "bm
 const IMAGE_OUTPUTS: &[&str] = &["jpg", "jpeg", "png", "webp", "tif", "tiff", "bmp", "gif", "avif"];
 
 pub fn capabilities() -> Vec<Value> {
-    ["convert", "compress", "resize", "crop", "rotate", "flip", "strip-metadata", "edit-image", "background"]
+    let mut routes = ["convert", "compress", "resize", "crop", "rotate", "flip", "strip-metadata", "edit-image", "background"]
         .iter()
         .map(|operation| json!({
             "id": format!("image:{operation}"),
@@ -27,7 +27,50 @@ pub fn capabilities() -> Vec<Value> {
             "options": {},
             "warning": "Local raster processing; 40 megapixel limit. EXIF and other metadata are removed. Animated images use the first frame."
         }))
-        .collect()
+        .collect::<Vec<_>>();
+    if metadata_available() {
+        routes.push(json!({ "id": "image:metadata", "operation": "metadata", "label": "Edit image metadata",
+            "category": "image", "inputs": ["jpg", "jpeg"], "outputs": ["jpg", "jpeg"], "backend": "exiftool",
+            "available": true, "batch": true, "preservesMetadata": true, "options": {},
+            "warning": "Local EXIF editing preserves other source metadata where ExifTool supports it. Save a new JPEG copy." }));
+    }
+    routes
+}
+
+pub fn metadata_available() -> bool {
+    static AVAILABLE: OnceLock<bool> = OnceLock::new();
+    *AVAILABLE.get_or_init(|| {
+        let mut command = Command::new("exiftool");
+        command.arg("-ver");
+        crate::media::captured(command, Duration::from_secs(5), || false).is_ok()
+    })
+}
+
+pub fn edit_metadata(input: &Path, output: &Path, options: &Value, cancelled: impl Fn() -> bool) -> Result<(), String> {
+    if !metadata_available() { return Err("ExifTool is unavailable".into()); }
+    let extension = input.extension().and_then(|part| part.to_str()).unwrap_or_default().to_ascii_lowercase();
+    if !["jpg", "jpeg"].contains(&extension.as_str()) { return Err("Metadata editing supports JPEG files".into()); }
+    load_image(input)?;
+    let mut command = Command::new("exiftool");
+    command.args(["-q", "-q", "-m", "-o"]).arg(output);
+    if options.get("stripMetadata").and_then(Value::as_bool).unwrap_or(false) { command.arg("-all="); }
+    else {
+        for (key, tag) in [("artist", "Artist"), ("copyright", "Copyright"), ("description", "ImageDescription"), ("dateTime", "DateTimeOriginal")] {
+            if let Some(value) = options.get(key) {
+                let value = value.as_str().ok_or_else(|| format!("Invalid {key}"))?;
+                if value.len() > 512 || value.chars().any(char::is_control) { return Err(format!("Invalid {key}")); }
+                if key == "dateTime" && !value.is_empty() && (value.len() != 19 || !value.chars().enumerate().all(|(index, character)| {
+                    if [4, 7].contains(&index) { character == ':' } else if index == 10 { character == ' ' }
+                    else if [13, 16].contains(&index) { character == ':' } else { character.is_ascii_digit() }
+                })) { return Err("Use YYYY:MM:DD HH:MM:SS for the EXIF date".into()); }
+                if !value.is_empty() { command.arg(format!("-{tag}={value}")); }
+            }
+        }
+    }
+    command.arg(input);
+    crate::media::captured(command, Duration::from_secs(30), cancelled).map_err(|_| "Local metadata editing failed".to_string())?;
+    if !output.is_file() { return Err("Metadata copy was not created".into()); }
+    Ok(())
 }
 
 fn format_for_extension(extension: &str) -> Result<ImageFormat, String> {
@@ -168,7 +211,7 @@ fn add_background(image: DynamicImage, options: &Value) -> Result<DynamicImage, 
 fn transform(mut image: DynamicImage, operation: &str, options: &Value) -> Result<DynamicImage, String> {
     let (width, height) = image.dimensions();
     match operation {
-        "convert" | "compress" | "strip-metadata" => {}
+        "convert" | "compress" | "strip-metadata" | "metadata" => {}
         "resize" => {
             let target_width = number(options, "width", width, 1, 16_384)?;
             let target_height = number(options, "height", height, 1, 16_384)?;

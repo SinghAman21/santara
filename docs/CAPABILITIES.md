@@ -58,3 +58,7 @@ Run `node scripts/export-capabilities.mjs` (or the parent's optional `npm run ma
 The in-app action wheel and accessible post-drop conversion picker are implemented. During an external drag, Chromium's protected mode prevents reading source filenames/paths before the OS drop. Santara chooses file-specific conversion routes after receiving the drop. It does not claim to inspect external file contents in protected mode. A system-wide desktop/tray drag surface, global wheel, and OS-wide shortcuts remain pending.
 
 Many primary strings are centralized, but details remain hardcoded. Full localization is a roadmap requirement, not a delivered internationalization guarantee.
+# Tauri migration note
+
+The Tauri image route currently removes source metadata during raster processing. When a local ExifTool is detected, the Tauri registry adds JPEG metadata editing as a separate, same-format copy operation. This optional route is not a substitute for the bundled Sharp/libvips metadata behavior described below; Phase 8 must verify the actual supported formats and notices.
+

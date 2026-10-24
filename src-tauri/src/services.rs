@@ -748,7 +748,7 @@ fn run_local_job(app: &AppHandle, job: &Job, settings: &Settings) -> Result<Opti
     let archive_extract = job.operation == "extract";
     let pdf_job = input_ext == "pdf";
     let document_job = ["txt", "md", "html", "docx", "epub", "rtf"].contains(&input_ext.as_str());
-    let bytes = if media_category.is_some() || archive_create || archive_extract || pdf_job || document_job { None }
+    let bytes = if media_category.is_some() || archive_create || archive_extract || pdf_job || document_job || job.operation == "metadata" { None }
         else if ["srt", "vtt"].contains(&input_ext.as_str()) { Some(crate::subtitles::convert(&source, &job.format)?) }
         else { Some(crate::processing::convert_image(&source, &job.operation, &job.format, &job.options, quality as u8)?) };
     if app.state::<AppState>().lock()?.jobs.iter().any(|entry| entry.id == job.id && entry.status == "cancelled") {
@@ -763,7 +763,8 @@ fn run_local_job(app: &AppHandle, job: &Job, settings: &Settings) -> Result<Opti
     if base.is_empty() || base.len() > 240 || base.chars().any(|ch| ch.is_control() || ch == '/' || ch == '\\') {
         return Err("Invalid output name".into());
     }
-    let temp = directory.join(format!(".santara-{}.tmp", Uuid::new_v4()));
+    let temp = if job.operation == "metadata" { directory.join(format!(".santara-{}.{}", Uuid::new_v4(), job.format)) }
+        else { directory.join(format!(".santara-{}.tmp", Uuid::new_v4())) };
     let result = (|| {
         if let Some(bytes) = bytes {
             let mut options = OpenOptions::new();
@@ -772,6 +773,10 @@ fn run_local_job(app: &AppHandle, job: &Job, settings: &Settings) -> Result<Opti
             let mut file = options.open(&temp).map_err(|error| error.to_string())?;
             file.write_all(&bytes).map_err(|error| error.to_string())?;
             file.sync_all().map_err(|error| error.to_string())?;
+        } else if job.operation == "metadata" {
+            crate::processing::edit_metadata(&source, &temp, &job.options,
+                || app.state::<AppState>().lock().is_ok_and(|data| data.jobs.iter().any(|entry| entry.id == job.id && entry.status == "cancelled")))?;
+            File::open(&temp).map_err(|error| error.to_string())?.sync_all().map_err(|error| error.to_string())?;
         } else if let Some(category) = media_category {
             let backend = app.state::<AppState>().media.lock().map_err(|_| "Media backend is unavailable")?.clone();
             let cancelled = || app.state::<AppState>().lock().is_ok_and(|data| data.jobs.iter().any(|entry| entry.id == job.id && entry.status == "cancelled"));
@@ -863,7 +868,7 @@ fn split_segments(options: &Value) -> Result<Vec<(f64, f64)>, String> {
 pub fn enqueue(app: AppHandle, state: State<'_, AppState>, request: EnqueueRequest) -> Result<Vec<Job>, String> {
     if request.files.is_empty() || request.files.len() > 1_000 { return Err("Select 1–1,000 files".into()); }
     if !request.options.is_object() || request.options.to_string().len() > 100_000 { return Err("Invalid conversion options".into()); }
-    if !["convert", "compress", "resize", "crop", "rotate", "flip", "strip-metadata", "edit-image", "background", "trim", "split", "merge", "mute", "speed", "snapshot", "gif", "redact", "visualize", "extract-audio", "normalize", "channels", "create-archive", "extract", "pdf-extract", "pdf-merge", "pdf-rotate", "render"].contains(&request.operation.as_str()) {
+    if !["convert", "compress", "resize", "crop", "rotate", "flip", "strip-metadata", "edit-image", "background", "metadata", "trim", "split", "merge", "mute", "speed", "snapshot", "gif", "redact", "visualize", "extract-audio", "normalize", "channels", "create-archive", "extract", "pdf-extract", "pdf-merge", "pdf-rotate", "render"].contains(&request.operation.as_str()) {
         return Err("Unsupported operation".into());
     }
     if !["jpg", "jpeg", "png", "webp", "tif", "tiff", "bmp", "gif", "avif", "srt", "vtt", "txt", "md", "html", "docx", "epub", "mp4", "mkv", "mov", "avi", "wmv", "mp3", "wav", "flac", "ogg", "opus", "m4a", "aiff", "wma", "zip", "tar", "gz", "directory", "pdf"].contains(&request.format.as_str()) {
@@ -918,6 +923,8 @@ pub fn enqueue(app: AppHandle, state: State<'_, AppState>, request: EnqueueReque
         let image = inspected.category == "image" && ["jpg", "jpeg", "png", "webp", "tif", "tiff", "bmp", "gif", "avif"].contains(&inspected.ext.as_str())
             && ["jpg", "jpeg", "png", "webp", "tif", "tiff", "bmp", "gif", "avif"].contains(&request.format.as_str())
             && ["convert", "compress", "resize", "crop", "rotate", "flip", "strip-metadata", "edit-image", "background"].contains(&request.operation.as_str());
+        let metadata = inspected.category == "image" && ["jpg", "jpeg"].contains(&inspected.ext.as_str())
+            && request.operation == "metadata" && ["jpg", "jpeg"].contains(&request.format.as_str()) && crate::processing::metadata_available();
         let subtitle = inspected.category == "subtitle" && ["srt", "vtt"].contains(&inspected.ext.as_str())
             && request.operation == "convert" && ["srt", "vtt", "txt"].contains(&request.format.as_str());
         let media = ["video", "audio"].contains(&inspected.category.as_str()) && state.media.lock().map_err(|_| "Media backend is unavailable")?
@@ -928,7 +935,7 @@ pub fn enqueue(app: AppHandle, state: State<'_, AppState>, request: EnqueueReque
             .supports(&request.operation, &request.format);
         let document = inspected.category == "document" && request.operation == "convert"
             && state.documents.lock().map_err(|_| "Document backend is unavailable")?.supports(&inspected.ext, &request.format);
-        if !(image || subtitle || media || archive || pdf || document) || !check_no_symlink(&path)?.is_file() {
+        if !(image || metadata || subtitle || media || archive || pdf || document) || !check_no_symlink(&path)?.is_file() {
             return Err("Select files supported by this local route".into());
         }
         if let Some(segments) = &segments {
