@@ -1317,6 +1317,27 @@ pub struct GlobalOperationRequest {
     files: Vec<LocalFile>,
 }
 
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlobalFilesRequest {
+    files: Vec<LocalFile>,
+    mode: String,
+}
+
+#[tauri::command]
+pub fn handoff_global_files(app: AppHandle, window: tauri::WebviewWindow, state: State<'_, AppState>, request: GlobalFilesRequest) -> Result<(), String> {
+    if window.label() != "wheel" { return Err("Only the wheel can hand off dropped files".into()); }
+    if !["convert", "tools", "actions"].contains(&request.mode.as_str()) { return Err("Invalid wheel mode".into()); }
+    if request.files.is_empty() { return Err("No dropped files".into()); }
+    for file in &request.files { state.known_path(&file.path, false)?; }
+    let workspace = app.get_webview_window("workspace").ok_or("Workspace window is unavailable")?;
+    workspace.show().map_err(|error| error.to_string())?;
+    workspace.set_focus().map_err(|error| error.to_string())?;
+    app.emit_to("workspace", "santara:global-files", &request).map_err(|error| error.to_string())?;
+    window.hide().map_err(|error| error.to_string())?;
+    Ok(())
+}
+
 #[tauri::command]
 pub fn select_global_operation(app: AppHandle, window: tauri::WebviewWindow, state: State<'_, AppState>, request: GlobalOperationRequest) -> Result<Value, String> {
     if window.label() != "wheel" { return Err("Only the wheel can select a global operation".into()); }

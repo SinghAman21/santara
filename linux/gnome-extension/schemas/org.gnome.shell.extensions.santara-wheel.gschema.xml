@@ -19,17 +19,17 @@
     <key name="convert-modifier" type="s">
       <default>'shift'</default>
       <summary>Conversion wheel modifier</summary>
-      <description>One of shift, alt, ctrl, or ctrl-shift.</description>
+      <description>Double-tap the chosen modifier during a file drag. One of shift, alt, ctrl, or ctrl-shift.</description>
     </key>
     <key name="tools-modifier" type="s">
       <default>'alt'</default>
       <summary>Tools wheel modifier</summary>
-      <description>One of shift, alt, ctrl, or ctrl-shift.</description>
+      <description>Double-tap the chosen modifier during a file drag. One of shift, alt, ctrl, or ctrl-shift.</description>
     </key>
     <key name="actions-modifier" type="s">
       <default>'ctrl'</default>
       <summary>File actions wheel modifier</summary>
-      <description>One of shift, alt, ctrl, or ctrl-shift.</description>
+      <description>Double-tap the chosen modifier during a file drag. One of shift, alt, ctrl, or ctrl-shift.</description>
     </key>
   </schema>
 </schemalist>

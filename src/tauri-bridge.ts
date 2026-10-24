@@ -44,9 +44,11 @@ export const tauriBridge: Bridge = {
   closeVideoTool: () => invoke('close_video_tool'),
   finishGlobalWheel: async page => { await invoke('finish_global_wheel', { page }); },
   selectGlobalOperation: request => invoke('select_global_operation', { request }),
+  handoffGlobalFiles: request => invoke('handoff_global_files', { request }),
   onWheelMode: callback => subscription<{ mode: string; newDrag: boolean }>('santara:wheel-mode', payload => callback(payload.mode, payload.newDrag)),
   currentWheelMode: () => invoke<string>('shell_wheel_mode'),
   onGlobalOperation: callback => subscription('santara:global-operation', callback),
+  onGlobalFiles: callback => subscription('santara:global-files', callback),
   onGlobalPage: callback => subscription('santara:global-page', callback),
   onUpdate: callback => subscription('santara:update', callback),
   onNativeDrop: callback => subscription<void>('santara:native-drop', () => {

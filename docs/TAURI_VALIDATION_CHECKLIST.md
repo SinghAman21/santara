@@ -31,7 +31,7 @@ Status: deferred integrated validation. Check boxes are evidence requirements, n
 
 ## Phase 4 wheel and integrations
 
-- [ ] Configurable Shift, Alt/Ctrl+Shift and Ctrl modes; shortcut conflicts and keyboard fallback.
+- [ ] Configurable double-tap Shift, Alt/Ctrl+Shift and Ctrl modes (400 ms); single press must not open the wheel; shortcut conflicts, drop handoff and keyboard fallback.
 - [ ] Real Explorer drags on Windows 10/11 and real GNOME Files drags on Ubuntu LTS, with optional helper/extension present and absent.
 - [ ] Pointer position, focus, Escape, drag ordering, mixed DPI and no stale-window callbacks.
 

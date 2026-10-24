@@ -9,7 +9,7 @@ The inspiration is the interaction and editor layout shown in `reference-tools/v
 ## Interaction model
 
 - Drag one or more video files from the file manager. Position the wheel near the current pointer, then clamp it inside the active display so it cannot open off-screen.
-- Hold **Shift** for conversion formats. Hold **Alt** or **Ctrl+Shift** for video tools. **Ctrl** remains reserved for file actions. Shortcuts stay configurable.
+- Double-tap **Shift** for conversion formats. Double-tap **Alt** or configured **Ctrl+Shift** for video tools. Double-tap **Ctrl** for file actions. Single presses do not open the wheel. Shortcuts stay configurable.
 - Keep the wheel open while the user chooses a slice by pointer, keyboard arrows, or direct drop. Enter confirms; Escape cancels.
 - Populate slices from the capability registry for the selected files and detected local engines. Never show an operation merely because an extension or design reference lists it.
 - A mixed selection shows only operations valid for every item, with an explicit “applies to some files” state when partial batch processing is safe.

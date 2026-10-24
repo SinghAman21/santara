@@ -14,6 +14,7 @@ mod documents;
 mod windows_watcher;
 
 use serde::Serialize;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
@@ -27,6 +28,8 @@ struct RuntimeInfo {
     platform: &'static str,
     shell_only: bool,
 }
+
+static WHEEL_VISIBILITY_GENERATION: AtomicU64 = AtomicU64::new(0);
 
 #[tauri::command]
 fn runtime_info() -> RuntimeInfo {
@@ -116,6 +119,7 @@ fn wheel_request(args: &[String]) -> Option<WheelRequest> {
 fn show_wheel(app: &tauri::AppHandle, mode: &str, point: Option<(i32, i32)>) {
     let Some(window) = app.get_webview_window("wheel") else { return };
     if ["convert", "tools", "actions"].contains(&mode) {
+        WHEEL_VISIBILITY_GENERATION.fetch_add(1, Ordering::SeqCst);
         if let Ok(mut current) = app.state::<services::AppState>().wheel_mode.lock() { *current = mode.into(); }
         let new_drag = !window.is_visible().unwrap_or(false);
         if let Err(error) = place_wheel(&window, point) { eprintln!("Wheel placement unavailable: {error}"); }
@@ -125,7 +129,15 @@ fn show_wheel(app: &tauri::AppHandle, mode: &str, point: Option<(i32, i32)>) {
 }
 
 fn hide_wheel(app: &tauri::AppHandle) {
-    if let Some(window) = app.get_webview_window("wheel") { let _ = window.hide(); }
+    let generation = WHEEL_VISIBILITY_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        // Give the native drop event time to reach the wheel after the mouse button is released.
+        std::thread::sleep(std::time::Duration::from_millis(600));
+        if WHEEL_VISIBILITY_GENERATION.load(Ordering::SeqCst) == generation {
+            if let Some(window) = handle.get_webview_window("wheel") { let _ = window.hide(); }
+        }
+    });
 }
 
 fn handle_wheel_request(app: &tauri::AppHandle, args: &[String]) -> bool {
@@ -180,6 +192,7 @@ fn main() {
             services::apply_video_tool,
             services::close_video_tool,
             services::select_global_operation,
+            services::handoff_global_files,
             services::finish_global_wheel,
             services::reveal,
             services::open_output,

@@ -133,9 +133,8 @@ export default function ImageToolWindow({ capability, file, format, initialOptio
     const wrap = previewWrapRef.current;
     const image = previewImageRef.current;
     if (!wrap || !image || zoom <= 1) return;
-    const bounds = image.getBoundingClientRect();
-    const maxX = Math.max(0, (bounds.width - wrap.clientWidth) / 2);
-    const maxY = Math.max(0, (bounds.height - wrap.clientHeight) / 2);
+    const maxX = Math.max(48, (image.offsetWidth * zoom - wrap.clientWidth) / 2);
+    const maxY = Math.max(48, (image.offsetHeight * zoom - wrap.clientHeight) / 2);
     setPan(current => ({ x: Math.max(-maxX, Math.min(maxX, current.x + x)), y: Math.max(-maxY, Math.min(maxY, current.y + y)) }));
   }
 

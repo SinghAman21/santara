@@ -5,7 +5,13 @@ import * as DND from 'resource:///org/gnome/shell/ui/dnd.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
-const UPDATE_INTERVAL_MS = 50;
+const UPDATE_INTERVAL_MS = 20;
+const DOUBLE_TAP_WINDOW_MS = 400;
+const MODIFIER_KEYS = [
+    Clutter.ModifierType.SHIFT_MASK,
+    Clutter.ModifierType.MOD1_MASK,
+    Clutter.ModifierType.CONTROL_MASK,
+];
 function getModifierMask(keyName) {
     switch (keyName) {
     case 'shift':
@@ -30,6 +36,9 @@ export default class SantaraWheelExtension extends Extension {
     enable() {
         this._settings = this.getSettings();
         this._mode = null;
+        this._previousModifiers = 0;
+        this._lastReleasedModifier = 0;
+        this._lastReleaseTime = 0;
         this._pollId = 0;
         this._lastLaunchError = null;
         if (typeof DND.addDragMonitor !== 'function' ||
@@ -50,6 +59,8 @@ export default class SantaraWheelExtension extends Extension {
                 if (event.source !== Main.xdndHandler)
                     return DND.DragMotionResult.CONTINUE;
 
+                if (!this._dragActive)
+                    this._previousModifiers = this._readModifierState();
                 this._dragActive = true;
                 this._lastX = Math.round(event.x);
                 this._lastY = Math.round(event.y);
@@ -62,6 +73,9 @@ export default class SantaraWheelExtension extends Extension {
         this._xdndSignals = Main.xdndHandler;
         this._beginSignal = this._xdndSignals.connect('drag-begin', () => {
             this._dragActive = true;
+            this._previousModifiers = this._readModifierState();
+            this._lastReleasedModifier = 0;
+            this._lastReleaseTime = 0;
             this._readPointer();
             this._startPolling();
         });
@@ -152,15 +166,25 @@ export default class SantaraWheelExtension extends Extension {
     _syncWheel() {
         if (!this._dragActive)
             return;
-
-        const nextMode = this._activeMode(this._readModifierState());
-        if (nextMode !== null && nextMode !== this._mode) {
-            this._mode = nextMode;
-            this._invoke('show', nextMode);
-            return;
+        const current = this._readModifierState();
+        const previous = this._previousModifiers;
+        this._previousModifiers = current;
+        const now = GLib.get_monotonic_time() / 1000;
+        for (const key of MODIFIER_KEYS) {
+            if ((previous & key) && !(current & key)) {
+                this._lastReleasedModifier = key;
+                this._lastReleaseTime = now;
+            } else if (!(previous & key) && (current & key)) {
+                if (this._lastReleasedModifier === key && now - this._lastReleaseTime <= DOUBLE_TAP_WINDOW_MS) {
+                    this._lastReleasedModifier = 0;
+                    const nextMode = this._activeMode(current);
+                    if (nextMode !== null && nextMode !== this._mode) {
+                        this._mode = nextMode;
+                        this._invoke('show', nextMode);
+                    }
+                }
+            }
         }
-        if (this._mode === null)
-            return;
     }
 
     _invoke(action, mode) {
@@ -195,6 +219,9 @@ export default class SantaraWheelExtension extends Extension {
             this._invoke('hide', '');
         this._dragActive = false;
         this._mode = null;
+        this._previousModifiers = 0;
+        this._lastReleasedModifier = 0;
+        this._lastReleaseTime = 0;
         if (this._pollId) {
             GLib.source_remove(this._pollId);
             this._pollId = 0;

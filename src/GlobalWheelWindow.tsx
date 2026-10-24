@@ -51,7 +51,7 @@ export default function GlobalWheelWindow() {
   });
   const [hints, setHints] = useState<LocalFile[]>([]);
   const [choice, setChoice] = useState('');
-  const [working, setWorking] = useState(false);
+  const processing = useRef(false);
   const choiceRef = useRef('');
   const nativeDropHandler = useRef<(files: LocalFile[]) => void>(() => {});
   const seenDrag = useRef(false);
@@ -127,17 +127,14 @@ export default function GlobalWheelWindow() {
   }
 
   async function processIncoming(incoming: LocalFile[], targetChoice?: string) {
-    if (working) return;
-    if (targetChoice && items.some(item => item.id === targetChoice && !item.disabled)) highlight(targetChoice);
-    setWorking(true);
+    if (!incoming.length || processing.current) return;
+    processing.current = true;
+    const acceptedTarget = targetChoice && items.some(item => item.id === targetChoice && !item.disabled) ? targetChoice : '';
+    if (acceptedTarget) highlight(acceptedTarget);
     try {
-      if (!incoming.length) {
-        await api.finishGlobalWheel?.('converter');
-        return;
-      }
-      const selectedChoice = targetChoice || choiceRef.current;
+      const selectedChoice = acceptedTarget || choiceRef.current;
       if (!selectedChoice) {
-        await api.finishGlobalWheel?.('converter');
+        await api.handoffGlobalFiles?.({ files: incoming, mode });
         return;
       }
       if (mode === 'actions') {
@@ -149,7 +146,7 @@ export default function GlobalWheelWindow() {
       const [capabilityId, format] = selectedChoice.split('|');
       const capability = snapshot.capabilities.find(item => item.id === capabilityId && item.available && incoming.some(file => supports(item, file)));
       if (!capability) {
-        await api.finishGlobalWheel?.('converter');
+        await api.handoffGlobalFiles?.({ files: incoming, mode });
         return;
       }
       if (['convert', 'render'].includes(operationName(capability))) {
@@ -169,7 +166,7 @@ export default function GlobalWheelWindow() {
       console.error('Global wheel drop failed:', error);
       await api.finishGlobalWheel?.('converter');
     } finally {
-      setWorking(false);
+      processing.current = false;
     }
   }
 
@@ -177,7 +174,7 @@ export default function GlobalWheelWindow() {
     event.preventDefault();
     const target = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-wheel-item]') : null;
     const incoming = await api.droppedFiles(Array.from(event.dataTransfer.files));
-    await processIncoming(incoming, target?.dataset.wheelItem);
+    if (incoming.length) await processIncoming(incoming, target?.dataset.wheelItem);
   }
 
   nativeDropHandler.current = files => { void processIncoming(files); };

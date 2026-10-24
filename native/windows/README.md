@@ -1,6 +1,6 @@
 # Santara Windows drag watcher prototype
 
-This isolated Windows x64 helper watches the current interactive desktop for a left-button drag that crosses the Windows drag threshold while Shift, Alt, or Control is held. It writes one compact JSON object per line to stdout:
+This isolated Windows x64 helper watches the current interactive desktop for a left-button drag that crosses the Windows drag threshold and requires a double tap of Shift, Alt, or Control within 400 ms. It writes one compact JSON object per line to stdout:
 
 ```json
 {"type":"show","mode":"convert","x":840,"y":520}
@@ -8,7 +8,7 @@ This isolated Windows x64 helper watches the current interactive desktop for a l
 {"type":"hide","mode":"convert","x":856,"y":532}
 ```
 
-Default mappings are Shift → `convert`, Alt → `tools`, Control → `actions`. Change them with `--shift-mode`, `--alt-mode`, `--control-mode`, or `--ctrl-shift-mode`; accepted mode names are `convert`, `tools`, `actions`, and `none` (unassigned). Configured Ctrl+Shift takes priority, then Shift, Alt, and Control. A mode change emits a new `show`; releasing all mapped modifiers emits `hide`. Coordinates are screen pixels and can be negative on monitors left of or above the primary display.
+Default mappings are Shift → `convert`, Alt → `tools`, Control → `actions`. Change them with `--shift-mode`, `--alt-mode`, `--control-mode`, or `--ctrl-shift-mode`; accepted mode names are `convert`, `tools`, `actions`, and `none` (unassigned). Configured Ctrl+Shift takes priority, then Shift, Alt, and Control. A completed double tap emits `show`; releasing the modifier leaves the wheel visible until the drag ends. Coordinates are screen pixels and can be negative on monitors left of or above the primary display.
 
 Releasing a modifier leaves the last selected wheel visible. The wheel hides only when the drag ends. The helper is a prototype and has not yet been exercised with real Explorer drags on Windows. It uses user-mode `WH_MOUSE_LL` and `WH_KEYBOARD_LL` hooks on the launching user's interactive desktop. It does not elevate, inspect files, read the clipboard, access the network, or register a drop target. The Tauri overlay must own the actual file drop. This process only reports modifier and pointer state; it cannot make the overlay receive drags that the OS routes elsewhere. Tauri starts only the bundled helper from its resource directory (or the local development build) and terminates it on exit.
 
@@ -35,4 +35,4 @@ Start the executable in a console:
 ./native/windows/build/santara-drag-watcher.exe
 ```
 
-Drag any item across the desktop while holding Shift, Alt, or Control. Observe `show`, `move`, and `hide` lines; stop with Ctrl+C. The helper does not need or receive the dragged file path. This manual check should be completed on supported Windows versions before treating the prototype as reliable.
+Drag any item across the desktop and double-tap Shift, Alt, or Control within 400 ms. A single press must produce no `show`. Observe `show`, `move`, and `hide` lines; stop with Ctrl+C. The helper does not need or receive the dragged file path. This manual check should be completed on supported Windows versions before treating the prototype as reliable.

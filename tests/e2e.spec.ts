@@ -6,6 +6,7 @@ interface MockControl {
   calls: { method: string; value: unknown }[];
   emit(update: Partial<Snapshot>): void;
   emitWheelMode(mode: string, newDrag?: boolean): void;
+  emitGlobalFiles(files: Snapshot['files'], mode: 'convert' | 'tools' | 'actions'): void;
 }
 
 declare global { interface Window { __santaraTest: MockControl } }
@@ -49,6 +50,7 @@ test.beforeEach(async ({ page }) => {
     };
     const listeners = new Set<(update: Partial<Snapshot>) => void>();
     const wheelModeListeners = new Set<(mode: string, newDrag?: boolean) => void>();
+    const globalFilesListeners = new Set<(request: { files: Snapshot['files']; mode: 'convert' | 'tools' | 'actions' }) => void>();
     const calls: MockControl['calls'] = [];
     const emit = (update: Partial<Snapshot>) => {
       Object.assign(state, structuredClone(update));
@@ -73,6 +75,7 @@ test.beforeEach(async ({ page }) => {
       openOutput: async () => undefined, fileAction: async () => undefined,
       finishGlobalWheel: async destination => { record('finishGlobalWheel', destination); },
       selectGlobalOperation: async request => { record('selectGlobalOperation', request); },
+      handoffGlobalFiles: async request => { record('handoffGlobalFiles', request); },
       preview: async filename => {
         record('preview', filename);
         const waveform = undefined;
@@ -94,9 +97,10 @@ test.beforeEach(async ({ page }) => {
       applyVideoTool: async request => { record('applyVideoTool', request); return { queued: true }; },
       closeVideoTool: async () => { record('closeVideoTool', null); },
       onWheelMode: callback => { wheelModeListeners.add(callback); return () => { wheelModeListeners.delete(callback); }; },
+      onGlobalFiles: callback => { globalFilesListeners.add(callback); return () => { globalFilesListeners.delete(callback); }; },
       onUpdate: callback => { listeners.add(callback); return () => { listeners.delete(callback); }; },
     };
-    window.__santaraTest = { state, calls, emit, emitWheelMode: (mode, newDrag) => { for (const listener of wheelModeListeners) listener(mode, newDrag); } };
+    window.__santaraTest = { state, calls, emit, emitWheelMode: (mode, newDrag) => { for (const listener of wheelModeListeners) listener(mode, newDrag); }, emitGlobalFiles: (files, mode) => { for (const listener of globalFilesListeners) listener({ files, mode }); } };
     Object.defineProperty(window, 'santara', { configurable: true, value: api });
   });
 });
@@ -104,6 +108,11 @@ test.beforeEach(async ({ page }) => {
 async function addFiles(page: Page) {
   await page.getByRole('button', { name: /add files/i }).first().click();
   await expect(page.getByRole('checkbox', { name: 'Select pixel.png' })).toBeChecked();
+}
+
+async function doubleTap(page: Page, key: 'Shift' | 'Alt' | 'Control') {
+  await page.keyboard.press(key);
+  await page.keyboard.press(key);
 }
 
 test('empty workspace renders without exceptions', async ({ page }, testInfo) => {
@@ -156,7 +165,7 @@ test('add files populates rows and mixed selections respect per-file routes', as
   await expect(dialog.getByRole('button', { name: 'Convert image · JPG' })).toHaveCount(0);
 });
 
-test('Shift drag and drop opens compatible operations after the mocked file boundary', async ({ page }) => {
+test('double-tap Shift during a drag opens compatible operations after the mocked file boundary', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Good things come in new formats.' })).toBeVisible();
   const transfer = await page.evaluateHandle(() => {
@@ -168,6 +177,9 @@ test('Shift drag and drop opens compatible operations after the mocked file boun
     const app = page.locator('.app');
     await app.dispatchEvent('dragenter', { dataTransfer: transfer });
     await app.dispatchEvent('dragover', { dataTransfer: transfer, shiftKey: true });
+    await page.keyboard.press('Shift');
+    await expect(page.getByRole('menu', { name: 'Convert', exact: true })).toHaveCount(0);
+    await page.keyboard.press('Shift');
     await expect(page.getByRole('menu', { name: 'Convert', exact: true })).toBeVisible();
     expect(await page.evaluate(() => window.__santaraTest.calls.filter(call => call.method === 'droppedFiles'))).toEqual([]);
     await expect(page.locator('.file-row')).toHaveCount(0);
@@ -202,6 +214,7 @@ test('citrus wheel persists after modifier release and dropping a slice queues i
     const app = page.locator('.app');
     await app.dispatchEvent('dragenter', { dataTransfer: transfer, clientX: 700, clientY: 400 });
     await app.dispatchEvent('dragover', { dataTransfer: transfer, clientX: 700, clientY: 400, shiftKey: true });
+    await doubleTap(page, 'Shift');
     await app.dispatchEvent('dragover', { dataTransfer: transfer, clientX: 710, clientY: 420, shiftKey: false });
     const wheel = page.getByRole('menu', { name: 'Convert', exact: true });
     await expect(wheel).toBeVisible();
@@ -248,6 +261,27 @@ test('global citrus overlay accepts and queues a drop directly on a wheel slice'
       await expect(page.getByRole('menuitem', { name: /^JPG/ })).toHaveCount(0);
     } finally { await nextTransfer.dispose(); }
   } finally { await transfer.dispose(); }
+});
+
+test('global wheel hands off files when no slice was selected', async ({ page }) => {
+  await page.goto('/?santara-wheel=1&mode=convert');
+  const transfer = await page.evaluateHandle(() => {
+    const value = new DataTransfer();
+    value.items.add(new File(['synthetic image fixture'], 'pixel.png', { type: 'image/png' }));
+    return value;
+  });
+  try {
+    await page.locator('.global-wheel-shell').dispatchEvent('drop', { dataTransfer: transfer });
+    await expect.poll(() => page.evaluate(() => window.__santaraTest.calls.find(call => call.method === 'handoffGlobalFiles')?.value)).toMatchObject({ mode: 'convert' });
+    expect(await page.evaluate(() => (window.__santaraTest.calls.find(call => call.method === 'handoffGlobalFiles')?.value as { files: Snapshot['files'] }).files.map(file => file.path))).toContain('/fixtures/pixel.png');
+  } finally { await transfer.dispose(); }
+});
+
+test('workspace receives files from the global wheel with its selected mode', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(() => window.__santaraTest.emitGlobalFiles([{ id: 'image', path: '/fixtures/pixel.png', name: 'pixel.png', ext: 'png', size: 120, category: 'image' }], 'tools'));
+  await expect(page.getByRole('checkbox', { name: 'Select pixel.png' })).toBeChecked();
+  await expect(page.getByRole('dialog', { name: 'Choose what happens next' }).getByRole('tab', { name: /^Tools/ })).toHaveAttribute('aria-selected', 'true');
 });
 
 test('global image tools wheel shows image tools and hides generic archive creation', async ({ page }) => {
@@ -298,7 +332,7 @@ test('compact video editor provides exact trim values and submits a non-destruct
   const editor = page.getByRole('dialog', { name: 'Trim video' });
   await expect(editor).toBeVisible();
   await expect(editor.getByText('clip.mp4')).toBeVisible();
-  await expect(editor.getByRole('slider', { name: 'Video timeline' })).toBeVisible();
+  await expect(editor.getByRole('slider', { name: 'Video preview timeline' })).toBeVisible();
   await editor.getByLabel('Start time (seconds)').fill('0.5');
   await editor.getByLabel('End time (seconds)').fill('2.5');
   await editor.getByRole('button', { name: 'Save new copy' }).click();
@@ -330,7 +364,7 @@ test('keyboard wheel switches groups and highlights partial selection coverage',
   await page.goto('/');
   await addFiles(page);
   await page.getByRole('button', { name: 'Choose an operation' }).click();
-  await page.keyboard.press('Alt');
+  await doubleTap(page, 'Alt');
   await expect(page.getByRole('tab', { name: /^Tools/ })).toHaveAttribute('aria-selected', 'true');
   const edit = page.getByRole('menuitem', { name: /^Edit photo/ });
   await expect(edit).toHaveAttribute('aria-label', /1 of 3 files/);
@@ -341,11 +375,24 @@ test('keyboard wheel switches groups and highlights partial selection coverage',
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
+test('single modifier presses leave the action picker unchanged; Ctrl double tap selects actions', async ({ page }) => {
+  await page.goto('/');
+  await addFiles(page);
+  await page.getByRole('button', { name: 'Choose an operation' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Choose what happens next' });
+  for (const key of ['Shift', 'Alt', 'Control'] as const) {
+    await page.keyboard.press(key);
+    await expect(dialog.getByRole('tab', { name: /^Convert/ })).toHaveAttribute('aria-selected', 'true');
+  }
+  await doubleTap(page, 'Control');
+  await expect(dialog.getByRole('tab', { name: /^File actions/ })).toHaveAttribute('aria-selected', 'true');
+});
+
 test('image editor exposes a real padded background canvas and directional zoom navigation', async ({ page }) => {
   await page.goto('/');
   await addFiles(page);
   await page.getByRole('button', { name: 'Choose an operation' }).click();
-  await page.keyboard.press('Alt');
+  await doubleTap(page, 'Alt');
   await page.getByRole('menuitem', { name: /^Add background/ }).click();
   const backgroundEditor = page.getByRole('dialog', { name: 'Add background' });
   await expect(backgroundEditor.getByLabel('Canvas width')).toHaveValue('864');
@@ -358,7 +405,7 @@ test('image editor exposes a real padded background canvas and directional zoom 
   await backgroundEditor.getByRole('button', { name: 'Close editor' }).click();
 
   await page.getByRole('button', { name: 'Choose an operation' }).click();
-  await page.keyboard.press('Alt');
+  await doubleTap(page, 'Alt');
   await page.getByRole('menuitem', { name: /^Edit photo/ }).click();
   const photoEditor = page.getByRole('dialog', { name: 'Edit photo' });
   await photoEditor.getByRole('button', { name: 'Zoom in' }).click();

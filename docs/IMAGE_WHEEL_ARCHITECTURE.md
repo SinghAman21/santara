@@ -12,7 +12,7 @@ This document defines the next implementation scope for image files only. Audio,
 
 ```text
 Drag image
-  -> hold Shift
+  -> double-tap Shift within 400 ms
   -> conversion wheel appears
   -> choose output format
   -> release/drop
@@ -24,7 +24,7 @@ For image tools:
 
 ```text
 Drag image
-  -> hold Alt or configured tools modifier
+  -> double-tap Alt or the configured tools modifier within 400 ms
   -> image tools wheel appears
   -> choose a tool
   -> compact floating tool window opens
@@ -33,7 +33,7 @@ Drag image
   -> new output is written beside the source
 ```
 
-The wheel remains open after the modifier is released. The user selects a slice by hovering, dragging over it, clicking, or keyboard navigation. Enter confirms, Escape cancels, and arrow keys move between slices. When a native drag supplies no pre-drop MIME or URI metadata, the image-focused wheel shows provisional image routes and verifies the actual file after drop.
+A single modifier press does not open the wheel. The wheel remains open after the second modifier press is released. The user selects a slice by hovering, dragging over it, clicking, or keyboard navigation. Enter confirms, Escape cancels, and arrow keys move between slices. When a native drag supplies no pre-drop MIME or URI metadata, the image-focused wheel shows provisional image routes and verifies the actual file after drop.
 
 ## Runtime architecture
 
@@ -92,7 +92,7 @@ When the user chooses a format, Santara should:
 
 ## Image tools wheel
 
-The tools wheel is opened with the configured tools modifier, defaulting to Alt. For a supported image it should expose these tools as they become implemented and verified:
+The tools wheel opens after a double tap of the configured tools modifier, defaulting to Alt. For a supported image it should expose these tools as they become implemented and verified:
 
 - Compress
 - Crop

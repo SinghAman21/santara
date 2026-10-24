@@ -17,6 +17,7 @@
 namespace {
 
 constexpr UINT WatcherEventMessage = WM_APP + 0x51;
+constexpr ULONGLONG DoubleTapWindowMs = 400;
 
 enum Modifier : unsigned int {
     Shift = 1u << 0,
@@ -47,7 +48,9 @@ public:
         dragging_ = false;
         visible_ = false;
         mode_.clear();
-        (void)update(x, y, modifiers);
+        lastReleased_ = 0;
+        lastReleaseTick_ = 0;
+        (void)modifiers;
     }
 
     std::vector<Event> move(int x, int y, unsigned int modifiers) {
@@ -56,11 +59,27 @@ public:
                            std::abs(y - startY_) >= thresholdY_)) {
             dragging_ = true;
         }
-        return update(x, y, modifiers);
+        (void)modifiers;
+        return moveVisible(x, y);
     }
 
-    std::vector<Event> modifierChange(int x, int y, unsigned int modifiers) {
-        return update(x, y, modifiers);
+    std::vector<Event> modifierDown(int x, int y, unsigned int key, unsigned int modifiers, ULONGLONG tick) {
+        if (!leftDown_ || !dragging_ || key == 0 || key != lastReleased_ ||
+            tick < lastReleaseTick_ || tick - lastReleaseTick_ > DoubleTapWindowMs) return {};
+        lastReleased_ = 0;
+        const char* selected = modeFor(modifiers);
+        if (*selected == '\0') return {};
+        mode_ = selected;
+        visible_ = true;
+        lastX_ = x;
+        lastY_ = y;
+        return {{"show", mode_, x, y}};
+    }
+
+    void modifierUp(unsigned int key, ULONGLONG tick) {
+        if (!leftDown_ || !dragging_ || key == 0) return;
+        lastReleased_ = key;
+        lastReleaseTick_ = tick;
     }
 
     std::vector<Event> release(int x, int y) {
@@ -68,6 +87,8 @@ public:
         leftDown_ = false;
         dragging_ = false;
         mode_.clear();
+        lastReleased_ = 0;
+        lastReleaseTick_ = 0;
         return events;
     }
 
@@ -86,6 +107,8 @@ private:
     std::string altMode_;
     std::string controlMode_;
     std::string controlShiftMode_;
+    unsigned int lastReleased_ = 0;
+    ULONGLONG lastReleaseTick_ = 0;
 
     const char* modeFor(unsigned int modifiers) const {
         const std::string* selected = nullptr;
@@ -106,24 +129,8 @@ private:
         return {{"hide", mode_.c_str(), x, y}};
     }
 
-    std::vector<Event> update(int x, int y, unsigned int modifiers) {
-        if (!leftDown_ || !dragging_) return {};
-        const char* requestedMode = modeFor(modifiers);
-        if (*requestedMode == '\0') {
-            if (!visible_ || (x == lastX_ && y == lastY_)) return {};
-            lastX_ = x;
-            lastY_ = y;
-            return {{"move", mode_, x, y}};
-        }
-
-        const bool changedMode = mode_ != requestedMode;
-        if (!visible_ || changedMode) {
-            visible_ = true;
-            mode_ = requestedMode;
-            lastX_ = x;
-            lastY_ = y;
-            return {{"show", mode_.c_str(), x, y}};
-        }
+    std::vector<Event> moveVisible(int x, int y) {
+        if (!leftDown_ || !dragging_ || !visible_) return {};
         if (x != lastX_ || y != lastY_) {
             lastX_ = x;
             lastY_ = y;
@@ -221,11 +228,20 @@ LRESULT CALLBACK keyboardProc(int code, WPARAM message, LPARAM data) {
         if ((info->flags & LLKHF_INJECTED) == 0) {
             if (info->vkCode < downKeys.size() && modifierForKey(info->vkCode) != 0) {
                 const bool pressed = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
+                const bool wasPressed = downKeys[info->vkCode];
+                if (pressed == wasPressed) return CallNextHookEx(keyboardHook, code, message, data);
                 downKeys[info->vkCode] = pressed;
                 modifiersDown = currentModifiers();
-                POINT cursor{};
-                if (GetCursorPos(&cursor) && leftButtonDown) {
-                    emitAll(dragState->modifierChange(cursor.x, cursor.y, modifiersDown));
+                if (leftButtonDown) {
+                    const auto key = modifierForKey(info->vkCode);
+                    const auto tick = GetTickCount64();
+                    if (pressed) {
+                        POINT cursor{};
+                        if (GetCursorPos(&cursor))
+                            emitAll(dragState->modifierDown(cursor.x, cursor.y, key, modifiersDown, tick));
+                    } else {
+                        dragState->modifierUp(key, tick);
+                    }
                 }
             }
         }
@@ -277,28 +293,41 @@ bool runSelfTest() {
     state.begin(100, 100, 0);
     if (!state.move(102, 102, Shift).empty()) return false;
     auto events = state.move(104, 100, Shift);
-    if (events.size() != 1 || std::strcmp(events[0].type, "show") != 0 ||
-        events[0].mode != "convert") return false;
+    if (!events.empty()) return false;
+    if (!state.modifierDown(104, 100, Shift, Shift, 100).empty()) return false;
+    state.modifierUp(Shift, 150);
+    events = state.modifierDown(104, 100, Shift, Shift, 300);
+    if (events.size() != 1 || std::strcmp(events[0].type, "show") != 0 || events[0].mode != "convert") return false;
     events = state.move(108, 100, Shift);
     if (events.size() != 1 || std::strcmp(events[0].type, "move") != 0) return false;
-    events = state.modifierChange(108, 100, Alt);
-    if (events.size() != 1 || std::strcmp(events[0].type, "show") != 0 ||
-        events[0].mode != "tools") return false;
-    events = state.modifierChange(108, 100, 0);
-    if (!events.empty()) return false;
+    state.modifierUp(Shift, 350);
+    if (!state.modifierDown(108, 100, Alt, Alt, 500).empty()) return false;
+    state.modifierUp(Alt, 550);
+    events = state.modifierDown(108, 100, Alt, Alt, 700);
+    if (events.size() != 1 || events[0].mode != "tools") return false;
     events = state.move(112, 104, 0);
     if (events.size() != 1 || std::strcmp(events[0].type, "move") != 0 ||
         events[0].mode != "tools") return false;
-    state.move(120, 100, Control);
+    state.modifierUp(Alt, 750);
+    if (!state.modifierDown(112, 104, Control, Control, 1200).empty()) return false;
+    state.modifierUp(Control, 1250);
+    events = state.modifierDown(112, 104, Control, Control, 1700);
+    if (!events.empty()) return false;
+    state.modifierUp(Control, 1750);
+    events = state.modifierDown(112, 104, Control, Control, 1850);
+    if (events.size() != 1 || events[0].mode != "actions") return false;
     events = state.release(120, 100);
     if (events.size() != 1 || std::strcmp(events[0].type, "hide") != 0) return false;
     state.begin(200, 200, 0);
     state.move(205, 200, Control);
     events = state.release(205, 200);
-    if (events.size() != 1 || std::strcmp(events[0].type, "hide") != 0) return false;
+    if (!events.empty()) return false;
     DragState custom(8, 8, "convert", "none", "actions", "tools");
     custom.begin(0, 0, 0);
-    events = custom.move(4, 0, Control | Shift);
+    if (!custom.move(4, 0, Control | Shift).empty()) return false;
+    custom.modifierDown(4, 0, Shift, Control | Shift, 100);
+    custom.modifierUp(Shift, 150);
+    events = custom.modifierDown(4, 0, Shift, Control | Shift, 250);
     return events.size() == 1 && events[0].mode == "tools";
 }
 
