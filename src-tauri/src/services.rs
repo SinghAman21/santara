@@ -13,6 +13,7 @@ use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use base64::{engine::general_purpose::STANDARD, Engine};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
@@ -1024,6 +1025,18 @@ pub async fn preview(app: AppHandle, window: tauri::WebviewWindow, state: State<
     let metadata = check_no_symlink(&source)?;
     if !metadata.is_file() || metadata.len() > 32 * 1024 * 1024 { return Err("Quick Preview supports files up to 32 MiB".into()); }
     let mime = preview_mime(&source)?;
+    let waveform = if mime.starts_with("audio/") {
+        let backend = state.media.lock().map_err(|_| "Media backend is unavailable")?.clone();
+        let directory = app.path().app_cache_dir().map_err(|error| error.to_string())?;
+        fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
+        let output = directory.join(format!("santara-waveform-{}.png", Uuid::new_v4()));
+        let input = source.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            let result = backend.waveform(&input, &output, || false).and_then(|_| fs::read(&output).map_err(|_| "Cannot read audio waveform".into()));
+            let _ = fs::remove_file(&output);
+            result.ok().map(|bytes| format!("data:image/png;base64,{}", STANDARD.encode(bytes)))
+        }).await.ok().flatten()
+    } else { None };
     let (prepared, mime, cached) = if mime == "application/pdf" {
         let backend = state.pdf.lock().map_err(|_| "PDF backend is unavailable")?.clone();
         if !backend.supports("render", "png") { return Err("PDF preview requires local Poppler".into()); }
@@ -1051,7 +1064,7 @@ pub async fn preview(app: AppHandle, window: tauri::WebviewWindow, state: State<
             window: window.label().into(), expires: Instant::now() + Duration::from_secs(3600), cached });
     }
     let url = if cfg!(windows) { format!("http://santara-media.localhost/{token}") } else { format!("santara-media://localhost/{token}") };
-    Ok(serde_json::json!({ "url": url }))
+    Ok(serde_json::json!({ "url": url, "waveform": waveform }))
 }
 
 #[tauri::command]

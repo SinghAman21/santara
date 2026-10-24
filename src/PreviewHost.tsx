@@ -7,6 +7,7 @@ import './preview-window.css';
 export default function PreviewHost() {
   const [file, setFile] = useState<LocalFile | null>(null);
   const [url, setUrl] = useState('');
+  const [waveform, setWaveform] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -15,7 +16,7 @@ export default function PreviewHost() {
       if (!api.previewContext || !api.preview) throw new Error('Quick Preview is unavailable.');
       const context = await api.previewContext();
       const result = await api.preview(context.path);
-      if (active) { setFile(context); setUrl(result.url); }
+      if (active) { setFile(context); setUrl(result.url); setWaveform(result.waveform || ''); }
     })().catch(reason => { if (active) setError(reason instanceof Error ? reason.message : String(reason)); });
     return () => { active = false; };
   }, []);
@@ -32,7 +33,7 @@ export default function PreviewHost() {
   return <main className="quick-preview" aria-label="Quick Preview">
     <header><strong title={file?.name}>{file?.name || 'Quick Preview'}</strong><button aria-label="Close preview" onClick={() => void api.closePreview?.()}><X size={18}/></button></header>
     <div className="quick-preview-content">
-      {error ? <p role="alert">{error}</p> : !url ? <p role="status">Preparing local preview…</p> : audio ? <audio controls src={url} aria-label={`Audio preview of ${file?.name}`}/> : video ? <video controls src={url} aria-label={`Video preview of ${file?.name}`}/> : <img src={url} alt={`Preview of ${file?.name}`}/>}
+      {error ? <p role="alert">{error}</p> : !url ? <p role="status">Preparing local preview…</p> : audio ? <div>{waveform && <img src={waveform} alt="Waveform of the first five minutes"/>}<audio controls src={url} aria-label={`Audio preview of ${file?.name}`}/></div> : video ? <video controls src={url} aria-label={`Video preview of ${file?.name}`}/> : <img src={url} alt={`Preview of ${file?.name}`}/>}
     </div>
   </main>;
 }

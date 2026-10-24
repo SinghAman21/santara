@@ -33,7 +33,7 @@ fn runtime_info() -> RuntimeInfo {
     RuntimeInfo {
         runtime: "tauri",
         platform: if cfg!(windows) { "win32" } else { "linux" },
-        shell_only: true,
+        shell_only: false,
     }
 }
 
@@ -195,15 +195,13 @@ fn main() {
                 if let Some(workspace) = app.get_webview_window("workspace") { let _ = workspace.hide(); }
             }
             let workspace = MenuItem::with_id(app, "workspace", "Show Santara", true, None::<&str>)?;
-            let wheel = MenuItem::with_id(app, "wheel", "Show wheel prototype", true, None::<&str>)?;
-            let image = MenuItem::with_id(app, "image", "Show image editor prototype", true, None::<&str>)?;
-            let video = MenuItem::with_id(app, "video", "Show video editor prototype", true, None::<&str>)?;
+            let wheel = MenuItem::with_id(app, "wheel", "Show citrus wheel", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&workspace, &wheel, &image, &video, &quit])?;
+            let menu = Menu::with_items(app, &[&workspace, &wheel, &quit])?;
             if let Some(icon) = app.default_window_icon() {
                 TrayIconBuilder::new()
                     .icon(icon.clone())
-                    .tooltip("Santara Tauri shell")
+                    .tooltip("Santara")
                     .menu(&menu)
                     .on_menu_event(|app, event| {
                         if event.id().as_ref() == "quit" {
@@ -211,7 +209,7 @@ fn main() {
                         } else if let Some(window) = app.get_webview_window(event.id().as_ref()) {
                             if window.label() == "wheel" {
                                 if let Err(error) = place_wheel(&window, None) {
-                                    eprintln!("Santara shell wheel placement unavailable: {error}");
+                                    eprintln!("Santara wheel placement unavailable: {error}");
                                 }
                             }
                             let _ = window.show();
@@ -234,7 +232,7 @@ fn main() {
                     window.app_handle().state::<services::AppState>().forget_window(window.label());
                 }
                 WindowEvent::DragDrop(DragDropEvent::Enter { paths, .. }) => {
-                    eprintln!("Santara shell drag entered {} ({} entries)", window.label(), paths.len());
+                    eprintln!("Santara drag entered {} ({} entries)", window.label(), paths.len());
                 }
                 WindowEvent::DragDrop(DragDropEvent::Drop { paths, .. }) => {
                     let app = window.app_handle();
@@ -246,13 +244,13 @@ fn main() {
                     }
                 }
                 WindowEvent::DragDrop(DragDropEvent::Leave) => {
-                    eprintln!("Santara shell drag left {}", window.label());
+                    eprintln!("Santara drag left {}", window.label());
                 }
                 _ => {}
             }
         })
         .build(tauri::generate_context!())
-        .expect("Santara Tauri shell failed to build")
+        .expect("Santara failed to build")
         .run(|_app, event| {
             #[cfg(windows)]
             if matches!(event, tauri::RunEvent::Exit) { windows_watcher::stop(_app); }

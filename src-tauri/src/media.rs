@@ -133,6 +133,24 @@ impl MediaBackend {
 
     pub fn info(&self) -> Value { json!({ "available": self.available(), "path": self.ffmpeg.as_ref().map(|path| path.to_string_lossy().to_string()) }) }
 
+    pub fn waveform(&self, input: &Path, output: &Path, cancelled: impl Fn() -> bool) -> Result<(), String> {
+        let extension = input.extension().and_then(|value| value.to_str()).unwrap_or_default().to_ascii_lowercase();
+        if !AUDIO_INPUTS.contains(&extension.as_str()) || !has(&self.demuxers, demuxer(&extension))
+            || !has(&self.filters, "showwavespic") || !has(&self.encoders, "png") { return Err("Audio waveform preview is unavailable".into()); }
+        let (_, audio) = self.merge_streams(input, &cancelled)?;
+        if audio.is_none() { return Err("Audio stream is missing".into()); }
+        let ffmpeg = self.ffmpeg.as_ref().ok_or("FFmpeg is unavailable")?;
+        let mut command = Command::new(ffmpeg);
+        command.args(["-hide_banner", "-nostdin", "-v", "error", "-n", "-protocol_whitelist", "file", "-f", demuxer(&extension), "-t", "300", "-i"])
+            .arg(input).args(["-filter_complex", "showwavespic=s=800x120:colors=0xf7943d", "-frames:v", "1", "-f", "image2", "-vcodec", "png"])
+            .arg(output);
+        captured(command, Duration::from_secs(20), cancelled).map_err(safe_media_error)?;
+        let mut bytes = Vec::new();
+        fs::File::open(output).map_err(|_| "Audio waveform was not created")?.take(1_000_001).read_to_end(&mut bytes).map_err(|_| "Cannot read audio waveform")?;
+        if bytes.len() > 1_000_000 || !bytes.starts_with(b"\x89PNG\r\n\x1a\n") { return Err("Invalid audio waveform preview".into()); }
+        Ok(())
+    }
+
     pub fn supports(&self, category: &str, operation: &str, input: &str, output: &str) -> bool {
         if !self.available() { return false }
         if (operation == "visualize" && category != "audio") || (["redact", "gif", "snapshot", "extract-audio", "mute", "speed", "resize", "crop", "rotate", "flip"].contains(&operation) && category != "video") { return false }
@@ -453,6 +471,11 @@ mod tests {
             let video = directory.join("wave.tmp");
             backend.run(&input, &video, "audio", "visualize", "mp4", &json!({"width": 64, "height": 64, "fps": 2}), || false).unwrap();
             assert!(std::fs::metadata(&video).unwrap().len() > 100);
+        }
+        if has(&backend.filters, "showwavespic") && has(&backend.encoders, "png") {
+            let waveform = directory.join("waveform.png");
+            backend.waveform(&input, &waveform, || false).unwrap();
+            assert!(std::fs::read(&waveform).unwrap().starts_with(b"\x89PNG\r\n\x1a\n"));
         }
         std::fs::remove_dir_all(directory).unwrap();
     }
