@@ -26,6 +26,47 @@ const AUDIO_OUTPUTS: &[(&str, &str, &str)] = &[
 
 fn has(text: &str, token: &str) -> bool { text.split(|part: char| part.is_whitespace() || part == ',').any(|part| part == token) }
 
+fn color(options: &Value, key: &str, default: &str) -> Result<String, String> {
+    let value = match options.get(key) { None => default, Some(Value::String(value)) => value, _ => return Err(format!("Invalid {key}")) };
+    if value.len() != 7 || !value.starts_with('#') || !value[1..].bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(format!("Invalid {key}"));
+    }
+    Ok(format!("0x{}", &value[1..]))
+}
+
+fn bounded(options: &Value, key: &str, default: f64, min: f64, max: f64) -> Result<f64, String> {
+    let value = match options.get(key) {
+        None => default,
+        Some(Value::Number(number)) => number.as_f64().ok_or_else(|| format!("Invalid {key}"))?,
+        Some(Value::String(value)) => value.parse::<f64>().map_err(|_| format!("Invalid {key}"))?,
+        _ => return Err(format!("Invalid {key}")),
+    };
+    if !value.is_finite() || !(min..=max).contains(&value) { return Err(format!("Invalid {key}")); }
+    Ok(value)
+}
+
+fn redact_filter(options: &Value, width: u32, height: u32) -> Result<String, String> {
+    let masks = options.get("masks").and_then(Value::as_array).ok_or("Missing redaction masks")?;
+    if masks.is_empty() || masks.len() > 16 { return Err("Select 1–16 redaction masks".into()); }
+    let mut filters = Vec::new();
+    for mask in masks {
+        if !mask.is_object() { return Err("Invalid redaction mask".into()); }
+        let x = bounded(mask, "x", 0.0, 0.0, width as f64)?;
+        let y = bounded(mask, "y", 0.0, 0.0, height as f64)?;
+        let w = bounded(mask, "width", 0.0, 2.0, width as f64)?;
+        let h = bounded(mask, "height", 0.0, 2.0, height as f64)?;
+        if [x, y, w, h].iter().any(|value| value.fract() != 0.0) || x + w > width as f64 || y + h > height as f64 {
+            return Err("Redaction mask exceeds video bounds".into());
+        }
+        let start = bounded(mask, "start", 0.0, 0.0, 604_800.0)?;
+        let end = bounded(mask, "end", 604_800.0, 0.0, 604_800.0)?;
+        if end <= start { return Err("Invalid redaction time range".into()); }
+        let fill = color(mask, "color", "#000000")?;
+        filters.push(format!("drawbox=x={x}:y={y}:w={w}:h={h}:color={fill}:t=fill:enable='between(t,{start},{end})'"));
+    }
+    Ok(filters.join(","))
+}
+
 pub(crate) fn captured(mut command: Command, timeout: Duration, cancelled: impl Fn() -> bool) -> Result<String, String> {
     command.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = command.spawn().map_err(|_| "Local media backend could not start".to_string())?;
@@ -91,15 +132,18 @@ impl MediaBackend {
 
     pub fn supports(&self, category: &str, operation: &str, input: &str, output: &str) -> bool {
         if !self.available() { return false }
+        if (operation == "visualize" && category != "audio") || (["redact", "gif", "snapshot", "extract-audio", "mute", "speed", "resize", "crop", "rotate", "flip"].contains(&operation) && category != "video") { return false }
         let inputs = if category == "video" { VIDEO_INPUTS } else if category == "audio" { AUDIO_INPUTS } else { return false };
         if !inputs.contains(&input) || !has(&self.demuxers, demuxer(input)) { return false }
         let output_spec = if operation == "snapshot" && category == "video" && output == "png" { Some(("png", "image2pipe")) }
             else if operation == "gif" && category == "video" && output == "gif" { Some(("gif", "gif")) }
+            else if operation == "visualize" && category == "audio" && output == "mp4" { Some(("libx264", "mp4")) }
             else if operation == "extract-audio" && category == "video" { AUDIO_OUTPUTS.iter().find(|entry| entry.0 == output).map(|entry| (entry.1, entry.2)) }
             else if category == "video" { VIDEO_OUTPUTS.iter().find(|entry| entry.0 == output).map(|entry| (entry.1, entry.2)) }
             else { AUDIO_OUTPUTS.iter().find(|entry| entry.0 == output).map(|entry| (entry.1, entry.2)) };
         let Some((encoder, muxer)) = output_spec else { return false };
         if !has(&self.encoders, encoder) || !has(&self.muxers, muxer) { return false }
+        if operation == "visualize" && !has(&self.encoders, "aac") { return false }
         if category == "video" && !["snapshot", "extract-audio", "mute", "gif"].contains(&operation) {
             let audio_encoder = video_audio_encoder(output);
             if !has(&self.encoders, audio_encoder) { return false }
@@ -110,6 +154,8 @@ impl MediaBackend {
             "flip" => &["hflip", "vflip"][..], "rotate" => &["hflip", "vflip", "transpose"][..],
             "speed" => &["setpts", "atempo"][..], "gif" => &["fps", "scale"][..],
             "normalize" => &["loudnorm", "aresample"][..], "channels" => &["aresample"][..],
+            "visualize" => &["showwaves", "color", "overlay", "format"][..],
+            "redact" => &["drawbox"][..],
             _ => return false,
         };
         filters.iter().all(|filter| has(&self.filters, filter))
@@ -120,11 +166,12 @@ impl MediaBackend {
         for category in ["video", "audio"] {
             let inputs = if category == "video" { VIDEO_INPUTS } else { AUDIO_INPUTS };
             let mut operations = vec!["convert", "compress", "trim", "strip-metadata"];
-            if category == "video" { operations.extend(["resize", "crop", "rotate", "flip", "mute", "speed", "snapshot", "extract-audio", "gif"]); }
-            else { operations.extend(["normalize", "channels"]); }
+            if category == "video" { operations.extend(["resize", "crop", "rotate", "flip", "mute", "speed", "snapshot", "extract-audio", "gif", "redact"]); }
+            else { operations.extend(["normalize", "channels", "visualize"]); }
             for operation in operations {
                 let outputs = if operation == "snapshot" { vec!["png"] }
                     else if operation == "gif" { vec!["gif"] }
+                    else if operation == "visualize" { vec!["mp4"] }
                     else if operation == "extract-audio" || category == "audio" { AUDIO_OUTPUTS.iter().map(|entry| entry.0).collect() }
                     else { VIDEO_OUTPUTS.iter().map(|entry| entry.0).collect() };
                 let available_inputs = inputs.iter().filter(|input| outputs.iter().any(|output| self.supports(category, operation, input, output))).copied().collect::<Vec<_>>();
@@ -152,15 +199,7 @@ impl MediaBackend {
         let ffmpeg = self.ffmpeg.as_ref().ok_or("FFmpeg is unavailable")?;
         let mut command = Command::new(ffmpeg);
         command.args(["-hide_banner", "-nostdin", "-v", "error", "-n", "-protocol_whitelist", "file", "-f", demuxer(&extension), "-i"]).arg(input);
-        let numeric = |key: &str, default: f64, min: f64, max: f64| -> Result<f64, String> {
-            let value = match options.get(key) {
-                None => default, Some(Value::Number(number)) => number.as_f64().ok_or_else(|| format!("Invalid {key}"))?,
-                Some(Value::String(value)) => value.parse::<f64>().map_err(|_| format!("Invalid {key}"))?,
-                _ => return Err(format!("Invalid {key}")),
-            };
-            if !value.is_finite() || value < min || value > max { return Err(format!("Invalid {key}")); }
-            Ok(value)
-        };
+        let numeric = |key: &str, default: f64, min: f64, max: f64| bounded(options, key, default, min, max);
         if operation == "trim" {
             command.args(["-ss", &numeric("start", 0.0, 0.0, 604_800.0)?.to_string(), "-t", &numeric("duration", 10.0, 0.01, 604_800.0)?.to_string()]);
         }
@@ -171,6 +210,21 @@ impl MediaBackend {
             let width = numeric("width", 480.0, 2.0, 2048.0)?;
             if fps.fract() != 0.0 || width.fract() != 0.0 { return Err("Invalid GIF dimensions or frame rate".into()); }
             command.args(["-map", "0:v:0", "-an", "-sn", "-dn", "-c:v", "gif", "-vf", &format!("fps={fps},scale={width}:-1")]);
+        } else if operation == "visualize" {
+            let width = numeric("width", 1280.0, 2.0, 4096.0)?;
+            let height = numeric("height", 720.0, 2.0, 4096.0)?;
+            let fps = numeric("fps", 30.0, 1.0, 60.0)?;
+            if [width, height, fps].iter().any(|value| value.fract() != 0.0)
+                || (width as u64) * (height as u64) > 8_294_400 || (width as u32) % 2 != 0 || (height as u32) % 2 != 0 {
+                return Err("Invalid waveform dimensions or frame rate".into());
+            }
+            let style = options.get("style").and_then(Value::as_str).unwrap_or("line");
+            if !["point", "line", "p2p", "cline"].contains(&style) { return Err("Invalid waveform style".into()); }
+            let background = color(options, "backgroundColor", "#111827")?;
+            let wave = color(options, "waveColor", "#ff8a3d")?;
+            let graph = format!("color=c={background}:s={width}x{height}:r={fps}[background];[0:a:0]showwaves=s={width}x{height}:r={fps}:mode={style}:colors={wave}:draw=full,format=rgba[wave];[background][wave]overlay=shortest=1:format=auto,format=yuv420p[video]");
+            let quality = numeric("quality", 75.0, 1.0, 100.0)?;
+            command.args(["-filter_complex", &graph, "-map", "[video]", "-map", "0:a:0", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", &((51.0 - quality * 0.5).round() as u32).to_string(), "-c:a", "aac", "-shortest"]);
         } else if category == "audio" || operation == "extract-audio" {
             let encoder = AUDIO_OUTPUTS.iter().find(|entry| entry.0 == format).ok_or("Invalid audio format")?.1;
             command.args(["-map", "0:a:0", "-vn", "-sn", "-dn", "-c:a", encoder]);
@@ -202,6 +256,17 @@ impl MediaBackend {
                     command.args(["-af", &audio]);
                     Some(format!("setpts=(PTS-STARTPTS)/{factor}"))
                 },
+                "redact" => {
+                    let mut dimensions = Command::new(ffprobe);
+                    dimensions.args(["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", "-i"]).arg(input);
+                    let output = captured(dimensions, Duration::from_secs(10), &cancelled).map_err(safe_media_error)?;
+                    let parts = output.trim().split(',').collect::<Vec<_>>();
+                    if parts.len() != 2 { return Err("Cannot inspect video dimensions for redaction".into()); }
+                    let width = parts[0].parse::<u32>().map_err(|_| "Invalid video dimensions")?;
+                    let height = parts[1].parse::<u32>().map_err(|_| "Invalid video dimensions")?;
+                    if width == 0 || height == 0 || width > 16_384 || height > 16_384 { return Err("Invalid video dimensions".into()); }
+                    Some(redact_filter(options, width, height)?)
+                }
                 _ => None,
             };
             if let Some(filter) = filter { command.args(["-vf", &filter]); }
@@ -211,7 +276,7 @@ impl MediaBackend {
         let strip = operation == "strip-metadata" || options.get("stripMetadata").and_then(Value::as_bool).unwrap_or(false);
         if strip { command.args(["-map_metadata", "-1", "-map_metadata:s", "-1", "-map_chapters", "-1"]); }
         else { command.args(["-map_metadata", "0", "-map_chapters", "0"]); }
-        let muxer = if operation == "snapshot" { "image2pipe" } else if operation == "gif" { "gif" } else if category == "audio" || operation == "extract-audio" { AUDIO_OUTPUTS.iter().find(|entry| entry.0 == format).ok_or("Invalid output")?.2 } else { VIDEO_OUTPUTS.iter().find(|entry| entry.0 == format).ok_or("Invalid output")?.2 };
+        let muxer = if operation == "snapshot" { "image2pipe" } else if operation == "gif" { "gif" } else if operation == "visualize" { "mp4" } else if category == "audio" || operation == "extract-audio" { AUDIO_OUTPUTS.iter().find(|entry| entry.0 == format).ok_or("Invalid output")?.2 } else { VIDEO_OUTPUTS.iter().find(|entry| entry.0 == format).ok_or("Invalid output")?.2 };
         command.args(["-f", muxer]).arg(output);
         captured(command, Duration::from_secs(3600), cancelled).map_err(safe_media_error)?;
         Ok(())
@@ -263,6 +328,11 @@ mod tests {
         std::fs::write(&input, bytes).unwrap();
         backend.run(&input, &output, "audio", "convert", "mp3", &json!({}), || false).unwrap();
         assert!(std::fs::metadata(&output).unwrap().len() > 100);
+        if backend.supports("audio", "visualize", "wav", "mp4") {
+            let video = directory.join("wave.tmp");
+            backend.run(&input, &video, "audio", "visualize", "mp4", &json!({"width": 64, "height": 64, "fps": 2}), || false).unwrap();
+            assert!(std::fs::metadata(&video).unwrap().len() > 100);
+        }
         std::fs::remove_dir_all(directory).unwrap();
     }
 
@@ -281,6 +351,12 @@ mod tests {
         let gif = directory.join("out.tmp");
         backend.run(&input, &gif, "video", "gif", "gif", &json!({"fps": 2, "width": 64}), || false).unwrap();
         assert!(gif.metadata().unwrap().len() > 100);
+        if backend.supports("video", "redact", "mp4", "mp4") {
+            let redacted = directory.join("redacted.tmp");
+            backend.run(&input, &redacted, "video", "redact", "mp4", &json!({"masks": [{"x": 0, "y": 0, "width": 16, "height": 16, "start": 0, "end": 1, "color": "#000000"}]}), || false).unwrap();
+            assert!(redacted.metadata().unwrap().len() > 100);
+            assert!(redact_filter(&json!({"masks": [{"x": 60, "y": 0, "width": 16, "height": 16}]}), 64, 64).is_err());
+        }
         std::fs::remove_dir_all(directory).unwrap();
     }
 }
