@@ -1,10 +1,10 @@
 # Santara Image Wheel Architecture
 
-Tauri migration note: `src-tauri/` now receives native file drops and has a provisional Rust raster job path with crop, resize, rotation, flip, adjustments, and generated background canvases. The optional GNOME extension now targets Tauri's single-instance wheel command. Metadata editing/preservation, codec parity, and the Windows global drag helper are still being ported; the feature descriptions below remain the Electron baseline until Phase 8 validation.
+Tauri migration note: `src-tauri/` owns native drops and Rust raster jobs with crop, resize, rotation, flip, adjustments, and generated background canvases. Detected ExifTool adds same-format JPEG metadata editing. The GNOME extension targets Tauri's single-instance wheel command; the Windows watcher is bundled by the Tauri NSIS config. The detailed design below includes previous-release behavior and future requirements. Metadata preservation across raster transforms, codec parity, and real global drags remain unverified or incomplete; see `TAURI_PARITY_MATRIX.md`.
 
 ## Product direction
 
-Santara should feel like a desktop wheel utility, not a conventional converter window. The visible application window is not part of the normal drag workflow. A small background desktop host owns the global wheel, local workers, settings, notifications, and native integrations. The host may still use Electron internally, but the main Santara workspace stays hidden unless the user explicitly opens history, settings, or a full queue view.
+Santara should feel like a desktop wheel utility. A small Tauri desktop host owns the global wheel, local workers, settings, notifications, and native integrations. The workspace stays available for history, settings, queue, and accessibility fallback.
 
 This document defines the next implementation scope for image files only. Audio, video, PDF, documents, archives, and other extensions remain unchanged until a separate design is approved.
 
@@ -45,7 +45,7 @@ The host remains installed as a background-capable desktop process. It is respon
 - The transparent, cursor-near citrus wheel overlay.
 - Secure file-drop handoff and local file inspection.
 - A local job queue and worker lifecycle.
-- Sharp/libvips image processing and preview generation.
+- Rust image processing and local preview generation.
 - Output naming, collision handling, atomic writes, cancellation, and cleanup.
 - Small progress/result notifications.
 - The tray status/quit control, diagnostics, and local job lifecycle.
@@ -171,7 +171,7 @@ Offer a one-click privacy tool with a short explanation of what is removed and w
 
 ## Backend and capability rules
 
-- Sharp/libvips is the primary bundled raster backend.
+- The Tauri Rust image processor is the bundled raster backend. Its codec and metadata gaps remain tracked in the parity matrix.
 - ImageMagick is optional and must not be required for the primary JPG/PNG/WebP workflow.
 - Every wheel item maps to a capability registry entry with inputs, outputs, backend, options, metadata behavior, batch support, and warnings.
 - Preview and export must use the same validated recipe contract so what the user sees is consistent with the output.
@@ -217,7 +217,7 @@ The notification should disappear automatically but remain available through the
 
 ## Current implementation note (2026-10-20)
 
-The compact image tool surface now opens in its own Electron window with a local Sharp preview and the existing local job queue. Images fit fully in the preview by default; zoom includes directional pan controls and a fit reset. Crop includes pointer-drag selection and corner handles alongside ratio presets and exact pixel bounds. Resize/fit, rotation/flip, source-sized background canvases with a visible 32 px default border and editable final dimensions, solid/gradient backgrounds, brightness/contrast/saturation, size-checked JPEG/WebP/AVIF and palette-quantized PNG compression, editable EXIF date/artist/copyright/description fields, and a Delete metadata action that writes a clean copy are available. Drag conversion queues beside the source when no output folder is configured, and the global wheel is placed from the GNOME pointer coordinates when available. Completed jobs use a local desktop notification with an open-file action.
+Current Tauri code opens the compact image editor in a separate window with a local Rust preview and queue-backed output. It supports fit/zoom/pan, crop bounds, resize/fit, rotation/flip, a solid or gradient background canvas, and brightness/contrast/saturation. The detected ExifTool route exposes JPEG metadata fields; the built-in strip route creates a metadata-free copy. The older Sharp implementation described in this design is available in Git history; feature parity and notification behavior still require Phase 8 verification.
 
 This remains an initial editor surface, not completion of the full tool roadmap. Backgrounds currently use generated solid or gradient pixels; local-image backgrounds, advanced adjustment controls, broad metadata inspection, annotation, redaction, and collage are not exposed. The desktop host stays hidden while conversions run in the backend and image tools open as separate compact windows. Image conversion still needs end-to-end manual validation from external Windows/GNOME file managers.
 

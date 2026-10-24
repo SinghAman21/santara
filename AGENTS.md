@@ -9,13 +9,13 @@
 
 ## Architecture
 
-- The desktop host is Electron with a React/Vite renderer.
+- The desktop host is Tauri 2 with a React/Vite renderer and Rust local services.
 - Keep the host available for settings, history, queue management, and accessibility fallback.
 - The primary interaction is the global citrus wheel: Shift for conversion, Alt or Ctrl+Shift for tools, and Ctrl for file actions. Keep shortcuts configurable.
 - Image conversion should dispatch directly to a local output beside the source when possible.
 - Image tools should open compact, non-destructive floating editors and save a new output through the local job system.
 - Use the capability registry to determine which operations are shown. Never expose a route solely because a file extension is listed.
-- Use Sharp/libvips for bundled raster image processing and optional detected backends such as FFmpeg, Poppler, qpdf, LibreOffice, Pandoc, and archive tools only when capability detection succeeds.
+- Use the bundled Rust image processor for current raster routes. Optional detected backends such as FFmpeg, Poppler, qpdf, LibreOffice, Pandoc, and ExifTool appear only when capability detection succeeds. Keep codec and metadata limits visible.
 
 ## Safety and reliability
 
@@ -45,7 +45,7 @@ npm run test
 npm run build
 ```
 
-For UI changes, also run the relevant Playwright or desktop tests. For packaging changes, validate Linux `.deb`/AppImage builds and Windows NSIS configuration on their native platforms. Do not claim global drag support until it has been manually tested with real Windows and GNOME file-manager drags.
+For UI changes, also run the relevant Playwright or desktop tests. For packaging changes, validate Linux `.deb`/AppImage builds and Windows NSIS configuration on their native platforms during Phase 8. Do not claim global drag support until it has been manually tested with real Windows and GNOME file-manager drags.
 
 ## Platform constraints
 

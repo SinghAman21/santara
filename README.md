@@ -1,76 +1,31 @@
 # Santara
 
-Santara is a desktop file-conversion workspace being developed for Windows x64 and Linux x64. It uses a React/Vite interface and an Electron host. Feature availability depends on the implemented engine and locally installed optional tools; a visible option is not evidence that a conversion works.
+Santara is a local, offline-first desktop file tool for Windows 10/11 x64 and Ubuntu LTS x64. The `tauri-rt` branch uses Tauri 2 with a React/Vite interface and Rust processing services. It is a migration preview: native Windows and Ubuntu acceptance remains in [Phase 8](docs/TAURI_VALIDATION_CHECKLIST.md). macOS is unsupported.
 
-The application includes a local queue, detected capability registry, native bridge, settings, and accessible file-operation picker. It remains a development preview. No signed installer, universal format support, or production readiness is claimed here.
-
-Raster conversion is bundled through Sharp/libvips, so JPG/PNG workflows do not require a separately installed image engine. Built-in subtitle and constrained ZIP/TAR/GZ processing are also available. FFmpeg, ImageMagick, qpdf, Poppler, and Pandoc remain optional system tools for their detected routes. See the [implementation status and next steps](docs/ROADMAP.md) for supported, partial, disabled, and unsupported capabilities.
+The citrus wheel offers conversion with Shift, tools with Alt or Ctrl+Shift, and file actions with Ctrl. Shortcuts are configurable. The workspace remains available for settings, queue, history, and keyboard access. Image, subtitle, and ZIP/TAR/GZIP operations run locally in Rust. FFmpeg/FFprobe, Poppler, qpdf, Pandoc, LibreOffice, and ExifTool routes appear only when their local capabilities are detected. Some formats and metadata workflows from the previous implementation are still incomplete; see the [parity matrix](docs/TAURI_PARITY_MATRIX.md).
 
 ## Development
 
-Install Node.js 22 and npm, then run `npm ci`, `npm run typecheck`, `npm run test`, and `npm run build`. Run `npm run desktop` for Electron or `npm run dev` for the restricted browser preview. Project status and remaining production requirements are in the [roadmap](docs/ROADMAP.md).
+Install Node.js 22, npm, Rust, and the platform development dependencies in [build instructions](docs/BUILD.md). On Ubuntu, the required build packages can be installed in one command:
 
-Run `npx playwright install --with-deps chromium` once, then `npx playwright test` for browser smoke tests. These use the Vite preview and a mock preload bridge, not a live Electron process. See [testing](docs/TESTING.md).
+```bash
+sudo apt update && sudo apt install libwebkit2gtk-4.1-dev libayatana-appindicator3-dev libgtk-3-dev librsvg2-dev libssl-dev patchelf
+```
 
-
-## Packaging
-
-`npm run dist` builds for the current host OS: on Windows 10/11 x64 it creates the NSIS `.exe`; on Linux x64 it creates the `.deb` and AppImage. These are x64 packages; native ARM and 32-bit builds are not supported. Use Node.js 22 and npm. On Windows, install Visual Studio Build Tools with the **Desktop development with C++** workload and Windows SDK so Santara can build its native drag watcher. From the repository root, install dependencies and generate the app icons once:
+The sudo command is for you to run; Santara does not install system packages. Then:
 
 ```bash
 npm ci
-npx playwright install chromium
-npm run icons
+npm run typecheck
+npm run test
+npm run build
+npm run desktop
 ```
 
-On Ubuntu/Debian x64, build both Linux packages:
+`npm run dev` starts a browser-only UI preview without local file access. `npm run test:e2e` runs its Playwright tests after installing Chromium with `npx playwright install chromium`.
 
-```bash
-npm run dist:linux
-```
+## Packages
 
-On Windows 10/11 x64, build the NSIS installer executable:
+Run `npm run dist:linux` on Ubuntu LTS x64 for `.deb` and AppImage, or `npm run dist:windows` in an MSVC x64 Developer PowerShell for NSIS. `npm run check:release` checks source package inputs. `npm run release:report` records actual artifact bytes and SHA-256 plus the npm/Cargo dependency inventory after packages exist. Installer execution, uninstall, installed bytes, real file-manager drags, and offline behavior are Phase 8 checks, not claims from a successful build.
 
-Open **Developer PowerShell for Visual Studio (x64)** first, so the MSVC compiler is available, then run:
-
-```powershell
-npm ci
-npx playwright install chromium
-npm run icons
-npm run dist:windows
-```
-
-The Windows build compiles and bundles `santara-drag-watcher.exe`; the installer is written to `release/` as `Santara-<version>-win-x64.exe`. Linux builds produce a `.deb` and `.AppImage` in `release/`. Packaging assembles production dependencies in a temporary app directory, removes unrelated Sharp binaries, and checks that the target's native image library is present in the packaged app. Builds are unsigned by default; the Windows installer may show a publisher warning. Do not disable SmartScreen. Signing is configured separately for trusted CI runs; see [build and signing](docs/BUILD.md).
-
-On Ubuntu, `npm run dist:windows` cross-builds the watcher with MinGW-w64 and packages the Windows NSIS installer with Wine. Install the prerequisites with `sudo apt update && sudo apt install wine g++-mingw-w64-x86-64`, then run `npm run dist:windows`. If your Wine setup cannot run the NSIS tools, build natively on Windows or download the Windows CI artifact. Plain `npm run dist` builds packages for the current OS.
-
-### Install on Linux
-
-Install the Debian package (use the single matching package in `release/`):
-
-```bash
-sudo apt install ./release/Santara-*.deb
-```
-
-Launch Santara from the desktop app menu or by running `santara`. To uninstall, run `sudo apt remove santara`.
-
-Run the portable AppImage without installing it:
-
-```bash
-chmod +x release/Santara-*.AppImage
-./release/Santara-*.AppImage
-```
-
-If the AppImage reports a missing FUSE runtime, install the FUSE compatibility package provided by your distribution. To remove it, delete the AppImage file; per-user settings are separate from the AppImage.
-
-### Install on Windows
-
-Double-click `release/Santara-<version>-win-x64.exe` and follow the installer. Santara appears in the Start menu. To uninstall, use **Settings → Apps → Installed apps → Santara → Uninstall**. An unsigned build may receive a Windows publisher warning; install only builds from a source you trust.
-
-See [build and signing](docs/BUILD.md), [architecture](docs/ARCHITECTURE.md), [capabilities and public sources](docs/CAPABILITIES.md), [image-wheel architecture](docs/IMAGE_WHEEL_ARCHITECTURE.md), and [roadmap](docs/ROADMAP.md).
-
-Santara has no affiliation with Tangerine. Public product research informs requirements, not a claim of implementation parity. Original Santara code is offered under [MIT](LICENSE); dependency obligations are separate and tracked in [third-party notices](THIRD_PARTY_NOTICES.md).
-
-`npm run licenses` generates the installed production dependency/license inventory at `build/THIRD_PARTY_LICENSES.txt`. Packaging runs it automatically and includes the text in `resources/licenses/THIRD_PARTY_LICENSES.txt`, supplementing Santara's notices and Electron's shipped license files.
-
-Linux `.deb` and `.AppImage` builds have been exercised. Windows NSIS packaging runs on the native Windows CI runner; Windows signing, clean-machine installation, and remaining feature/release requirements are not complete; see the [roadmap](docs/ROADMAP.md).
+Santara never uploads files, creates accounts, or enables telemetry. Optional engines are separate system installations. See [capabilities](docs/CAPABILITIES.md), [architecture](docs/ARCHITECTURE.md), [packaging](docs/TAURI_PACKAGING.md), and [third-party notices](THIRD_PARTY_NOTICES.md).

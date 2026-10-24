@@ -7,11 +7,10 @@
   "description": "A little orange. A lot of possibilities. Private local file conversion for Windows and Linux.",
   "author": "Santara contributors",
   "license": "MIT",
-  "main": "electron/main.mjs",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "desktop": "npm run build:windows-hook && node scripts/desktop.mjs",
+    "desktop": "tauri dev",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "tauri:dist:linux": "tauri build --bundles deb,appimage",
@@ -20,31 +19,20 @@
     "build:windows-hook:cross": "node scripts/build-windows-hook.mjs --cross",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "test": "node --test tests/*.test.mjs",
+    "test": "cargo test --manifest-path src-tauri/Cargo.toml --locked && node --test native/windows/protocol.test.mjs",
     "test:e2e": "playwright test",
-    "test:desktop": "node tests/electron-smoke.mjs",
-    "manifest": "node scripts/export-capabilities.mjs",
-    "icons": "node scripts/generate-icons.mjs",
-    "dist": "node scripts/package.mjs",
-    "dist:windows": "node scripts/package.mjs --win --x64 --publish never",
-    "dist:linux": "node scripts/package.mjs --linux --x64 --publish never",
-    "licenses": "node scripts/collect-licenses.mjs",
+    "dist": "tauri build",
+    "dist:windows": "npm run tauri:dist:windows",
+    "dist:linux": "npm run tauri:dist:linux",
+    "check:release": "node scripts/check-release.mjs",
+    "release:report": "node scripts/release-report.mjs",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.4",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "sharp": "^0.35.5",
-    "tar-stream": "^3.1.7",
-    "yauzl": "^3.2.0",
-    "yazl": "^3.3.1"
-  },
-  "overrides": {
-    "@electron/get": {
-      "global-agent": "^4.1.3"
-    }
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.56.0",
@@ -53,13 +41,8 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.4.0",
-    "concurrently": "^9.1.0",
-    "cross-env": "^7.0.3",
-    "electron": "^44.9.0",
-    "electron-builder": "^26.0.12",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.7.0",
-    "vite": "^6.1.0",
-    "wait-on": "^8.0.2"
+    "vite": "^6.1.0"
   }
 }

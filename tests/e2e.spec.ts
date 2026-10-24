@@ -29,13 +29,12 @@ test.beforeEach(async ({ page }) => {
       },
       backends: { imagemagick: { available: true }, ffmpeg: { available: true } },
       capabilities: [
-        { id: 'image:convert', label: 'Convert image', category: 'image', inputs: ['png'], outputs: ['jpg', 'webp'], backend: 'imagemagick', available: true, batch: true, preservesMetadata: false },
+        { id: 'image:convert', label: 'Convert image', category: 'image', inputs: ['png'], outputs: ['jpg', 'webp'], backend: 'rust-image', available: true, batch: true, preservesMetadata: false },
         { id: 'audio:convert', label: 'Convert audio', category: 'audio', inputs: ['wav'], outputs: ['mp3'], backend: 'ffmpeg', available: true, batch: true, preservesMetadata: false },
-        { id: 'subtitle:convert', label: 'Convert subtitles', category: 'subtitle', inputs: ['srt'], outputs: ['vtt'], backend: 'javascript', available: true, batch: true, preservesMetadata: false },
-        { id: 'image:edit-image', operation: 'edit-image', label: 'Edit photo', category: 'image', inputs: ['png'], outputs: ['png', 'jpg'], backend: 'sharp', available: true, batch: true, preservesMetadata: true },
-        { id: 'image:background', operation: 'background', label: 'Add background', category: 'image', inputs: ['png'], outputs: ['png', 'jpg'], backend: 'sharp', available: true, batch: true, preservesMetadata: true },
-        { id: 'image:compress', operation: 'compress', label: 'Compress', category: 'image', inputs: ['png'], outputs: ['png'], backend: 'sharp', available: true, batch: true, preservesMetadata: true },
-        { id: 'image:metadata', operation: 'metadata', label: 'Edit metadata', category: 'image', inputs: ['png'], outputs: ['png'], backend: 'sharp', available: true, batch: true, preservesMetadata: true },
+        { id: 'subtitle:convert', label: 'Convert subtitles', category: 'subtitle', inputs: ['srt'], outputs: ['vtt'], backend: 'rust-subtitles', available: true, batch: true, preservesMetadata: false },
+        { id: 'image:edit-image', operation: 'edit-image', label: 'Edit photo', category: 'image', inputs: ['png'], outputs: ['png', 'jpg'], backend: 'rust-image', available: true, batch: true, preservesMetadata: false },
+        { id: 'image:background', operation: 'background', label: 'Add background', category: 'image', inputs: ['png'], outputs: ['png', 'jpg'], backend: 'rust-image', available: true, batch: true, preservesMetadata: false },
+        { id: 'image:compress', operation: 'compress', label: 'Compress', category: 'image', inputs: ['png'], outputs: ['png'], backend: 'rust-image', available: true, batch: true, preservesMetadata: false },
         { id: 'video:convert', operation: 'convert', label: 'Convert video', category: 'video', inputs: ['mp4'], outputs: ['mp4', 'webm'], backend: 'ffmpeg', available: true, batch: true, preservesMetadata: true },
         { id: 'video:compress', operation: 'compress', label: 'Compress video', category: 'video', inputs: ['mp4'], outputs: ['mp4', 'webm'], backend: 'ffmpeg', available: true, batch: true, preservesMetadata: true },
         { id: 'video:trim', operation: 'trim', label: 'Trim video', category: 'video', inputs: ['mp4'], outputs: ['mp4'], backend: 'ffmpeg', available: true, batch: true, preservesMetadata: true },
@@ -43,7 +42,7 @@ test.beforeEach(async ({ page }) => {
         { id: 'video:merge', operation: 'merge', label: 'Merge video', category: 'video', inputs: ['mp4'], outputs: ['mp4'], backend: 'ffmpeg', available: true, batch: true, preservesMetadata: true },
         { id: 'video:redact', operation: 'redact', label: 'Redact video', category: 'video', inputs: ['mp4'], outputs: ['mp4'], backend: 'ffmpeg', available: true, batch: true, preservesMetadata: false },
         { id: 'audio:visualize', operation: 'visualize', label: 'Audio wave visualizer', category: 'audio', inputs: ['wav'], outputs: ['mp4'], backend: 'ffmpeg', available: true, batch: true, preservesMetadata: true },
-        { id: 'archive:create', operation: 'create-archive', label: 'Create archive', category: 'archive', inputs: ['*'], outputs: ['zip'], backend: 'javascript', available: true, batch: false, preservesMetadata: false },
+        { id: 'archive:create', operation: 'create-archive', label: 'Create archive', category: 'archive', inputs: ['*'], outputs: ['zip'], backend: 'rust-archive', available: true, batch: false, preservesMetadata: false },
         { id: 'pdf:render', operation: 'render', label: 'Render PDF pages', category: 'pdf', inputs: ['pdf'], outputs: ['png', 'jpg'], backend: 'poppler', available: true, batch: true, preservesMetadata: false, options: { page: { min: 1, max: 100000 }, dpi: { min: 36, max: 600, default: 300 } } },
         { id: 'office:convert', label: 'Unavailable office conversion', category: 'document', inputs: ['png'], outputs: ['pdf'], backend: 'libreoffice', available: false, batch: true, preservesMetadata: false },
       ],
@@ -76,7 +75,7 @@ test.beforeEach(async ({ page }) => {
       selectGlobalOperation: async request => { record('selectGlobalOperation', request); },
       preview: async filename => {
         record('preview', filename);
-        const waveform = Array.from({ length: 160 }, (_, index) => Math.abs(Math.sin(index * 0.27)) * (0.2 + Math.abs(Math.sin(index * 0.08)) * 0.6));
+        const waveform = undefined;
         if (filename.endsWith('.wav')) {
           const bytes = new Uint8Array(44 + 32000 * 2), view = new DataView(bytes.buffer);
           const text = (offset: number, value: string) => bytes.set(new TextEncoder().encode(value), offset);

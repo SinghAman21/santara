@@ -3,6 +3,7 @@
   "bundle": {
     "targets": ["nsis"],
     "resources": {
+      "../THIRD_PARTY_NOTICES.md": "licenses/THIRD_PARTY_NOTICES.md",
       "../native/windows/build/santara-drag-watcher.exe": "native/santara-drag-watcher.exe"
     }
   }

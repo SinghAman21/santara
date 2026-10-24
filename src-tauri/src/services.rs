@@ -262,6 +262,7 @@ impl AppState {
             ("rust-image".into(), serde_json::json!({ "available": true, "version": "0.25" })),
             ("rust-subtitles".into(), serde_json::json!({ "available": true })),
             ("rust-archive".into(), serde_json::json!({ "available": true })),
+            ("exiftool".into(), serde_json::json!({ "available": crate::processing::metadata_available() })),
             ("ffmpeg".into(), media.info()),
             ("ffprobe".into(), serde_json::json!({ "available": media.available() }))
         ]);
@@ -482,13 +483,19 @@ async fn add_selected(app: AppHandle, paths: Vec<String>, recursive: bool) -> Re
     state.add_files(&app, files)
 }
 
+fn require_window(window: &tauri::WebviewWindow, roles: &[&str]) -> Result<(), String> {
+    if roles.contains(&window.label()) { Ok(()) } else { Err("This action is unavailable in this window".into()) }
+}
+
 #[tauri::command]
-pub fn bootstrap(state: State<'_, AppState>) -> Result<Snapshot, String> {
+pub fn bootstrap(window: tauri::WebviewWindow, state: State<'_, AppState>) -> Result<Snapshot, String> {
+    require_window(&window, &["workspace", "wheel"])?;
     state.snapshot()
 }
 
 #[tauri::command]
-pub async fn inspect_paths(app: AppHandle, paths: Vec<String>, recursive: bool) -> Result<Vec<LocalFile>, String> {
+pub async fn inspect_paths(app: AppHandle, window: tauri::WebviewWindow, paths: Vec<String>, recursive: bool) -> Result<Vec<LocalFile>, String> {
+    require_window(&window, &["workspace", "wheel"])?;
     let state = app.state::<AppState>();
     let known = state.lock()?.files.iter().map(|file| file.path.clone()).collect::<HashSet<_>>();
     if paths.iter().any(|path| !known.contains(path)) { return Err("Select files through a native dialog or drop first".into()); }
@@ -497,6 +504,7 @@ pub async fn inspect_paths(app: AppHandle, paths: Vec<String>, recursive: bool) 
 
 #[tauri::command]
 pub async fn consume_drop(app: AppHandle, window: tauri::WebviewWindow) -> Result<Vec<LocalFile>, String> {
+    require_window(&window, &["workspace", "wheel"])?;
     let state = app.state::<AppState>();
     let paths = state.lock()?.pending_drops.remove(window.label()).unwrap_or_default();
     if paths.is_empty() { return Ok(Vec::new()); }
@@ -505,7 +513,8 @@ pub async fn consume_drop(app: AppHandle, window: tauri::WebviewWindow) -> Resul
 }
 
 #[tauri::command]
-pub async fn choose_files(app: AppHandle) -> Result<Vec<LocalFile>, String> {
+pub async fn choose_files(app: AppHandle, window: tauri::WebviewWindow) -> Result<Vec<LocalFile>, String> {
+    require_window(&window, &["workspace"])?;
     let dialog_app = app.clone();
     let paths = tauri::async_runtime::spawn_blocking(move || dialog_app.dialog().file().blocking_pick_files())
         .await
@@ -518,7 +527,8 @@ pub async fn choose_files(app: AppHandle) -> Result<Vec<LocalFile>, String> {
 }
 
 #[tauri::command]
-pub async fn choose_folder(app: AppHandle) -> Result<Vec<LocalFile>, String> {
+pub async fn choose_folder(app: AppHandle, window: tauri::WebviewWindow) -> Result<Vec<LocalFile>, String> {
+    require_window(&window, &["workspace"])?;
     let dialog_app = app.clone();
     let path = tauri::async_runtime::spawn_blocking(move || dialog_app.dialog().file().blocking_pick_folder())
         .await
@@ -530,7 +540,8 @@ pub async fn choose_folder(app: AppHandle) -> Result<Vec<LocalFile>, String> {
 }
 
 #[tauri::command]
-pub async fn pick_output(app: AppHandle) -> Result<Option<String>, String> {
+pub async fn pick_output(app: AppHandle, window: tauri::WebviewWindow) -> Result<Option<String>, String> {
+    require_window(&window, &["workspace"])?;
     let dialog_app = app.clone();
     let selected = tauri::async_runtime::spawn_blocking(move || dialog_app.dialog().file().blocking_pick_folder())
         .await
@@ -597,7 +608,7 @@ fn validate_settings(mut settings: Settings, patch: Value) -> Result<Settings, S
                 let entries = value.as_object().ok_or("Invalid backend paths")?;
                 let mut paths = HashMap::new();
                 for (name, path) in entries {
-                    if !["ffmpeg", "ffprobe", "imagemagick", "qpdf", "poppler", "pandoc", "libreoffice"].contains(&name.as_str()) {
+                    if !["ffmpeg", "ffprobe", "qpdf", "poppler", "pandoc", "libreoffice"].contains(&name.as_str()) {
                         return Err("Unknown backend".into());
                     }
                     let path = path.as_str().ok_or("Invalid backend path")?;
@@ -631,7 +642,8 @@ fn persist_json<T: Serialize + ?Sized>(path: &Path, value: &T) -> Result<(), Str
 }
 
 #[tauri::command]
-pub async fn save_settings(app: AppHandle, state: State<'_, AppState>, patch: Value) -> Result<Settings, String> {
+pub async fn save_settings(app: AppHandle, window: tauri::WebviewWindow, state: State<'_, AppState>, patch: Value) -> Result<Settings, String> {
+    require_window(&window, &["workspace"])?;
     let changing_backend = patch.get("backendPaths").is_some();
     let previous = state.lock()?.settings.clone();
     let updated = validate_settings(previous.clone(), patch)?;
@@ -679,14 +691,16 @@ pub async fn save_settings(app: AppHandle, state: State<'_, AppState>, patch: Va
 }
 
 #[tauri::command]
-pub fn reveal(app: AppHandle, state: State<'_, AppState>, path: String) -> Result<Value, String> {
+pub fn reveal(app: AppHandle, window: tauri::WebviewWindow, state: State<'_, AppState>, path: String) -> Result<Value, String> {
+    require_window(&window, &["workspace", "wheel"])?;
     let path = state.known_path(&path, false)?;
     app.opener().reveal_item_in_dir(path).map_err(|error| error.to_string())?;
     Ok(serde_json::json!({ "ok": true }))
 }
 
 #[tauri::command]
-pub fn open_output(app: AppHandle, state: State<'_, AppState>, path: String) -> Result<Value, String> {
+pub fn open_output(app: AppHandle, window: tauri::WebviewWindow, state: State<'_, AppState>, path: String) -> Result<Value, String> {
+    require_window(&window, &["workspace", "wheel"])?;
     let path = state.known_path(&path, true)?;
     app.opener().open_path(path.to_string_lossy().to_string(), None::<&str>).map_err(|error| error.to_string())?;
     Ok(serde_json::json!({ "ok": true }))
@@ -866,7 +880,8 @@ fn split_segments(options: &Value) -> Result<Vec<(f64, f64)>, String> {
 }
 
 #[tauri::command]
-pub fn enqueue(app: AppHandle, state: State<'_, AppState>, request: EnqueueRequest) -> Result<Vec<Job>, String> {
+pub fn enqueue(app: AppHandle, window: tauri::WebviewWindow, state: State<'_, AppState>, request: EnqueueRequest) -> Result<Vec<Job>, String> {
+    require_window(&window, &["workspace", "wheel", "image", "video"])?;
     if request.files.is_empty() || request.files.len() > 1_000 { return Err("Select 1–1,000 files".into()); }
     if !request.options.is_object() || request.options.to_string().len() > 100_000 { return Err("Invalid conversion options".into()); }
     if !["convert", "compress", "resize", "crop", "rotate", "flip", "strip-metadata", "edit-image", "background", "metadata", "trim", "split", "merge", "mute", "speed", "snapshot", "gif", "redact", "visualize", "extract-audio", "normalize", "channels", "create-archive", "extract", "pdf-extract", "pdf-merge", "pdf-rotate", "render"].contains(&request.operation.as_str()) {
@@ -969,7 +984,8 @@ pub fn enqueue(app: AppHandle, state: State<'_, AppState>, request: EnqueueReque
 }
 
 #[tauri::command]
-pub fn cancel(app: AppHandle, state: State<'_, AppState>, id: String) -> Result<Value, String> {
+pub fn cancel(app: AppHandle, window: tauri::WebviewWindow, state: State<'_, AppState>, id: String) -> Result<Value, String> {
+    require_window(&window, &["workspace"])?;
     let mut data = state.lock()?;
     let job = data.jobs.iter_mut().find(|job| job.id == id).ok_or("Unknown job")?;
     if ["queued", "processing", "preparing"].contains(&job.status.as_str()) { job.status = "cancelled".into(); }
@@ -979,7 +995,8 @@ pub fn cancel(app: AppHandle, state: State<'_, AppState>, id: String) -> Result<
 }
 
 #[tauri::command]
-pub fn retry(app: AppHandle, state: State<'_, AppState>, id: String) -> Result<Value, String> {
+pub fn retry(app: AppHandle, window: tauri::WebviewWindow, state: State<'_, AppState>, id: String) -> Result<Value, String> {
+    require_window(&window, &["workspace"])?;
     {
         let mut data = state.lock()?;
         let job = data.jobs.iter_mut().find(|job| job.id == id).ok_or("Unknown job")?;
@@ -995,7 +1012,8 @@ pub fn retry(app: AppHandle, state: State<'_, AppState>, id: String) -> Result<V
 }
 
 #[tauri::command]
-pub fn copy_diagnostic(app: AppHandle, state: State<'_, AppState>, id: String) -> Result<(), String> {
+pub fn copy_diagnostic(app: AppHandle, window: tauri::WebviewWindow, state: State<'_, AppState>, id: String) -> Result<(), String> {
+    require_window(&window, &["workspace"])?;
     let data = state.lock()?;
     let job = data.jobs.iter().find(|job| job.id == id).ok_or("Unknown job")?;
     let details = serde_json::json!({
@@ -1013,7 +1031,8 @@ pub fn copy_diagnostic(app: AppHandle, state: State<'_, AppState>, id: String) -
 }
 
 #[tauri::command]
-pub async fn image_preview(state: State<'_, AppState>, path: String, operation: String, options: Value) -> Result<Value, String> {
+pub async fn image_preview(window: tauri::WebviewWindow, state: State<'_, AppState>, path: String, operation: String, options: Value) -> Result<Value, String> {
+    require_window(&window, &["image", "workspace"])?;
     let input = state.known_path(&path, false)?;
     tauri::async_runtime::spawn_blocking(move || crate::processing::image_preview(&input, &operation, &options))
         .await.map_err(|error| error.to_string())?
@@ -1021,6 +1040,9 @@ pub async fn image_preview(state: State<'_, AppState>, path: String, operation: 
 
 #[tauri::command]
 pub async fn preview(app: AppHandle, window: tauri::WebviewWindow, state: State<'_, AppState>, path: String) -> Result<Value, String> {
+    if !["workspace", "video"].contains(&window.label()) && !window.label().starts_with("preview-") {
+        return Err("Preview is unavailable in this window".into());
+    }
     let source = state.known_path(&path, false)?;
     let metadata = check_no_symlink(&source)?;
     if !metadata.is_file() || metadata.len() > 32 * 1024 * 1024 { return Err("Quick Preview supports files up to 32 MiB".into()); }
@@ -1140,7 +1162,8 @@ fn editor_context(state: &AppState, request: EditorRequest, category: &str) -> R
 }
 
 #[tauri::command]
-pub fn open_image_tool(app: AppHandle, state: State<'_, AppState>, request: EditorRequest) -> Result<Value, String> {
+pub fn open_image_tool(app: AppHandle, window: tauri::WebviewWindow, state: State<'_, AppState>, request: EditorRequest) -> Result<Value, String> {
+    require_window(&window, &["workspace", "wheel"])?;
     let context = editor_context(&state, request, "image")?;
     state.lock()?.image_context = Some(context);
     let window = app.get_webview_window("image").ok_or("Image editor window is unavailable")?;
@@ -1150,7 +1173,8 @@ pub fn open_image_tool(app: AppHandle, state: State<'_, AppState>, request: Edit
 }
 
 #[tauri::command]
-pub fn open_video_tool(app: AppHandle, state: State<'_, AppState>, request: EditorRequest) -> Result<Value, String> {
+pub fn open_video_tool(app: AppHandle, window: tauri::WebviewWindow, state: State<'_, AppState>, request: EditorRequest) -> Result<Value, String> {
+    require_window(&window, &["workspace", "wheel"])?;
     let context = editor_context(&state, request, "video")?;
     state.lock()?.video_context = Some(context);
     let window = app.get_webview_window("video").ok_or("Video editor window is unavailable")?;
@@ -1177,7 +1201,7 @@ pub fn apply_image_tool(app: AppHandle, window: tauri::WebviewWindow, state: Sta
     let mut options = context.options.as_object().cloned().ok_or("Invalid image context")?;
     options.extend(request.options.as_object().ok_or("Invalid image recipe")?.clone());
     let operation = context.capability["operation"].as_str().ok_or("Invalid image operation")?.to_string();
-    let jobs = enqueue(app.clone(), state, EnqueueRequest { files: context.files, operation, format: context.format, options: Value::Object(options) })?;
+    let jobs = enqueue(app.clone(), window.clone(), state, EnqueueRequest { files: context.files, operation, format: context.format, options: Value::Object(options) })?;
     app.state::<AppState>().lock()?.image_context = None;
     window.hide().map_err(|error| error.to_string())?;
     Ok(jobs)
@@ -1223,7 +1247,7 @@ pub fn apply_video_tool(app: AppHandle, window: tauri::WebviewWindow, state: Sta
     let mut options = context.options.as_object().cloned().ok_or("Invalid video context")?;
     options.extend(request.options.as_object().ok_or("Invalid video recipe")?.clone());
     let operation = context.capability["operation"].as_str().ok_or("Invalid video operation")?.to_string();
-    let jobs = enqueue(app.clone(), state, EnqueueRequest { files, operation, format, options: Value::Object(options) })?;
+    let jobs = enqueue(app.clone(), window.clone(), state, EnqueueRequest { files, operation, format, options: Value::Object(options) })?;
     app.state::<AppState>().lock()?.video_context = None;
     window.hide().map_err(|error| error.to_string())?;
     Ok(jobs)
@@ -1254,8 +1278,8 @@ pub fn select_global_operation(app: AppHandle, window: tauri::WebviewWindow, sta
     let files = request.files.iter().map(|file| file.path.clone()).collect::<Vec<_>>();
     if category == "image" || category == "video" {
         let editor = EditorRequest { capability_id: request.capability_id, files, format: request.format, options: serde_json::json!({}) };
-        if category == "image" { open_image_tool(app, state, editor)?; }
-        else { open_video_tool(app, state, editor)?; }
+        if category == "image" { open_image_tool(app, window.clone(), state, editor)?; }
+        else { open_video_tool(app, window.clone(), state, editor)?; }
     } else {
         for file in &request.files { state.known_path(&file.path, false)?; }
         let workspace = app.get_webview_window("workspace").ok_or("Workspace window is unavailable")?;

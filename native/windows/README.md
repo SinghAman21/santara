@@ -25,7 +25,7 @@ The script builds `native\windows\build\santara-drag-watcher.exe` and runs the h
 
 ## Linux cross-build for the Windows installer
 
-For an Ubuntu x64 cross-build, install Wine and the MinGW-w64 x64 compiler (`sudo apt install wine g++-mingw-w64-x86-64`) and run `npm run dist:windows` from the repository root. The script cross-compiles this helper, runs its state self-test under Wine, then invokes electron-builder for the NSIS installer. Native Windows/MSVC builds remain the preferred release validation path.
+For an Ubuntu x64 helper-only cross-build, install Wine and the MinGW-w64 x64 compiler (`sudo apt install wine g++-mingw-w64-x86-64`) and run `npm run build:windows-hook:cross` from the repository root. This cross-compiles the helper and runs its state self-test under Wine. Build the Tauri NSIS installer on native Windows/MSVC; Wine does not satisfy the Windows package or drag gate.
 
 ## Manual hook check
 

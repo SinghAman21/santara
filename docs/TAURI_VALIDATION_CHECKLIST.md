@@ -7,7 +7,7 @@ Status: deferred integrated validation. Check boxes are evidence requirements, n
 - [x] Inventory Electron responsibilities, windows, helpers, backends and routes in ADR 0001.
 - [x] Record current tests, measured Electron artifacts, system dependencies, build hosts and licensing direction.
 - [x] Define the typed renderer bridge and command/event boundaries.
-- [ ] Confirm Windows libvips/codec redistribution provenance before final release.
+- [ ] Confirm final Rust image codec licenses and Windows/Linux redistributed dependencies before release.
 
 ## Phase 1 shell
 
@@ -26,7 +26,7 @@ Status: deferred integrated validation. Check boxes are evidence requirements, n
 - [ ] Route-by-route capability parity against the previous implementation, using actual installed backends.
 - [ ] Image conversions, orientation, metadata, crop/resize/rotate/flip/compression, preview and output naming.
 - [ ] Archive traversal, symlink, decompression-limit and malformed-file tests.
-- [ ] FFmpeg, Poppler, qpdf, Pandoc, LibreOffice and ImageMagick routes only when detected; missing engines fail safely.
+- [ ] FFmpeg, Poppler, qpdf, Pandoc, LibreOffice and ExifTool routes only when detected; missing engines fail safely.
 - [ ] Malformed inputs, cancellation, subprocess arguments and process termination leave no partial outputs.
 
 ## Phase 4 wheel and integrations

@@ -1,6 +1,6 @@
 # Capability specification and source registry
 
-The `tauri-rt` branch has provisional Rust raster, subtitle, archive, and detected FFmpeg, Poppler, qpdf, and Pandoc routes. The support claims below describe the retained Electron baseline until the Tauri parity matrix and Phase 8 checks pass; see `TAURI_PARITY_MATRIX.md`. The provisional image route covers crop, resize, arbitrary rotation, flip, adjustments, and generated backgrounds, but removes metadata and lacks metadata editing and codec parity. The detected FFmpeg path includes snapshot, GIF export, audio visualization, and bounded video redaction; split/merge, document, PDF, and archive route suites are still incomplete.
+The `tauri-rt` branch uses Tauri and a runtime capability registry. Rust image/subtitle/archive routes and detected FFmpeg, Poppler, qpdf, Pandoc, LibreOffice, and optional ExifTool routes are implemented in code. Rust raster processing removes metadata; detected ExifTool enables JPEG metadata editing as a same-format copy. FFmpeg includes snapshot, GIF, visualization, bounded redaction, split ranges, and ordered merge. The detailed status and native validation gaps are in `TAURI_PARITY_MATRIX.md`.
 
 Research date: 2026-10-19. Only the public [Tangerine website](https://tangerineformac.com/) was read. No application binary was downloaded, run, decompiled, or reverse engineered. Public marketing is evidence of advertised behavior, not a tested technical implementation or Santara compatibility.
 
@@ -51,14 +51,11 @@ The requirement table is an acceptance checklist, not a list of absent features.
 | Office | LibreOffice probing exists | Conversion disabled pending isolation of macros/external resources |
 | Archives | Built-in ZIP/TAR/GZIP creation and extraction using mature archive libraries | ZIP STORE creation and STORE/DEFLATE extraction; plain USTAR; GZIP accepts one regular file; bounded sizes/counts and no links/unsafe paths; RAR/7z unsupported |
 
-Run `node scripts/export-capabilities.mjs` (or the parent's optional `npm run manifest`) to refresh [the machine-readable registry](capabilities.generated.json). It contains backend availability/version, capability records, and declared input/output combinations. It is environment-specific detection evidence, not proof that every Cartesian input/output pair was converted. Counts may include unavailable routes; filter `available` explicitly. Regenerate after engine changes and do not infer support from an older snapshot.
+The live Tauri `bootstrap` snapshot contains backend availability and capability records for the current machine. This environment-specific detection is not proof that every declared input/output pair has been converted; filter `available` and run representative local fixtures during Phase 8.
 
 ## Drag and keyboard boundaries
 
-The in-app action wheel and accessible post-drop conversion picker are implemented. During an external drag, Chromium's protected mode prevents reading source filenames/paths before the OS drop. Santara chooses file-specific conversion routes after receiving the drop. It does not claim to inspect external file contents in protected mode. A system-wide desktop/tray drag surface, global wheel, and OS-wide shortcuts remain pending.
+The in-app action wheel, accessible post-drop conversion picker, and Tauri global overlay code are implemented. During an external drag, a WebView cannot read source filenames/paths until the OS delivers the drop. Santara chooses file-specific routes after inspection. The optional GNOME bridge and Windows watcher can request the overlay, but real Explorer and GNOME Files handoff remains a Phase 8 gate.
 
-Many primary strings are centralized, but details remain hardcoded. Full localization is a roadmap requirement, not a delivered internationalization guarantee.
-# Tauri migration note
-
-The Tauri image route currently removes source metadata during raster processing. When a local ExifTool is detected, the Tauri registry adds JPEG metadata editing as a separate, same-format copy operation. This optional route is not a substitute for the bundled Sharp/libvips metadata behavior described below; Phase 8 must verify the actual supported formats and notices.
+Many primary strings are centralized, but details remain hardcoded. Full localization is a roadmap requirement, not a delivered internationalization guarantee. The Tauri image route removes metadata during raster processing; detected ExifTool adds JPEG metadata editing as a separate copy operation.
 
