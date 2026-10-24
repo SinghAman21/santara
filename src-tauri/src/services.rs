@@ -774,8 +774,15 @@ fn run_local_job(app: &AppHandle, job: &Job, settings: &Settings) -> Result<Opti
             file.sync_all().map_err(|error| error.to_string())?;
         } else if let Some(category) = media_category {
             let backend = app.state::<AppState>().media.lock().map_err(|_| "Media backend is unavailable")?.clone();
-            backend.run(&source, &temp, category, &job.operation, &job.format, &job.options,
-                || app.state::<AppState>().lock().is_ok_and(|data| data.jobs.iter().any(|entry| entry.id == job.id && entry.status == "cancelled")))?;
+            let cancelled = || app.state::<AppState>().lock().is_ok_and(|data| data.jobs.iter().any(|entry| entry.id == job.id && entry.status == "cancelled"));
+            if job.operation == "merge" {
+                let inputs = job.options.get("inputs").and_then(Value::as_array).ok_or("Missing media merge inputs")?
+                    .iter().map(|value| value.as_str().ok_or_else(|| "Invalid media merge input".to_string()).and_then(checked_path))
+                    .collect::<Result<Vec<_>, _>>()?;
+                backend.run_merge(&inputs, &temp, category, &job.format, &job.options, cancelled)?;
+            } else {
+                backend.run(&source, &temp, category, &job.operation, &job.format, &job.options, cancelled)?;
+            }
             File::open(&temp).map_err(|error| error.to_string())?.sync_all().map_err(|error| error.to_string())?;
         } else if archive_create {
             let inputs = job.options.get("inputs").and_then(Value::as_array).ok_or("Missing archive sources")?
@@ -856,7 +863,7 @@ fn split_segments(options: &Value) -> Result<Vec<(f64, f64)>, String> {
 pub fn enqueue(app: AppHandle, state: State<'_, AppState>, request: EnqueueRequest) -> Result<Vec<Job>, String> {
     if request.files.is_empty() || request.files.len() > 1_000 { return Err("Select 1–1,000 files".into()); }
     if !request.options.is_object() || request.options.to_string().len() > 100_000 { return Err("Invalid conversion options".into()); }
-    if !["convert", "compress", "resize", "crop", "rotate", "flip", "strip-metadata", "edit-image", "background", "trim", "split", "mute", "speed", "snapshot", "gif", "redact", "visualize", "extract-audio", "normalize", "channels", "create-archive", "extract", "pdf-extract", "pdf-merge", "pdf-rotate", "render"].contains(&request.operation.as_str()) {
+    if !["convert", "compress", "resize", "crop", "rotate", "flip", "strip-metadata", "edit-image", "background", "trim", "split", "merge", "mute", "speed", "snapshot", "gif", "redact", "visualize", "extract-audio", "normalize", "channels", "create-archive", "extract", "pdf-extract", "pdf-merge", "pdf-rotate", "render"].contains(&request.operation.as_str()) {
         return Err("Unsupported operation".into());
     }
     if !["jpg", "jpeg", "png", "webp", "tif", "tiff", "bmp", "gif", "avif", "srt", "vtt", "txt", "md", "html", "docx", "epub", "mp4", "mkv", "mov", "avi", "wmv", "mp3", "wav", "flac", "ogg", "opus", "m4a", "aiff", "wma", "zip", "tar", "gz", "directory", "pdf"].contains(&request.format.as_str()) {
@@ -865,16 +872,29 @@ pub fn enqueue(app: AppHandle, state: State<'_, AppState>, request: EnqueueReque
     let now = OffsetDateTime::now_utc().format(&Rfc3339).map_err(|error| error.to_string())?;
     let segments = if request.operation == "split" { Some(split_segments(&request.options)?) } else { None };
     let mut jobs = Vec::new();
-    if request.operation == "create-archive" || request.operation == "pdf-merge" {
+    if request.operation == "create-archive" || request.operation == "pdf-merge" || request.operation == "merge" {
         if request.operation == "create-archive" && !["zip", "tar", "gz"].contains(&request.format.as_str()) { return Err("Unsupported archive format".into()); }
         if request.operation == "pdf-merge" && (request.format != "pdf" || !state.pdf.lock().map_err(|_| "PDF backend is unavailable")?.supports("pdf-merge", "pdf")) {
             return Err("PDF merge is unavailable".into());
         }
+        if request.operation == "merge" && !(2..=16).contains(&request.files.len()) { return Err("Select 2–16 media files to merge".into()); }
         let mut paths = Vec::new();
+        let mut merge_category = None;
         for file in &request.files {
             let path = state.known_path(&file.path, false)?;
             if request.operation == "pdf-merge" && (path.extension().and_then(|value| value.to_str()) != Some("pdf") || !check_no_symlink(&path)?.is_file()) {
                 return Err("Select inspected PDFs to merge".into());
+            }
+            if request.operation == "merge" {
+                let inspected = state.lock()?.files.iter().find(|entry| entry.path == file.path).cloned().ok_or("Inspect media files before merging")?;
+                if !["audio", "video"].contains(&inspected.category.as_str()) || !check_no_symlink(&path)?.is_file() {
+                    return Err("Merge inputs must be inspected media files".into());
+                }
+                if merge_category.as_ref().is_some_and(|category| category != &inspected.category) { return Err("Merge files of one media category".into()); }
+                if !state.media.lock().map_err(|_| "Media backend is unavailable")?.supports(&inspected.category, "merge", &inspected.ext, &request.format) {
+                    return Err("Media merge route is unavailable".into());
+                }
+                merge_category = Some(inspected.category);
             }
             paths.push(path);
         }
@@ -884,6 +904,7 @@ pub fn enqueue(app: AppHandle, state: State<'_, AppState>, request: EnqueueReque
             .cloned().collect::<Vec<_>>();
         if roots.is_empty() { return Err("Select archive sources".into()); }
         if request.operation == "pdf-merge" && roots.len() < 2 { return Err("Select at least two PDFs".into()); }
+        if request.operation == "merge" && roots.len() < 2 { return Err("Select at least two distinct media files".into()); }
         let mut options = request.options.clone();
         options.as_object_mut().ok_or("Invalid archive options")?.insert("inputs".into(), serde_json::json!(roots));
         let first = roots[0].to_string_lossy().to_string();

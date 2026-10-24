@@ -1,4 +1,7 @@
-use std::{io::Read, path::{Path, PathBuf}, process::{Command, Stdio}, thread, time::{Duration, Instant}};
+use std::{fs::{self, OpenOptions}, io::{Read, Write}, path::{Path, PathBuf}, process::{Command, Stdio}, thread, time::{Duration, Instant}};
+
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 
 use serde_json::{json, Value};
 
@@ -150,6 +153,7 @@ impl MediaBackend {
         }
         let filters = match operation {
             "convert" | "compress" | "trim" | "split" | "strip-metadata" | "extract-audio" | "mute" | "snapshot" => &[][..],
+            "merge" => & ["concat", "setpts", "asetpts"][..],
             "resize" => &["scale"][..], "crop" => &["crop"][..],
             "flip" => &["hflip", "vflip"][..], "rotate" => &["hflip", "vflip", "transpose"][..],
             "speed" => &["setpts", "atempo"][..], "gif" => &["fps", "scale"][..],
@@ -165,7 +169,7 @@ impl MediaBackend {
         let mut result = Vec::new();
         for category in ["video", "audio"] {
             let inputs = if category == "video" { VIDEO_INPUTS } else { AUDIO_INPUTS };
-            let mut operations = vec!["convert", "compress", "trim", "split", "strip-metadata"];
+            let mut operations = vec!["convert", "compress", "trim", "split", "merge", "strip-metadata"];
             if category == "video" { operations.extend(["resize", "crop", "rotate", "flip", "mute", "speed", "snapshot", "extract-audio", "gif", "redact"]); }
             else { operations.extend(["normalize", "channels", "visualize"]); }
             for operation in operations {
@@ -179,8 +183,8 @@ impl MediaBackend {
                 result.push(json!({ "id": format!("{category}:{operation}"), "operation": operation,
                     "label": format!("{} {category}", operation.replace('-', " ")), "category": category,
                     "inputs": available_inputs, "outputs": available_outputs, "backend": "ffmpeg",
-                    "available": !available_outputs.is_empty(), "batch": true, "preservesMetadata": !["strip-metadata", "snapshot", "gif"].contains(&operation),
-                    "options": if operation == "split" { json!({ "segments": "0-5,8-12" }) } else { json!({}) },
+                    "available": !available_outputs.is_empty(), "batch": operation != "merge", "preservesMetadata": !["strip-metadata", "snapshot", "gif"].contains(&operation),
+                    "options": if operation == "split" { json!({ "segments": "0-5,8-12" }) } else if operation == "merge" { json!({ "reencode": [true, false] }) } else { json!({}) },
                     "warning": "Uses the first media streams. Codec and container metadata support varies; compression can increase size." }));
             }
         }
@@ -282,6 +286,107 @@ impl MediaBackend {
         captured(command, Duration::from_secs(3600), cancelled).map_err(safe_media_error)?;
         Ok(())
     }
+
+    fn merge_streams(&self, input: &Path, cancelled: &impl Fn() -> bool) -> Result<(Value, Option<Value>), String> {
+        let extension = input.extension().and_then(|value| value.to_str()).unwrap_or_default().to_ascii_lowercase();
+        let ffprobe = self.ffprobe.as_ref().ok_or("FFprobe is unavailable")?;
+        let mut command = Command::new(ffprobe);
+        command.args(["-v", "error", "-show_data_hash", "sha256", "-show_entries",
+            "format=format_name:stream=codec_type,codec_name,width,height,pix_fmt,sample_rate,channels,channel_layout,time_base,extradata_hash",
+            "-of", "json", "-i"]).arg(input);
+        let output = captured(command, Duration::from_secs(15), cancelled).map_err(safe_media_error)?;
+        let value: Value = serde_json::from_str(&output).map_err(|_| "Cannot inspect media streams")?;
+        let names = value["format"]["format_name"].as_str().ok_or("Cannot inspect media container")?;
+        if !names.split(',').any(|name| name == demuxer(&extension)) { return Err("Media signature does not match its container".into()); }
+        let streams = value["streams"].as_array().ok_or("Cannot inspect media streams")?;
+        let video = streams.iter().find(|stream| stream["codec_type"] == "video").cloned();
+        let audio = streams.iter().find(|stream| stream["codec_type"] == "audio").cloned();
+        Ok((video.unwrap_or(Value::Null), audio))
+    }
+
+    pub fn run_merge(&self, inputs: &[PathBuf], output: &Path, category: &str, format: &str, options: &Value, cancelled: impl Fn() -> bool) -> Result<(), String> {
+        if !(2..=16).contains(&inputs.len()) { return Err("Select 2–16 media files to merge".into()); }
+        let reencode = match options.get("reencode") { None => true, Some(Value::Bool(value)) => *value, Some(Value::String(value)) if value == "true" => true, Some(Value::String(value)) if value == "false" => false, _ => return Err("Invalid merge encoding choice".into()) };
+        let first_extension = inputs[0].extension().and_then(|value| value.to_str()).unwrap_or_default().to_ascii_lowercase();
+        if !self.supports(category, "merge", &first_extension, format) { return Err("Media merge route is unavailable".into()); }
+        let mut first_video = Value::Null;
+        let mut first_audio = None;
+        for (index, input) in inputs.iter().enumerate() {
+            let extension = input.extension().and_then(|value| value.to_str()).unwrap_or_default().to_ascii_lowercase();
+            if !self.supports(category, "merge", &extension, format) { return Err("A selected media input is unsupported".into()); }
+            let metadata = fs::symlink_metadata(input).map_err(|_| "Media input is unavailable")?;
+            if !metadata.is_file() || metadata.file_type().is_symlink() { return Err("Merge inputs must be regular files".into()); }
+            let (video, audio) = self.merge_streams(input, &cancelled)?;
+            if (category == "video" && video.is_null()) || audio.is_none() && category == "audio" { return Err("Required media stream is missing".into()); }
+            if index == 0 { first_video = video; first_audio = audio; }
+            else {
+                if category == "video" && (video["width"] != first_video["width"] || video["height"] != first_video["height"] || audio.is_some() != first_audio.is_some()) {
+                    return Err("Video dimensions or audio tracks differ; preprocess clips before merging".into());
+                }
+                if !reencode && (video != first_video || audio != first_audio) { return Err("Direct-copy merge requires matching stream configuration".into()); }
+            }
+            if !reencode && extension != first_extension { return Err("Direct-copy merge requires matching containers".into()); }
+        }
+        if !reencode && format != first_extension { return Err("Direct-copy merge requires the original container".into()); }
+        let ffmpeg = self.ffmpeg.as_ref().ok_or("FFmpeg is unavailable")?;
+        let mut command = Command::new(ffmpeg);
+        command.args(["-hide_banner", "-nostdin", "-v", "error", "-n"]);
+        let manifest = output.with_extension("ffconcat");
+        if reencode {
+            for input in inputs {
+                let extension = input.extension().and_then(|value| value.to_str()).unwrap_or_default().to_ascii_lowercase();
+                command.args(["-protocol_whitelist", "file", "-f", demuxer(&extension), "-i"]).arg(input);
+            }
+            let video = category == "video";
+            let audio = category == "audio" || first_audio.is_some();
+            let mut graph = String::new();
+            let mut labels = String::new();
+            for index in 0..inputs.len() {
+                if video { graph.push_str(&format!("[{index}:v:0]setpts=PTS-STARTPTS[v{index}];")); labels.push_str(&format!("[v{index}]")); }
+                if audio { graph.push_str(&format!("[{index}:a:0]asetpts=PTS-STARTPTS[a{index}];")); labels.push_str(&format!("[a{index}]")); }
+            }
+            graph.push_str(&format!("{labels}concat=n={}:v={}:a={}{}", inputs.len(), u8::from(video), u8::from(audio), if video && audio { "[v][a]" } else if video { "[v]" } else { "[a]" }));
+            command.args(["-filter_complex", &graph]);
+            if video {
+                let encoder = VIDEO_OUTPUTS.iter().find(|entry| entry.0 == format).ok_or("Invalid video merge output")?.1;
+                command.args(["-map", "[v]", "-c:v", encoder]);
+                if encoder == "libx264" {
+                    let quality = bounded(options, "quality", 75.0, 1.0, 100.0)?;
+                    command.args(["-pix_fmt", "yuv420p", "-crf", &((51.0 - quality * 0.5).round() as u32).to_string()]);
+                }
+            }
+            if audio {
+                let encoder = if video { video_audio_encoder(format) } else { AUDIO_OUTPUTS.iter().find(|entry| entry.0 == format).ok_or("Invalid audio merge output")?.1 };
+                command.args(["-map", "[a]", "-c:a", encoder]);
+            }
+        } else {
+            let mut contents = String::from("ffconcat version 1.0\n");
+            for input in inputs {
+                let text = input.to_str().ok_or("Invalid media path encoding")?.replace('\\', "/");
+                if text.chars().any(char::is_control) { return Err("Invalid media path".into()); }
+                contents.push_str(&format!("file '{}'\n", text.replace('\'', "'\\''")));
+            }
+            let mut open = OpenOptions::new();
+            open.write(true).create_new(true);
+            #[cfg(unix)] open.mode(0o600);
+            let mut file = open.open(&manifest).map_err(|error| error.to_string())?;
+            let write_result = file.write_all(contents.as_bytes()).and_then(|_| file.sync_all());
+            drop(file);
+            if let Err(error) = write_result { let _ = fs::remove_file(&manifest); return Err(error.to_string()); }
+            command.args(["-protocol_whitelist", "file", "-f", "concat", "-safe", "0", "-i"]).arg(&manifest);
+            if category == "video" { command.args(["-map", "0:v:0"]); }
+            if category == "audio" || first_audio.is_some() { command.args(["-map", "0:a:0"]); }
+            command.args(["-c", "copy", "-sn", "-dn"]);
+        }
+        if options.get("stripMetadata").and_then(Value::as_bool).unwrap_or(false) { command.args(["-map_metadata", "-1", "-map_chapters", "-1"]); }
+        else { command.args(["-map_metadata", "0", "-map_chapters", "0"]); }
+        let muxer = if category == "video" { VIDEO_OUTPUTS.iter().find(|entry| entry.0 == format).ok_or("Invalid video merge output")?.2 }
+            else { AUDIO_OUTPUTS.iter().find(|entry| entry.0 == format).ok_or("Invalid audio merge output")?.2 };
+        command.args(["-f", muxer]).arg(output);
+        let result = captured(command, Duration::from_secs(3600), cancelled).map_err(safe_media_error).map(|_| ());
+        if !reencode { let _ = fs::remove_file(manifest); }
+        result
+    }
 }
 
 fn video_audio_encoder(format: &str) -> &'static str {
@@ -334,6 +439,16 @@ mod tests {
             backend.run(&input, &clip, "audio", "split", "mp3", &json!({"start": 0, "duration": 0.25}), || false).unwrap();
             assert!(std::fs::metadata(&clip).unwrap().len() > 100);
         }
+        if backend.supports("audio", "merge", "wav", "mp3") {
+            let joined = directory.join("joined.tmp");
+            backend.run_merge(&[input.clone(), input.clone()], &joined, "audio", "mp3", &json!({"reencode": true}), || false).unwrap();
+            assert!(joined.metadata().unwrap().len() > 100);
+        }
+        if backend.supports("audio", "merge", "wav", "wav") {
+            let copied = directory.join("copied.tmp");
+            backend.run_merge(&[input.clone(), input.clone()], &copied, "audio", "wav", &json!({"reencode": false}), || false).unwrap();
+            assert!(copied.metadata().unwrap().len() > input.metadata().unwrap().len());
+        }
         if backend.supports("audio", "visualize", "wav", "mp4") {
             let video = directory.join("wave.tmp");
             backend.run(&input, &video, "audio", "visualize", "mp4", &json!({"width": 64, "height": 64, "fps": 2}), || false).unwrap();
@@ -362,6 +477,11 @@ mod tests {
             backend.run(&input, &redacted, "video", "redact", "mp4", &json!({"masks": [{"x": 0, "y": 0, "width": 16, "height": 16, "start": 0, "end": 1, "color": "#000000"}]}), || false).unwrap();
             assert!(redacted.metadata().unwrap().len() > 100);
             assert!(redact_filter(&json!({"masks": [{"x": 60, "y": 0, "width": 16, "height": 16}]}), 64, 64).is_err());
+        }
+        if backend.supports("video", "merge", "mp4", "mp4") {
+            let joined = directory.join("joined-video.tmp");
+            backend.run_merge(&[input.clone(), input.clone()], &joined, "video", "mp4", &json!({"reencode": true}), || false).unwrap();
+            assert!(joined.metadata().unwrap().len() > input.metadata().unwrap().len());
         }
         std::fs::remove_dir_all(directory).unwrap();
     }
