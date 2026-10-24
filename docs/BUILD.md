@@ -22,6 +22,23 @@ These optional tools are not downloaded or bundled by Santara. Run `npm ci`, `np
 
 Install Node.js 22, Rust MSVC, Visual Studio Build Tools with Desktop development with C++, and Windows SDK. In an MSVC x64 Developer PowerShell, run `npm ci`, `npm run test`, `npm run build`, and `npm run dist:windows`. This builds and self-tests the isolated drag watcher before NSIS packaging. The NSIS configuration embeds a WebView2 offline installer; check actual offline installation and package size on both Windows versions. The release is unsigned until a reviewed signing setup is supplied.
 
+## Experimental Windows build from Ubuntu
+
+The Windows drag watcher can be cross compiled with the existing MinGW and Wine tools using `npm run build:windows-hook:cross`. A full NSIS build has not yet completed on this Ubuntu host. [Tauri's cross compilation instructions](https://tauri.app/distribute/windows-installer/#cross-compiling-windows-applications-on-linux) call for `lld`, `llvm`, `nsis`, and `cargo-xwin`; `clang` supports C/C++ build scripts. Install the missing system packages yourself with:
+
+```bash
+sudo apt update && sudo apt install lld llvm nsis clang
+```
+
+This host also lacks `rustup` and the Windows MSVC Rust target. Install rustup for your user, add `x86_64-pc-windows-msvc`, and install `cargo-xwin` before trying the Tauri NSIS cross build. The Ubuntu `rustup` package conflicts with the currently installed system `cargo` and `rustc`, so it is deliberately excluded from the sudo command. A cross built installer still needs native Windows 10/11 testing.
+
+```bash
+rustup target add x86_64-pc-windows-msvc
+cargo install --locked cargo-xwin
+npm run build:windows-hook:cross
+npx tauri build --bundles nsis --runner cargo-xwin --target x86_64-pc-windows-msvc
+```
+
 ## Release records
 
 Run `npm run check:release` and, after packaging, `npm run release:report`. The latter writes `build/release-report.json` with actual installer byte counts and SHA-256 hashes and `build/dependency-inventory.json` with npm and Cargo packages. It deliberately leaves installed bytes unset until native installation is measured. Review exact bundled notices, source obligations, platform WebView/media licenses, signatures, installation, removal, and clean-checkout builds before publication. See [packaging](TAURI_PACKAGING.md), [notices](../THIRD_PARTY_NOTICES.md), and the [Phase 8 checklist](TAURI_VALIDATION_CHECKLIST.md).

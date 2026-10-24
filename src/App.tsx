@@ -93,7 +93,7 @@ export default function App() {
   const dragModeRef = useRef<PickerTab | null>(null);
   const pendingNativeMode = useRef<PickerTab | null>(null);
   const dragPosition = useRef({ x: 400, y: 350 });
-  const modifierTap = useRef({ pressed: new Set<string>(), lastReleased: '', releasedAt: 0 });
+  const modifierTap = useRef({ pressed: new Map<string, number>(), lastReleased: '', releasedAt: 0 });
   const selectedFiles = files.filter(file => selected.includes(file.id));
   const activeJobs = data.jobs.filter(job => ['queued', 'preparing', 'processing', 'publishing'].includes(job.status));
   const completedJobs = data.jobs.filter(job => job.status === 'completed');
@@ -123,8 +123,8 @@ export default function App() {
       if (!dragging && !picker) return;
       const modifier = ['Shift', 'Alt', 'Control'].includes(event.key) ? event.key : '';
       if (!modifier || event.repeat || modifierTap.current.pressed.has(modifier)) return;
-      modifierTap.current.pressed.add(modifier);
       const now = performance.now();
+      modifierTap.current.pressed.set(modifier, now);
       const doubleTap = modifierTap.current.lastReleased === modifier && now - modifierTap.current.releasedAt <= 400;
       modifierTap.current.lastReleased = '';
       if (!doubleTap) return;
@@ -133,8 +133,12 @@ export default function App() {
       if (match) { event.preventDefault(); if (dragging) activateWheel(match[0] as PickerTab); else setPicker(match[0] as PickerTab); }
     };
     const released = (event: KeyboardEvent) => {
-      if (!['Shift', 'Alt', 'Control'].includes(event.key) || !modifierTap.current.pressed.delete(event.key)) return;
-      if (dragging || picker) { modifierTap.current.lastReleased = event.key; modifierTap.current.releasedAt = performance.now(); }
+      const pressedAt = modifierTap.current.pressed.get(event.key);
+      if (pressedAt === undefined) return;
+      modifierTap.current.pressed.delete(event.key);
+      const now = performance.now();
+      if ((dragging || picker) && now - pressedAt <= 400) { modifierTap.current.lastReleased = event.key; modifierTap.current.releasedAt = now; }
+      else modifierTap.current.lastReleased = '';
     };
     window.addEventListener('keydown', handle);
     window.addEventListener('keyup', released);
@@ -251,7 +255,7 @@ export default function App() {
   return <div className="app" onDragEnter={event => {
     event.preventDefault();
     if (pdfEditor || (!event.dataTransfer.types.includes('Files') && !dragInternal.current)) return;
-    if (!dragging) { pendingNativeMode.current = null; setDragSource(dragInternal.current || dragHints(event.dataTransfer)); highlightWheel(''); }
+    if (!dragging) { pendingNativeMode.current = null; modifierTap.current.lastReleased = ''; modifierTap.current.pressed.clear(); setDragSource(dragInternal.current || dragHints(event.dataTransfer)); highlightWheel(''); }
     setDragging(true);
   }} onDragOver={event => {
     event.preventDefault(); event.dataTransfer.dropEffect = 'copy';
@@ -320,7 +324,7 @@ export default function App() {
     {imageEditor && imageEditor.files[0] && <ImageToolWindow capability={imageEditor.capability} file={imageEditor.files[0]} format={imageEditor.format} initialOptions={imageEditor.options} onClose={() => setImageEditor(null)} onApply={async values => { await runSafe(async () => { await queueOperation(imageEditor.capability, imageEditor.format, values, imageEditor.files); setImageEditor(null); }); }}/ >}
     {guide && <Modal title={t.guide} onClose={() => setGuide(false)}><div className="guide-content"><Orange sliced/><p>{t.guideIntro}</p><div className="guide-keys">{([{ key: 'convert', label: t.convertKey }, { key: 'tools', label: t.toolsKey }, { key: 'actions', label: t.actionsKey }] as const).map(item => <div key={item.key}><kbd>{settings.shortcuts[item.key]}</kbd><span>{item.label}</span></div>)}</div><p>{t.keyboardHelp}</p><div className="privacy-callout"><ShieldCheck size={21}/><span>{t.noUploads}</span></div>{!isDesktop && <p className="inline-warning">{t.previewNotice}</p>}<button className="button primary full" onClick={() => setGuide(false)}>Let’s make something fresh<ArrowRight size={16}/></button></div></Modal>}
     {privacy && <Modal title="Private by nature." onClose={() => setPrivacy(false)}><div className="guide-content"><span className="privacy-big-icon"><ShieldCheck size={35}/></span><h3>{t.noUploads}</h3><p>{t.privacyText}</p><button className="button full" onClick={() => { setPrivacy(false); setSettingsTab('privacy'); setPage('settings'); }}>More about your local data<ArrowRight size={16}/></button></div></Modal>}
-    {dragging && <div className="drag-overlay wheel-overlay" aria-label="File drop target">
+    {dragging && dragMode && <div className="drag-overlay wheel-overlay" aria-label="File drop target">
       {dragMode ? <div className="floating-wheel" style={{ left: wheelAnchor.x, top: wheelAnchor.y - 40 }}>
         <div className="wheel-mode-bar">{(['convert', 'tools', 'actions'] as const).map(mode => <button key={mode} className={mode === dragMode ? 'active' : ''} onDragEnter={() => activateWheel(mode)} onClick={() => activateWheel(mode)}><kbd>{settings.shortcuts[mode]}</kbd>{t[mode]}</button>)}</div>
         <RadialWheel label={dragMode === 'convert' ? 'Convert' : dragMode === 'tools' ? 'Tools' : 'File actions'} subtitle={dragSource.some(file => !file.ext) ? 'Drop to inspect files and choose a supported operation' : 'Hover a slice, then drop'} dragging selected={wheelChoice} onHighlight={highlightWheel} onChoose={id => highlightWheel(id)} items={wheelItems(dragMode, dragSource).length ? wheelItems(dragMode, dragSource) : [{ id: 'choose', label: 'Choose after drop', detail: 'File types are protected until dropped' }]}/>

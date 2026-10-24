@@ -2,7 +2,7 @@
 
 Santara is a local, offline-first desktop file tool for Windows 10/11 x64 and Ubuntu LTS x64. The `tauri-rt` branch uses Tauri 2 with a React/Vite interface and Rust processing services. It is a migration preview: native Windows and Ubuntu acceptance remains in [Phase 8](docs/TAURI_VALIDATION_CHECKLIST.md). macOS is unsupported.
 
-During a drag, double-tap Shift for conversion, Alt (or configured Ctrl+Shift) for tools, or Ctrl for file actions. Single modifier presses leave the wheel closed. Shortcuts are configurable. The workspace remains available for settings, queue, history, and keyboard access. Image, subtitle, and ZIP/TAR/GZIP operations run locally in Rust. FFmpeg/FFprobe, Poppler, qpdf, Pandoc, LibreOffice, and ExifTool routes appear only when their local capabilities are detected. Some formats and metadata workflows from the previous implementation are still incomplete; see the [parity matrix](docs/TAURI_PARITY_MATRIX.md).
+During a drag, double-tap Shift for conversion, Alt (or configured Ctrl+Shift) for tools, or Ctrl for file actions. Both taps must begin during the drag; a held key or single modifier press leaves the wheel closed. Shortcuts are configurable. The workspace remains available for settings, queue, history, and keyboard access. Image, subtitle, and ZIP/TAR/GZIP operations run locally in Rust. FFmpeg/FFprobe, Poppler, qpdf, Pandoc, LibreOffice, and ExifTool routes appear only when their local capabilities are detected. Some formats and metadata workflows from the previous implementation are still incomplete; see the [parity matrix](docs/TAURI_PARITY_MATRIX.md).
 
 ## Development
 

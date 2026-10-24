@@ -37,6 +37,7 @@ export default class SantaraWheelExtension extends Extension {
         this._settings = this.getSettings();
         this._mode = null;
         this._previousModifiers = 0;
+        this._pressedSince = new Map();
         this._lastReleasedModifier = 0;
         this._lastReleaseTime = 0;
         this._pollId = 0;
@@ -59,8 +60,11 @@ export default class SantaraWheelExtension extends Extension {
                 if (event.source !== Main.xdndHandler)
                     return DND.DragMotionResult.CONTINUE;
 
-                if (!this._dragActive)
+                if (!this._dragActive) {
                     this._previousModifiers = this._readModifierState();
+                    this._pressedSince.clear();
+                    this._lastReleasedModifier = 0;
+                }
                 this._dragActive = true;
                 this._lastX = Math.round(event.x);
                 this._lastY = Math.round(event.y);
@@ -74,6 +78,7 @@ export default class SantaraWheelExtension extends Extension {
         this._beginSignal = this._xdndSignals.connect('drag-begin', () => {
             this._dragActive = true;
             this._previousModifiers = this._readModifierState();
+            this._pressedSince.clear();
             this._lastReleasedModifier = 0;
             this._lastReleaseTime = 0;
             this._readPointer();
@@ -174,9 +179,16 @@ export default class SantaraWheelExtension extends Extension {
         const now = GLib.get_monotonic_time() / 1000;
         for (const key of MODIFIER_KEYS) {
             if ((previous & key) && !(current & key)) {
-                this._lastReleasedModifier = key;
-                this._lastReleaseTime = now;
+                const pressedAt = this._pressedSince.get(key);
+                this._pressedSince.delete(key);
+                if (pressedAt !== undefined && now - pressedAt <= DOUBLE_TAP_WINDOW_MS) {
+                    this._lastReleasedModifier = key;
+                    this._lastReleaseTime = now;
+                } else {
+                    this._lastReleasedModifier = 0;
+                }
             } else if (!(previous & key) && (current & key)) {
+                this._pressedSince.set(key, now);
                 if (this._lastReleasedModifier === key && now - this._lastReleaseTime <= DOUBLE_TAP_WINDOW_MS) {
                     this._lastReleasedModifier = 0;
                     const nextMode = this._activeMode(current);
@@ -222,6 +234,7 @@ export default class SantaraWheelExtension extends Extension {
         this._dragActive = false;
         this._mode = null;
         this._previousModifiers = 0;
+        this._pressedSince.clear();
         this._lastReleasedModifier = 0;
         this._lastReleaseTime = 0;
         if (this._pollId) {

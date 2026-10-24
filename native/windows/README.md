@@ -1,6 +1,6 @@
 # Santara Windows drag watcher prototype
 
-This isolated Windows x64 helper watches the current interactive desktop for a left-button drag that crosses the Windows drag threshold and requires a double tap of Shift, Alt, or Control within 400 ms. It writes one compact JSON object per line to stdout:
+This isolated Windows x64 helper watches the current interactive desktop for a left-button drag that crosses the Windows drag threshold and requires two complete taps of Shift, Alt, or Control during that drag. Each tap and the gap after the first release must fit within 400 ms; a key held before the drag threshold does not count. It writes one compact JSON object per line to stdout:
 
 ```json
 {"type":"show","mode":"convert","x":840,"y":520}

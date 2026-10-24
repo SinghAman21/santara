@@ -33,7 +33,7 @@ Drag image
   -> new output is written beside the source
 ```
 
-A single modifier press does not open the wheel. The wheel remains open after the second modifier press is released. The user selects a slice by hovering, dragging over it, clicking, or keyboard navigation. Enter confirms, Escape cancels, and arrow keys move between slices. When a native drag supplies no pre-drop MIME or URI metadata, the image-focused wheel shows provisional image routes and verifies the actual file after drop.
+A single modifier press does not open the wheel. The first press and release must both happen after the drag begins and last no more than 400 ms; a modifier held before the drag cannot count as the first tap. The same key must be pressed again within 400 ms of that release. The wheel remains open after the second modifier press is released. The user selects a slice by hovering, dragging over it, clicking, or keyboard navigation. Enter confirms, Escape cancels, and arrow keys move between slices. When a native drag supplies no pre-drop MIME or URI metadata, the image-focused wheel shows provisional image routes and verifies the actual file after drop.
 
 ## Runtime architecture
 

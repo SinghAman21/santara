@@ -50,6 +50,7 @@ public:
         mode_.clear();
         lastReleased_ = 0;
         lastReleaseTick_ = 0;
+        pressedDuringDrag_ = 0;
         (void)modifiers;
     }
 
@@ -64,7 +65,10 @@ public:
     }
 
     std::vector<Event> modifierDown(int x, int y, unsigned int key, unsigned int modifiers, ULONGLONG tick) {
-        if (!leftDown_ || !dragging_ || key == 0 || key != lastReleased_ ||
+        if (!leftDown_ || !dragging_ || key == 0) return {};
+        pressedDuringDrag_ |= key;
+        pressedAt_[key == Shift ? 0 : key == Alt ? 1 : 2] = tick;
+        if (key != lastReleased_ ||
             tick < lastReleaseTick_ || tick - lastReleaseTick_ > DoubleTapWindowMs) return {};
         lastReleased_ = 0;
         const char* selected = modeFor(modifiers);
@@ -78,8 +82,16 @@ public:
 
     void modifierUp(unsigned int key, ULONGLONG tick) {
         if (!leftDown_ || !dragging_ || key == 0) return;
-        lastReleased_ = key;
-        lastReleaseTick_ = tick;
+        const auto pressedAt = pressedAt_[key == Shift ? 0 : key == Alt ? 1 : 2];
+        const bool completeTap = (pressedDuringDrag_ & key) != 0 && tick >= pressedAt &&
+                                 tick - pressedAt <= DoubleTapWindowMs;
+        pressedDuringDrag_ &= ~key;
+        if (completeTap) {
+            lastReleased_ = key;
+            lastReleaseTick_ = tick;
+        } else {
+            lastReleased_ = 0;
+        }
     }
 
     std::vector<Event> release(int x, int y) {
@@ -89,6 +101,7 @@ public:
         mode_.clear();
         lastReleased_ = 0;
         lastReleaseTick_ = 0;
+        pressedDuringDrag_ = 0;
         return events;
     }
 
@@ -109,6 +122,8 @@ private:
     std::string controlShiftMode_;
     unsigned int lastReleased_ = 0;
     ULONGLONG lastReleaseTick_ = 0;
+    unsigned int pressedDuringDrag_ = 0;
+    std::array<ULONGLONG, 3> pressedAt_{};
 
     const char* modeFor(unsigned int modifiers) const {
         const std::string* selected = nullptr;
@@ -289,6 +304,21 @@ bool parseArguments(int argc, char** argv, bool* selfTest) {
 }
 
 bool runSelfTest() {
+    for (const auto key : {Shift, Alt, Control}) {
+        DragState held(8, 8, "convert", "tools", "actions", "none");
+        held.begin(0, 0, key);
+        held.move(4, 0, key);
+        held.modifierUp(key, 100);
+        if (!held.modifierDown(4, 0, key, key, 150).empty()) return false;
+        held.modifierUp(key, 200);
+        if (held.modifierDown(4, 0, key, key, 250).size() != 1) return false;
+        DragState longPress(8, 8, "convert", "tools", "actions", "none");
+        longPress.begin(0, 0, 0);
+        longPress.move(4, 0, 0);
+        longPress.modifierDown(4, 0, key, key, 100);
+        longPress.modifierUp(key, 600);
+        if (!longPress.modifierDown(4, 0, key, key, 650).empty()) return false;
+    }
     DragState state(8, 8, "convert", "tools", "actions", "none");
     state.begin(100, 100, 0);
     if (!state.move(102, 102, Shift).empty()) return false;

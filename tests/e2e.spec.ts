@@ -213,6 +213,29 @@ test('double-tap Shift during a drag opens compatible operations after the mocke
   }
 });
 
+test('a modifier held before a drag needs two new taps before the wheel opens', async ({ page }) => {
+  await page.goto('/');
+  const transfer = await page.evaluateHandle(() => {
+    const value = new DataTransfer();
+    value.items.add(new File(['synthetic fixture'], 'pixel.png', { type: 'image/png' }));
+    return value;
+  });
+  try {
+    const app = page.locator('.app');
+    for (const [key, mode] of [['Shift', 'Convert'], ['Alt', 'Tools'], ['Control', 'File actions']] as const) {
+      await page.keyboard.down(key);
+      await app.dispatchEvent('dragenter', { dataTransfer: transfer });
+      await page.keyboard.up(key);
+      await page.keyboard.press(key);
+      await expect(page.locator('.drag-overlay')).toHaveCount(0);
+      await page.keyboard.press(key);
+      await expect(page.getByRole('menu', { name: mode, exact: true })).toBeVisible();
+      await app.dispatchEvent('dragleave', { dataTransfer: transfer, clientX: 0, clientY: 0 });
+      await expect(page.locator('.drag-overlay')).toHaveCount(0);
+    }
+  } finally { await transfer.dispose(); }
+});
+
 test('citrus wheel persists after modifier release and dropping a slice queues its format', async ({ page }, testInfo) => {
   await page.goto('/');
   const transfer = await page.evaluateHandle(() => {

@@ -1,6 +1,6 @@
 # Capability specification and source registry
 
-The `tauri-rt` branch uses Tauri and a runtime capability registry. Rust image/subtitle/archive routes and detected FFmpeg, Poppler, qpdf, Pandoc, LibreOffice, and optional ExifTool routes are implemented in code. Rust raster processing removes metadata; detected ExifTool enables JPEG metadata editing as a same-format copy. FFmpeg includes snapshot, GIF, visualization, bounded redaction, split ranges, and ordered merge. The detailed status and native validation gaps are in `TAURI_PARITY_MATRIX.md`.
+The `tauri-rt` branch uses Tauri and a runtime capability registry. Shift, Alt, and Ctrl each require two complete taps during an active drag before the wheel opens; a held modifier at drag start does not count. Rust image/subtitle/archive routes and detected FFmpeg, Poppler, qpdf, Pandoc, LibreOffice, and optional ExifTool routes are implemented in code. Rust raster processing removes metadata; detected ExifTool enables JPEG metadata editing as a same-format copy. FFmpeg includes snapshot, GIF, visualization, bounded redaction, split ranges, and ordered merge. The detailed status and native validation gaps are in `TAURI_PARITY_MATRIX.md`.
 
 Research date: 2026-10-19. Only the public [Tangerine website](https://tangerineformac.com/) was read. No application binary was downloaded, run, decompiled, or reverse engineered. Public marketing is evidence of advertised behavior, not a tested technical implementation or Santara compatibility.
 
@@ -28,9 +28,7 @@ The site presents local conversion across media, documents, and archives, drag-t
 | Source ID | URL | Use and limitations |
 | --- | --- | --- |
 | SRC-001 | https://tangerineformac.com/ | Public product positioning, format families, local workflow, keyboard demonstration; simulation/marketing only |
-| SRC-002 | https://www.electron.build/code-signing | Signing configuration; certificate/provider eligibility remains external |
-| SRC-003 | https://www.electron.build/icons | Icon generation/configuration guidance; default icons used initially |
-| SRC-004 | https://playwright.dev/docs/test-webserver | Browser preview server lifecycle; no native Electron assurance |
+| SRC-004 | https://playwright.dev/docs/test-webserver | Browser preview server lifecycle; native drag behavior requires platform testing |
 | SRC-005 | https://playwright.dev/docs/mock-browser-apis | Pre-page-load bridge mocking technique |
 
 ## Evidence rules
