@@ -1,7 +1,7 @@
 {
   "uuid": "santara-wheel@santara.local",
   "name": "Santara Drag Wheel",
-  "description": "Shows the Santara wheel while dragging files and holding a configured modifier key.",
+  "description": "Shows the Santara wheel after a modifier double tap during a file drag.",
   "version": 1,
   "shell-version": ["46", "50"],
   "settings-schema": "org.gnome.shell.extensions.santara-wheel"
