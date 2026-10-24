@@ -149,7 +149,7 @@ impl MediaBackend {
             if !has(&self.encoders, audio_encoder) { return false }
         }
         let filters = match operation {
-            "convert" | "compress" | "trim" | "strip-metadata" | "extract-audio" | "mute" | "snapshot" => &[][..],
+            "convert" | "compress" | "trim" | "split" | "strip-metadata" | "extract-audio" | "mute" | "snapshot" => &[][..],
             "resize" => &["scale"][..], "crop" => &["crop"][..],
             "flip" => &["hflip", "vflip"][..], "rotate" => &["hflip", "vflip", "transpose"][..],
             "speed" => &["setpts", "atempo"][..], "gif" => &["fps", "scale"][..],
@@ -165,7 +165,7 @@ impl MediaBackend {
         let mut result = Vec::new();
         for category in ["video", "audio"] {
             let inputs = if category == "video" { VIDEO_INPUTS } else { AUDIO_INPUTS };
-            let mut operations = vec!["convert", "compress", "trim", "strip-metadata"];
+            let mut operations = vec!["convert", "compress", "trim", "split", "strip-metadata"];
             if category == "video" { operations.extend(["resize", "crop", "rotate", "flip", "mute", "speed", "snapshot", "extract-audio", "gif", "redact"]); }
             else { operations.extend(["normalize", "channels", "visualize"]); }
             for operation in operations {
@@ -180,7 +180,8 @@ impl MediaBackend {
                     "label": format!("{} {category}", operation.replace('-', " ")), "category": category,
                     "inputs": available_inputs, "outputs": available_outputs, "backend": "ffmpeg",
                     "available": !available_outputs.is_empty(), "batch": true, "preservesMetadata": !["strip-metadata", "snapshot", "gif"].contains(&operation),
-                    "options": {}, "warning": "Uses the first media streams. Codec and container metadata support varies; compression can increase size." }));
+                    "options": if operation == "split" { json!({ "segments": "0-5,8-12" }) } else { json!({}) },
+                    "warning": "Uses the first media streams. Codec and container metadata support varies; compression can increase size." }));
             }
         }
         result
@@ -200,7 +201,7 @@ impl MediaBackend {
         let mut command = Command::new(ffmpeg);
         command.args(["-hide_banner", "-nostdin", "-v", "error", "-n", "-protocol_whitelist", "file", "-f", demuxer(&extension), "-i"]).arg(input);
         let numeric = |key: &str, default: f64, min: f64, max: f64| bounded(options, key, default, min, max);
-        if operation == "trim" {
+        if operation == "trim" || operation == "split" {
             command.args(["-ss", &numeric("start", 0.0, 0.0, 604_800.0)?.to_string(), "-t", &numeric("duration", 10.0, 0.01, 604_800.0)?.to_string()]);
         }
         if operation == "snapshot" {
@@ -328,6 +329,11 @@ mod tests {
         std::fs::write(&input, bytes).unwrap();
         backend.run(&input, &output, "audio", "convert", "mp3", &json!({}), || false).unwrap();
         assert!(std::fs::metadata(&output).unwrap().len() > 100);
+        if backend.supports("audio", "split", "wav", "mp3") {
+            let clip = directory.join("clip.tmp");
+            backend.run(&input, &clip, "audio", "split", "mp3", &json!({"start": 0, "duration": 0.25}), || false).unwrap();
+            assert!(std::fs::metadata(&clip).unwrap().len() > 100);
+        }
         if backend.supports("audio", "visualize", "wav", "mp4") {
             let video = directory.join("wave.tmp");
             backend.run(&input, &video, "audio", "visualize", "mp4", &json!({"width": 64, "height": 64, "fps": 2}), || false).unwrap();

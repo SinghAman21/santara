@@ -755,7 +755,11 @@ fn run_local_job(app: &AppHandle, job: &Job, settings: &Settings) -> Result<Opti
         return Err("Cancelled".into());
     }
     let stem = source.file_stem().and_then(|value| value.to_str()).ok_or("Invalid source name")?;
-    let base = settings.naming_pattern.replace("{name}", stem).replace("{operation}", &job.operation).replace("{ext}", &job.format);
+    let mut base = settings.naming_pattern.replace("{name}", stem).replace("{operation}", &job.operation).replace("{ext}", &job.format);
+    if job.operation == "split" {
+        let index = job.options.get("segmentIndex").and_then(Value::as_u64).ok_or("Missing split segment index")?;
+        base.push_str(&format!("-part-{index:03}"));
+    }
     if base.is_empty() || base.len() > 240 || base.chars().any(|ch| ch.is_control() || ch == '/' || ch == '\\') {
         return Err("Invalid output name".into());
     }
@@ -829,17 +833,37 @@ fn publish_directory(source: &Path, destination: &Path) -> std::io::Result<()> {
     { if destination.exists() { return Err(std::io::Error::new(std::io::ErrorKind::AlreadyExists, "Destination exists")); } fs::rename(source, destination) }
 }
 
+fn split_segments(options: &Value) -> Result<Vec<(f64, f64)>, String> {
+    let text = options.get("segments").and_then(Value::as_str).ok_or("Enter split time ranges")?;
+    if text.is_empty() || text.len() > 2_048 { return Err("Invalid split time ranges".into()); }
+    let mut segments = Vec::new();
+    let mut previous_end = 0.0_f64;
+    for part in text.split(',') {
+        let (start, end) = part.trim().split_once('-').ok_or("Use start-end split ranges")?;
+        let start = start.trim().parse::<f64>().map_err(|_| "Invalid split start")?;
+        let end = end.trim().parse::<f64>().map_err(|_| "Invalid split end")?;
+        if !start.is_finite() || !end.is_finite() || start < previous_end || start < 0.0 || end <= start || end > 604_800.0 {
+            return Err("Split ranges must be ordered, non-overlapping, and within seven days".into());
+        }
+        segments.push((start, end - start));
+        previous_end = end;
+        if segments.len() > 64 { return Err("Select at most 64 split ranges".into()); }
+    }
+    Ok(segments)
+}
+
 #[tauri::command]
 pub fn enqueue(app: AppHandle, state: State<'_, AppState>, request: EnqueueRequest) -> Result<Vec<Job>, String> {
     if request.files.is_empty() || request.files.len() > 1_000 { return Err("Select 1–1,000 files".into()); }
     if !request.options.is_object() || request.options.to_string().len() > 100_000 { return Err("Invalid conversion options".into()); }
-    if !["convert", "compress", "resize", "crop", "rotate", "flip", "strip-metadata", "edit-image", "background", "trim", "mute", "speed", "snapshot", "gif", "redact", "visualize", "extract-audio", "normalize", "channels", "create-archive", "extract", "pdf-extract", "pdf-merge", "pdf-rotate", "render"].contains(&request.operation.as_str()) {
+    if !["convert", "compress", "resize", "crop", "rotate", "flip", "strip-metadata", "edit-image", "background", "trim", "split", "mute", "speed", "snapshot", "gif", "redact", "visualize", "extract-audio", "normalize", "channels", "create-archive", "extract", "pdf-extract", "pdf-merge", "pdf-rotate", "render"].contains(&request.operation.as_str()) {
         return Err("Unsupported operation".into());
     }
     if !["jpg", "jpeg", "png", "webp", "tif", "tiff", "bmp", "gif", "avif", "srt", "vtt", "txt", "md", "html", "docx", "epub", "mp4", "mkv", "mov", "avi", "wmv", "mp3", "wav", "flac", "ogg", "opus", "m4a", "aiff", "wma", "zip", "tar", "gz", "directory", "pdf"].contains(&request.format.as_str()) {
         return Err("Unsupported output format".into());
     }
     let now = OffsetDateTime::now_utc().format(&Rfc3339).map_err(|error| error.to_string())?;
+    let segments = if request.operation == "split" { Some(split_segments(&request.options)?) } else { None };
     let mut jobs = Vec::new();
     if request.operation == "create-archive" || request.operation == "pdf-merge" {
         if request.operation == "create-archive" && !["zip", "tar", "gz"].contains(&request.format.as_str()) { return Err("Unsupported archive format".into()); }
@@ -886,9 +910,22 @@ pub fn enqueue(app: AppHandle, state: State<'_, AppState>, request: EnqueueReque
         if !(image || subtitle || media || archive || pdf || document) || !check_no_symlink(&path)?.is_file() {
             return Err("Select files supported by this local route".into());
         }
-        jobs.push(Job { id: Uuid::new_v4().to_string(), input: inspected.path, name: inspected.name,
-            operation: request.operation.clone(), format: request.format.clone(), status: "queued".into(), progress: 0,
-            output: None, error: None, created_at: now.clone(), options: request.options.clone() });
+        if let Some(segments) = &segments {
+            for (index, (start, duration)) in segments.iter().enumerate() {
+                let mut options = request.options.clone();
+                let values = options.as_object_mut().ok_or("Invalid split options")?;
+                values.insert("start".into(), serde_json::json!(start));
+                values.insert("duration".into(), serde_json::json!(duration));
+                values.insert("segmentIndex".into(), serde_json::json!(index + 1));
+                jobs.push(Job { id: Uuid::new_v4().to_string(), input: inspected.path.clone(), name: inspected.name.clone(),
+                    operation: request.operation.clone(), format: request.format.clone(), status: "queued".into(), progress: 0,
+                    output: None, error: None, created_at: now.clone(), options });
+            }
+        } else {
+            jobs.push(Job { id: Uuid::new_v4().to_string(), input: inspected.path, name: inspected.name,
+                operation: request.operation.clone(), format: request.format.clone(), status: "queued".into(), progress: 0,
+                output: None, error: None, created_at: now.clone(), options: request.options.clone() });
+        }
     }
     }
     {
@@ -1370,5 +1407,13 @@ mod tests {
         assert_eq!(parse_range(Some("bytes=-5"), 100).unwrap(), (95, 99, true));
         assert!(parse_range(Some("bytes=100-"), 100).is_err());
         assert!(parse_range(Some("bytes=0-1,4-5"), 100).is_err());
+    }
+
+    #[test]
+    fn split_ranges_are_ordered_and_bounded() {
+        assert_eq!(split_segments(&serde_json::json!({ "segments": "0-5, 8.5-12" })).unwrap(), vec![(0.0, 5.0), (8.5, 3.5)]);
+        for ranges in ["5-2", "0-5,4-8", "-1-2", "1-NaN", "0-604801", "0-1,"] {
+            assert!(split_segments(&serde_json::json!({ "segments": ranges })).is_err(), "{ranges}");
+        }
     }
 }
