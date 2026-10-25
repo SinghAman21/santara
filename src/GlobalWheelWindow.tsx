@@ -22,6 +22,26 @@ const operationName = (capability: Capability) => capability.operation || capabi
 const noticeText = (value: string) => value.replace(/[\x00-\x1f\x7f]/g, ' ').slice(0, 256);
 const supports = (capability: Capability, file: LocalFile) => capability.inputs.includes('*') || (file.ext ? capability.inputs.includes(file.isDirectory ? 'directory' : file.ext.toLowerCase()) : capability.category === file.category);
 const knownCategory = (file: LocalFile) => file.category !== 'other' ? file.category : '';
+const provisionalImageCapabilities: Capability[] = (() => {
+  const inputs = ['jpg', 'jpeg', 'png', 'webp', 'tif', 'tiff', 'bmp', 'gif', 'avif'];
+  const outputs = [...inputs];
+  return ['convert', 'edit-image', 'background', 'compress', 'crop', 'resize', 'rotate', 'flip'].map(operation => ({
+    id: `image:${operation}`,
+    operation,
+    label: operation,
+    category: 'image',
+    inputs,
+    outputs,
+    backend: 'rust-image',
+    available: true,
+    batch: true,
+    preservesMetadata: false,
+  }));
+})();
+const imageToolLabels: Record<string, string> = {
+  'edit-image': 'Edit photo', background: 'Add background', compress: 'Compress',
+  crop: 'Crop', resize: 'Resize', rotate: 'Rotate', flip: 'Flip',
+};
 const videoToolLabels: Record<string, string> = {
   compress: 'Compress', trim: 'Trim', split: 'Split', merge: 'Merge', crop: 'Crop', speed: 'Speed',
   snapshot: 'Frames', mute: 'Mute', redact: 'Redact', 'strip-metadata': 'Delete metadata', resize: 'Resize',
@@ -63,7 +83,14 @@ export default function GlobalWheelWindow() {
     : [{ id: 'provisional-image', name: 'Dragged image', path: '', size: 0, ext: '', category: 'image' as const }];
 
   useEffect(() => {
-    void api.bootstrap().then(setSnapshot);
+    let active = true;
+    void api.bootstrap().then(value => { if (active) setSnapshot(value); }).catch(error => {
+      console.error('Global wheel capability bootstrap failed:', error);
+    });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
     const media = matchMedia('(prefers-color-scheme: dark)');
     const applyTheme = () => {
       const preference = snapshot.settings.theme || 'system';
@@ -105,10 +132,13 @@ export default function GlobalWheelWindow() {
     return () => window.removeEventListener('keydown', cancel);
   }, []);
 
+  // Keep the built-in raster wheel populated even if the window is shown
+  // before bootstrap finishes; the live registry replaces matching entries.
+  const capabilities = [...new Map([...provisionalImageCapabilities, ...snapshot.capabilities].map(capability => [capability.id, capability])).values()];
   const selectedCategories: Set<string> = new Set(externalFiles.map(knownCategory).filter(Boolean));
   const items: WheelItem[] = mode === 'actions'
     ? actions.map(action => ({ ...action, detail: 'Local file action' }))
-    : [...new Map(snapshot.capabilities
+    : [...new Map(capabilities
       .filter(capability => capability.available && capability.outputs.length)
       .filter(capability => mode !== 'tools' || operationName(capability) !== 'create-archive')
       .filter(capability => mode !== 'tools' || !(capability.category === 'image' && operationName(capability) === 'strip-metadata'))
@@ -121,7 +151,7 @@ export default function GlobalWheelWindow() {
       .flatMap(capability => (mode === 'convert' ? capability.outputs : ['']).map(format => {
         const coverage = externalFiles.filter(file => supports(capability, file)).length;
         const operation = operationName(capability);
-        const label = mode === 'convert' ? format.toUpperCase() : capability.category === 'video' ? videoToolLabels[operation] || capability.label : capability.label;
+        const label = mode === 'convert' ? format.toUpperCase() : capability.category === 'video' ? videoToolLabels[operation] || capability.label : capability.category === 'image' ? imageToolLabels[operation] || capability.label : capability.label;
         const Icon = capability.category === 'video' ? videoToolIcons[operation] : undefined;
         return [{ id: `${capability.id}|${format}`, label, icon: Icon ? <Icon size={17} aria-hidden="true"/> : undefined, detail: coverage === externalFiles.length ? `${coverage} ${coverage === 1 ? 'file' : 'files'} · Local` : `${coverage} of ${externalFiles.length} files · Others will be skipped` }];
       }))
@@ -157,7 +187,7 @@ export default function GlobalWheelWindow() {
         return;
       }
       const [capabilityId, format] = selectedChoice.split('|');
-      const capability = snapshot.capabilities.find(item => item.id === capabilityId && item.available && incoming.some(file => supports(item, file)));
+      const capability = capabilities.find(item => item.id === capabilityId && item.available && incoming.some(file => supports(item, file)));
       if (!capability) {
         await api.handoffGlobalFiles?.({ files: incoming, mode });
         return;
