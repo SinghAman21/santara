@@ -23,7 +23,7 @@ This is a startup and compile proof. It does **not** verify tray clicks, transpa
 
 - Test all four windows, tray/menu, wheel positioning/lifetime, file and folder drops, keyboard input, shutdown, visual layout, high contrast, and editor surfaces on this Ubuntu LTS GNOME desktop.
 - Build, install, launch, and test the shell on native Windows 10 and 11 x64 with WebView2. Wine/MinGW can check cross-build mechanics but cannot substitute for native Explorer and WebView2 behavior. The user will perform native Windows validation later.
-- Build the Windows shell installer and measure artifact bytes and **installed** bytes for all targets. The Linux shell-only `.deb` and AppImage were built and measured above; installed footprints remain unmeasured. The separate WebView2 offline prerequisite and small NSIS installer need native clean-machine and existing-runtime checks before their release sizes and flow are signed off.
+- Build the Windows shell installer and measure artifact bytes and **installed** bytes for all targets. The Linux shell-only `.deb` and AppImage were built and measured above; installed footprints remain unmeasured. The small NSIS installer needs native consent, download-failure, clean-machine and existing-runtime checks before its flow is signed off.
 - Decide how the shell exposes editor contexts for a valid WebView visual check without treating a browser fallback or mock as a production workflow.
 
 Under the revised code-first plan, continue implementing Phase 2 while these checks remain on the Phase 8 list. The shell evidence here does not establish parity or release readiness.

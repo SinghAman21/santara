@@ -10,7 +10,7 @@ Use Rust bindings to libvips for the primary local raster pipeline, with libvips
 
 Implementation note: the first Phase 3 code slice uses the local Rust `image` crate for basic raster routes while the libvips build dependency is unavailable. It removes metadata and lacks several Sharp editor recipes. It is a provisional processor, not the selected parity backend or a release claim; the gaps are listed in the parity matrix and must be closed before cleanup and release.
 
-Use Windows `webviewInstallMode: skip` with an NSIS preinstall hook that checks both per-machine and per-user WebView2 registry entries. If absent, the hook runs a separately distributed, Microsoft-signed Evergreen Standalone Installer for x64. This keeps the Santara setup small while retaining offline setup when both files are shipped together and reuses the existing shared system runtime. Linux `.deb` declares the system WebKitGTK 4.1 dependency; the AppImage's library inclusion and portability must be measured and tested on a clean Ubuntu LTS installation. The system WebView is a runtime dependency on both platforms.
+Use Windows `webviewInstallMode: skip` with an NSIS preinstall hook that checks both per-machine and per-user WebView2 registry entries. If absent, the hook asks permission, downloads Microsoft's signed Evergreen Bootstrapper, installs the shared Runtime, and continues only after verification. This keeps the Santara setup small and reuses an existing system Runtime without a download. Linux `.deb` declares the system WebKitGTK 4.1 dependency; the AppImage's library inclusion and portability must be measured and tested on a clean Ubuntu LTS installation. The system WebView is a runtime dependency on both platforms.
 
 ## Electron responsibility inventory
 

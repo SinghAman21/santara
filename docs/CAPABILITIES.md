@@ -21,7 +21,7 @@ The site presents local conversion across media, documents, and archives, drag-t
 | CAP-009 | Keyboard-operable UI, settings, meaningful disabled states | Browser scaffold covers only selected flows |
 | CAP-010 | Desktop drag wheel and global shortcuts | OS-specific research, implementation, and accessibility testing pending |
 | CAP-011 | File actions such as copy, move, reveal, copy path | Validate destinations and destructive-action policy; no macOS-only parity claim |
-| CAP-012 | Windows NSIS and Linux deb/AppImage x64 distribution | The 4.56 MB Windows NSIS setup checks for WebView2 and uses a separate offline prerequisite if absent; native Windows and clean-machine installation validation remain required |
+| CAP-012 | Windows NSIS and Linux deb/AppImage x64 distribution | Windows setup checks for WebView2, asks before downloading Microsoft's small bootstrapper when missing, then installs Santara; native Windows and clean-machine installation validation remain required |
 
 ## Sources
 
