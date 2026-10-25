@@ -75,7 +75,7 @@ The phase gates below are now acceptance checks collected in [the validation che
 
 - Build signed-ready Windows x64 `.exe` installer and Linux x64 `.deb`/AppImage configuration.
 - Decide whether the AppImage depends on system WebKitGTK or bundles additional libraries; state the trade-off clearly in user docs.
-- Decide WebView2 installation mode; do not claim an offline standalone install if the installer needs network access to fetch WebView2.
+- Use a small NSIS setup with a preinstall check for per-machine/per-user WebView2. Deliver Microsoft's signed Evergreen Standalone x64 installer as a separate prerequisite and run it only when WebView2 is missing; verify existing-runtime and clean-machine offline paths natively.
 - Include platform-specific runtime/native dependencies only; verify architecture, checksums/signatures, license notices, and SBOM/dependency inventory.
 - Measure download size and installed size separately. Compare with the Electron baseline and set a realistic size budget.
 - **Gate:** native Windows and Ubuntu LTS builds/install/uninstall/launch tests pass; offline behavior and dependency notices are reviewed.

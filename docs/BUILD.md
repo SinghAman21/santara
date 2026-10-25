@@ -20,7 +20,13 @@ These optional tools are not downloaded or bundled by Santara. Run `npm ci`, `np
 
 ## Windows 10/11 x64
 
-Install Node.js 22, Rust MSVC, Visual Studio Build Tools with Desktop development with C++, and Windows SDK. In an MSVC x64 Developer PowerShell, run `npm ci`, `npm run test`, `npm run build`, and `npm run dist:windows`. This builds and self-tests the isolated drag watcher before NSIS packaging. The NSIS configuration embeds a WebView2 offline installer; check actual offline installation and package size on both Windows versions. The release is unsigned until a reviewed signing setup is supplied.
+Install Node.js 22, Rust MSVC, Visual Studio Build Tools with Desktop development with C++, and Windows SDK. In an MSVC x64 Developer PowerShell, run `npm ci`, `npm run test`, `npm run build`, and `npm run dist:windows`. This builds and self-tests the isolated drag watcher before NSIS packaging. The Santara NSIS installer does not embed WebView2. Download Microsoft's Evergreen Standalone Installer for x64 separately, then prepare the two-file offline release with:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/prepare-windows-offline-release.ps1 -WebView2Installer "$env:USERPROFILE\Downloads\MicrosoftEdgeWebView2RuntimeInstallerX64.exe"
+```
+
+Distribute both files from `release/windows` together. Setup reuses the existing per-machine or per-user WebView2 Runtime; otherwise it runs the adjacent signed offline prerequisite silently and aborts if installation fails. The release is unsigned until a reviewed signing setup is supplied.
 
 ## Experimental Windows build from Ubuntu
 

@@ -46,7 +46,7 @@ Status: deferred integrated validation. Check boxes are evidence requirements, n
 ## Phase 6 packaging and licensing
 
 - [ ] Native Windows NSIS and Ubuntu `.deb`/AppImage build, install, uninstall and launch on clean target machines.
-- [ ] WebView2 offline installer policy verified without network; Linux WebKitGTK/AppImage dependency behavior documented and tested.
+- [ ] Windows setup on a clean machine installs WebView2 from the separate offline prerequisite before Santara can launch; setup on a machine with an existing per-machine or per-user Runtime reuses it without requiring the prerequisite file. Confirm both paths offline. Linux WebKitGTK/AppImage dependency behavior is documented and tested.
 - [ ] Final installer bytes, installed bytes, architecture, hashes/signatures, notices and SBOM/dependency inventory.
 
 ## Phase 7 cleanup

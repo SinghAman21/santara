@@ -24,9 +24,6 @@
   "bundle": {
     "active": true,
     "icon": ["../build/icon.png", "../build/icon.ico"],
-    "resources": { "../THIRD_PARTY_NOTICES.md": "licenses/THIRD_PARTY_NOTICES.md" },
-    "windows": {
-      "webviewInstallMode": { "type": "offlineInstaller" }
-    }
+    "resources": { "../THIRD_PARTY_NOTICES.md": "licenses/THIRD_PARTY_NOTICES.md" }
   }
 }
