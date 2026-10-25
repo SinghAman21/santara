@@ -247,14 +247,21 @@ fn main() {
                 WindowEvent::DragDrop(DragDropEvent::Enter { paths, .. }) => {
                     eprintln!("Santara drag entered {} ({} entries)", window.label(), paths.len());
                 }
-                WindowEvent::DragDrop(DragDropEvent::Drop { paths, .. }) => {
+                WindowEvent::DragDrop(DragDropEvent::Over { position }) => {
+                    if window.label() == "wheel" {
+                        let point = position.to_logical::<f64>(window.scale_factor().unwrap_or(1.0));
+                        let _ = window.emit("santara:native-drag-over", serde_json::json!({ "x": point.x, "y": point.y }));
+                    }
+                }
+                WindowEvent::DragDrop(DragDropEvent::Drop { paths, position }) => {
                     let app = window.app_handle();
                     let state = app.state::<services::AppState>();
                     if let Err(error) = state.record_drop(window.label(), paths) {
                         eprintln!("Santara drop rejected: {error}");
                         let _ = window.emit("santara:native-drop-error", error);
                     } else {
-                        let _ = window.emit("santara:native-drop", ());
+                        let point = position.to_logical::<f64>(window.scale_factor().unwrap_or(1.0));
+                        let _ = window.emit("santara:native-drop", serde_json::json!({ "x": point.x, "y": point.y }));
                     }
                 }
                 WindowEvent::DragDrop(DragDropEvent::Leave) => {

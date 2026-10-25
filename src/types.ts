@@ -46,6 +46,7 @@ export interface Bridge {
   onGlobalNotice?(callback: (notice: string) => void): () => void;
   onGlobalPage?(callback: (page: 'converter' | 'activity') => void): () => void;
   onUpdate(callback: (update: Partial<Snapshot>) => void): () => void;
-  onNativeDrop?(callback: (files: LocalFile[]) => void, onError?: (message: string) => void): () => void;
+  onNativeDrop?(callback: (files: LocalFile[], position?: { x: number; y: number }) => void, onError?: (message: string) => void): () => void;
+  onNativeDragOver?(callback: (position: { x: number; y: number }) => void): () => void;
 }
 declare global { interface Window { santara?: Bridge } }

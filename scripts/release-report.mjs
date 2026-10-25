@@ -6,21 +6,26 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const bundle = path.join(root, 'src-tauri/target/release/bundle');
+const bundles = [
+  path.join(root, 'src-tauri/target/release/bundle'),
+  path.join(root, 'src-tauri/target/x86_64-pc-windows-msvc/release/bundle'),
+];
 const packages = [];
 async function sha256(filename) {
   const hash = createHash('sha256');
   for await (const chunk of createReadStream(filename)) hash.update(chunk);
   return hash.digest('hex');
 }
-for (const [folder, extension] of [['nsis', '.exe'], ['deb', '.deb'], ['appimage', '.AppImage']]) {
-  let names = [];
-  try { names = await readdir(path.join(bundle, folder)); } catch {}
-  for (const name of names.filter(value => value.startsWith('Santara_') && value.endsWith(extension))) {
-    const filename = path.join(bundle, folder, name);
-    packages.push({ file: path.relative(root, filename), installerBytes: (await stat(filename)).size,
-      sha256: await sha256(filename),
-      installedBytes: null, installValidation: 'Phase 8 pending' });
+for (const bundle of bundles) {
+  for (const [folder, extension] of [['nsis', '.exe'], ['deb', '.deb'], ['appimage', '.AppImage']]) {
+    let names = [];
+    try { names = await readdir(path.join(bundle, folder)); } catch {}
+    for (const name of names.filter(value => value.startsWith('Santara_') && value.endsWith(extension))) {
+      const filename = path.join(bundle, folder, name);
+      packages.push({ file: path.relative(root, filename), installerBytes: (await stat(filename)).size,
+        sha256: await sha256(filename),
+        installedBytes: null, installValidation: 'Phase 8 pending' });
+    }
   }
 }
 if (!packages.length) throw new Error('No Tauri installer artifacts found');

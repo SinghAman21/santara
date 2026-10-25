@@ -24,13 +24,13 @@ Install Node.js 22, Rust MSVC, Visual Studio Build Tools with Desktop developmen
 
 ## Experimental Windows build from Ubuntu
 
-The Windows drag watcher can be cross compiled with the existing MinGW and Wine tools using `npm run build:windows-hook:cross`. A full NSIS build has not yet completed on this Ubuntu host. [Tauri's cross compilation instructions](https://tauri.app/distribute/windows-installer/#cross-compiling-windows-applications-on-linux) call for `lld`, `llvm`, `nsis`, and `cargo-xwin`; `clang` supports C/C++ build scripts. Install the missing system packages yourself with:
+The Windows drag watcher can be cross compiled with the existing MinGW and Wine tools using `npm run build:windows-hook:cross`. A full x64 NSIS cross build completed on this Ubuntu host on 2026-10-25; see the measured artifact in [packaging](TAURI_PACKAGING.md). [Tauri's cross compilation instructions](https://tauri.app/distribute/windows-installer/#cross-compiling-windows-applications-on-linux) call for `lld`, `llvm`, `nsis`, and `cargo-xwin`; `clang` supports C/C++ build scripts. Install the missing system packages yourself with:
 
 ```bash
 sudo apt update && sudo apt install lld llvm nsis clang
 ```
 
-This host also lacks `rustup` and the Windows MSVC Rust target. Install rustup for your user, add `x86_64-pc-windows-msvc`, and install `cargo-xwin` before trying the Tauri NSIS cross build. The Ubuntu `rustup` package conflicts with the currently installed system `cargo` and `rustc`, so it is deliberately excluded from the sudo command. A cross built installer still needs native Windows 10/11 testing.
+Install rustup for your user, add `x86_64-pc-windows-msvc`, and install `cargo-xwin` before trying the Tauri NSIS cross build. This host now has those user-level tools installed. The Ubuntu `rustup` package conflicts with the currently installed system `cargo` and `rustc`, so it is deliberately excluded from the sudo command. A cross built installer still needs native Windows 10/11 testing.
 
 ```bash
 rustup target add x86_64-pc-windows-msvc

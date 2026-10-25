@@ -35,3 +35,11 @@ The latest `.deb` is **8,995,988 bytes** (SHA-256 `fa7f06e733157c12c7cba6b319a89
 ### Strict double-tap build, 2026-10-24
 
 `npm run dist:linux` completed both bundles. The `.deb` is **8,996,388 bytes** (SHA-256 `d5b7930a164cfdb54a1484c5347d5afed940b78cf2f52a1093b29ceb339a0f3e`); its extracted regular-file payload is **25,033,745 bytes**, and Debian metadata reports `Installed-Size: 24495` KiB. The AppImage is **201,816,568 bytes** (SHA-256 `f68620943a5a36895f0aabc6eafef385c3687f9325bcbcf0f26359342f7e944f`); its build AppDir occupies **590,122,520 bytes**. These are actual package and unpacked measurements, **not** installed sizes. The AppImage stayed running for a planned 12-second timeout under isolated D-Bus/Xvfb, which checks startup only. The installed `/usr/bin/santara` is still an older build. Native installation and GNOME/Windows file-manager drags remain to be checked.
+
+### Background conversion and native pointer drop build, 2026-10-25
+
+`npx tauri build --bundles deb` produced a `.deb` of **8,998,682 bytes** (SHA-256 `9a354c0f50d6354edd4a8a2fbb95eeae8adbc3a69c5332dcd520b84cb399efab`). The extracted package payload is **25,080,721 bytes**; Debian metadata reports `Installed-Size: 24540` KiB. The extracted executable stayed running for a planned 10-second isolated D-Bus/Xvfb smoke test. These are actual artifact and payload measurements, **not** an installed footprint or a real GNOME file-manager drag test. The AppImage from the prior build does not include this change.
+
+### Windows x64 NSIS cross build, 2026-10-25
+
+Using user-level `rustup` and `cargo-xwin` plus the installed Ubuntu NSIS/LLVM tools, the Windows target compiled and `makensis` produced `Santara_0.1.0_x64-setup.exe`. The installer is **222,176,073 bytes** (SHA-256 `6cc50959715b9a40be6923b1ae1a4404da4693f3852c1e97338d99353da84c10`). The bundled `santara.exe` is a **17,795,072-byte** x86-64 PE application. The generated NSIS script targets x64 and embeds the offline WebView2 installer and the 589,054-byte Windows drag watcher. These are actual artifact measurements; **Windows installed size has not been measured**. The cross built installer is unsigned and still needs install/uninstall, wheel, editor, conversion, accessibility, and offline checks on native Windows 10 and 11 x64.

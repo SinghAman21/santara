@@ -6,6 +6,8 @@ interface MockControl {
   calls: { method: string; value: unknown }[];
   emit(update: Partial<Snapshot>): void;
   emitWheelMode(mode: string, newDrag?: boolean): void;
+  emitNativeDragOver(position: { x: number; y: number }): void;
+  emitNativeDrop(files: Snapshot['files'], position: { x: number; y: number }): void;
   emitGlobalFiles(files: Snapshot['files'], mode: 'convert' | 'tools' | 'actions'): void;
   emitImageContext(context: ImageEditorContext): void;
   emitVideoContext(context: VideoEditorContext): void;
@@ -21,6 +23,8 @@ test.beforeEach(async ({ page }) => {
       { id: 'subtitle', path: '/fixtures/captions.srt', name: 'captions.srt', ext: 'srt', size: 64, category: 'subtitle' },
     ];
     const droppedVideo: Snapshot['files'] = [{ id: 'video', path: '/fixtures/clip.mp4', name: 'clip.mp4', ext: 'mp4', size: 4096, category: 'video' }];
+    const nativeDragOverListeners = new Set<(position: { x: number; y: number }) => void>();
+    const nativeDropListeners = new Set<(files: Snapshot['files'], position?: { x: number; y: number }) => void>();
     const mergeVideos: Snapshot['files'] = [...droppedVideo, { id: 'video-2', path: '/fixtures/clip-2.mp4', name: 'clip-2.mp4', ext: 'mp4', size: 2048, category: 'video' }];
     const state: Snapshot = {
       platform: 'linux', files: [], jobs: [],
@@ -107,10 +111,12 @@ test.beforeEach(async ({ page }) => {
       applyVideoTool: async request => { record('applyVideoTool', request); return { queued: true }; },
       closeVideoTool: async () => { record('closeVideoTool', null); },
       onWheelMode: callback => { wheelModeListeners.add(callback); return () => { wheelModeListeners.delete(callback); }; },
+      onNativeDragOver: callback => { nativeDragOverListeners.add(callback); return () => { nativeDragOverListeners.delete(callback); }; },
+      onNativeDrop: callback => { nativeDropListeners.add(callback); return () => { nativeDropListeners.delete(callback); }; },
       onGlobalFiles: callback => { globalFilesListeners.add(callback); return () => { globalFilesListeners.delete(callback); }; },
       onUpdate: callback => { listeners.add(callback); return () => { listeners.delete(callback); }; },
     };
-    window.__santaraTest = { state, calls, emit, emitWheelMode: (mode, newDrag) => { for (const listener of wheelModeListeners) listener(mode, newDrag); }, emitGlobalFiles: (files, mode) => { for (const listener of globalFilesListeners) listener({ files, mode }); }, emitImageContext: context => { imageContext = structuredClone(context); for (const listener of imageContextListeners) listener(structuredClone(context)); }, emitVideoContext: context => { videoContext = structuredClone(context); for (const listener of videoContextListeners) listener(structuredClone(context)); } };
+    window.__santaraTest = { state, calls, emit, emitWheelMode: (mode, newDrag) => { for (const listener of wheelModeListeners) listener(mode, newDrag); }, emitNativeDragOver: position => { for (const listener of nativeDragOverListeners) listener(position); }, emitNativeDrop: (files, position) => { for (const listener of nativeDropListeners) listener(files, position); }, emitGlobalFiles: (files, mode) => { for (const listener of globalFilesListeners) listener({ files, mode }); }, emitImageContext: context => { imageContext = structuredClone(context); for (const listener of imageContextListeners) listener(structuredClone(context)); }, emitVideoContext: context => { videoContext = structuredClone(context); for (const listener of videoContextListeners) listener(structuredClone(context)); } };
     Object.defineProperty(window, 'santara', { configurable: true, value: api });
   });
 });
@@ -281,7 +287,7 @@ test('global citrus overlay accepts and queues a drop directly on a wheel slice'
     await expect(slice).toHaveClass(/chosen/);
     await slice.dispatchEvent('drop', { dataTransfer: transfer });
     await expect.poll(() => page.evaluate(() => window.__santaraTest.calls.find(call => call.method === 'enqueue')?.value)).toMatchObject({ operation: 'convert', format: 'jpg' });
-    expect(await page.evaluate(() => window.__santaraTest.calls.find(call => call.method === 'finishGlobalWheel')?.value)).toBe('activity');
+    expect(await page.evaluate(() => window.__santaraTest.calls.find(call => call.method === 'finishGlobalWheel')?.value)).toBe('background');
     await page.evaluate(() => window.__santaraTest.emitWheelMode('convert', true));
     const nextTransfer = await page.evaluateHandle(() => {
       const value = new DataTransfer();
@@ -294,6 +300,42 @@ test('global citrus overlay accepts and queues a drop directly on a wheel slice'
       await expect(page.getByRole('menuitem', { name: /^JPG/ })).toHaveCount(0);
     } finally { await nextTransfer.dispose(); }
   } finally { await transfer.dispose(); }
+});
+
+test('native wheel drop converts at the pointer and keeps the workspace closed', async ({ page }) => {
+  await page.goto('/?santara-wheel=1&mode=convert');
+  const slice = page.locator('.citrus-label[data-wheel-item="image:convert|jpg"]');
+  await expect(slice).toBeVisible();
+  const bounds = await slice.boundingBox();
+  expect(bounds).not.toBeNull();
+  const position = { x: bounds!.x + bounds!.width / 2, y: bounds!.y + bounds!.height / 2 };
+  await page.evaluate(point => window.__santaraTest.emitNativeDragOver(point), position);
+  await expect(slice).toHaveClass(/chosen/);
+  await page.evaluate(point => window.__santaraTest.emitNativeDrop([
+    { id: 'image', path: '/fixtures/pixel.png', name: 'pixel.png', ext: 'png', size: 120, category: 'image' },
+  ], point), position);
+  await expect.poll(() => page.evaluate(() => window.__santaraTest.calls.find(call => call.method === 'enqueue')?.value)).toMatchObject({ operation: 'convert', format: 'jpg' });
+  expect(await page.evaluate(() => window.__santaraTest.calls.find(call => call.method === 'finishGlobalWheel')?.value)).toBe('background');
+  expect(await page.evaluate(() => window.__santaraTest.calls.some(call => call.method === 'handoffGlobalFiles'))).toBe(false);
+});
+
+test('native drop outside a slice does not reuse a previously hovered conversion', async ({ page }) => {
+  await page.goto('/?santara-wheel=1&mode=convert');
+  const slice = page.locator('.citrus-label[data-wheel-item="image:convert|jpg"]');
+  await expect(slice).toBeVisible();
+  const sliceBounds = await slice.boundingBox();
+  const coreBounds = await page.locator('.citrus-core').boundingBox();
+  expect(sliceBounds).not.toBeNull();
+  expect(coreBounds).not.toBeNull();
+  const hovered = { x: sliceBounds!.x + sliceBounds!.width / 2, y: sliceBounds!.y + sliceBounds!.height / 2 };
+  const dropped = { x: coreBounds!.x + coreBounds!.width / 2, y: coreBounds!.y + coreBounds!.height / 2 };
+  await page.evaluate(point => window.__santaraTest.emitNativeDragOver(point), hovered);
+  await expect(slice).toHaveClass(/chosen/);
+  await page.evaluate(point => window.__santaraTest.emitNativeDrop([
+    { id: 'image', path: '/fixtures/pixel.png', name: 'pixel.png', ext: 'png', size: 120, category: 'image' },
+  ], point), dropped);
+  await expect.poll(() => page.evaluate(() => window.__santaraTest.calls.some(call => call.method === 'handoffGlobalFiles'))).toBe(true);
+  expect(await page.evaluate(() => window.__santaraTest.calls.some(call => call.method === 'enqueue'))).toBe(false);
 });
 
 test('global wheel hands off files when no slice was selected', async ({ page }) => {
@@ -489,6 +531,15 @@ test('image editor exposes a real padded background canvas and directional zoom 
   await doubleTap(page, 'Alt');
   await page.getByRole('menuitem', { name: /^Edit photo/ }).click();
   const photoEditor = page.getByRole('dialog', { name: 'Edit photo' });
+  await expect(photoEditor.getByRole('button', { name: 'Move image up' })).toBeEnabled();
+  await photoEditor.getByRole('button', { name: 'Move image up' }).click();
+  await expect(photoEditor.locator('.image-tool-preview')).toHaveAttribute('style', /--image-pan-y: -48px/);
+  await photoEditor.getByRole('button', { name: 'Move image down' }).click();
+  await expect(photoEditor.locator('.image-tool-preview')).toHaveAttribute('style', /--image-pan-y: 0px/);
+  await photoEditor.getByRole('button', { name: 'Move image left' }).click();
+  await expect(photoEditor.locator('.image-tool-preview')).toHaveAttribute('style', /--image-pan-x: -48px/);
+  await photoEditor.getByRole('button', { name: 'Move image right' }).click();
+  await expect(photoEditor.locator('.image-tool-preview')).toHaveAttribute('style', /--image-pan-x: 0px/);
   await photoEditor.getByRole('button', { name: 'Zoom in' }).click();
   await photoEditor.getByRole('button', { name: 'Move image left' }).click();
   await expect(photoEditor.locator('.image-tool-preview')).toHaveAttribute('style', /--image-pan-x: -48px/);

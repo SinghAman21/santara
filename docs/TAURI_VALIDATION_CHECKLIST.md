@@ -31,7 +31,7 @@ Status: deferred integrated validation. Check boxes are evidence requirements, n
 
 ## Phase 4 wheel and integrations
 
-- [ ] Configurable double-tap Shift, Alt/Ctrl+Shift and Ctrl modes (400 ms); a key held before drag, long press, or single new press must not open the wheel; shortcut conflicts, drop handoff and keyboard fallback.
+- [ ] Configurable double-tap Shift, Alt/Ctrl+Shift and Ctrl modes (400 ms); a key held before drag, long press, or single new press must not open the wheel; shortcut conflicts, native pointer-selected drop, silent conversion without opening the workspace, failure handoff and keyboard fallback.
 - [ ] Drop the same file twice; both selections retain a usable stable ID. Confirm successful conversion opens Activity and failed routes retain the files with visible feedback.
 - [ ] Real Explorer drags on Windows 10/11 and real GNOME Files drags on Ubuntu LTS, with optional helper/extension present and absent.
 - [ ] Pointer position, focus, Escape, drag ordering, mixed DPI and no stale-window callbacks.

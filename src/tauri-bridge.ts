@@ -55,10 +55,11 @@ export const tauriBridge: Bridge = {
   onGlobalPage: callback => subscription('santara:global-page', callback),
   onUpdate: callback => subscription('santara:update', callback),
   onNativeDrop: (callback, onError) => {
-    const stopDrop = subscription<void>('santara:native-drop', () => {
-      void invoke<LocalFile[]>('consume_drop').then(callback).catch(error => onError?.(error instanceof Error ? error.message : String(error)));
+    const stopDrop = subscription<{ x: number; y: number } | null>('santara:native-drop', position => {
+      void invoke<LocalFile[]>('consume_drop').then(files => callback(files, position || undefined)).catch(error => onError?.(error instanceof Error ? error.message : String(error)));
     });
     const stopError = subscription<string>('santara:native-drop-error', message => onError?.(message));
     return () => { stopDrop(); stopError(); };
   },
+  onNativeDragOver: callback => subscription<{ x: number; y: number }>('santara:native-drag-over', callback),
 };
