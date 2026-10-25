@@ -58,7 +58,9 @@ export default function GlobalWheelWindow() {
   const nativeDropHandler = useRef<(files: LocalFile[], position?: { x: number; y: number }) => void>(() => {});
   const nativeOverHandler = useRef<(position: { x: number; y: number }) => void>(() => {});
   const seenDrag = useRef(false);
-  const externalFiles = hints.length ? hints : [{ id: 'provisional-image', name: 'Dragged image', path: '', size: 0, ext: '', category: 'image' as const }];
+  const externalFiles = hints.length
+    ? hints.map(file => file.ext || knownCategory(file) ? file : { ...file, name: 'Dragged image', category: 'image' as const })
+    : [{ id: 'provisional-image', name: 'Dragged image', path: '', size: 0, ext: '', category: 'image' as const }];
 
   useEffect(() => {
     void api.bootstrap().then(setSnapshot);
