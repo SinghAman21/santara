@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowRight, ArrowUpRight, Check, FileOutput, LockKeyhole } from 'lucide-react';
-import { families, type Family, type WheelOption } from '../tools-data';
+import { families, familyOptions, catalogueHref, catalogueSelection, type Family, type WheelOption } from '../tools-data';
 import { ToolMotion } from './ToolMotion';
 
 type Mode = 'convert' | 'tools';
@@ -62,9 +62,9 @@ function outputName(family: Family, mode: Mode, operation?: WheelOption) {
 
 function FilePreview({ family, mode, operation }: { family: Family; mode: Mode; operation?: WheelOption }) {
   if (mode === 'tools' && operation) return <div className="desk-canvas tool-canvas">
-    <div className="desk-canvas-header"><span>ILLUSTRATIVE TOOL MOTION</span><span>{family.id === 'audio' ? 'PLANNED / NOT IN APP' : 'LOCAL / NO UPLOAD'}</span></div>
+    <div className="desk-canvas-header"><span>ILLUSTRATIVE TOOL MOTION</span><span>{operation.availability === 'concept' ? 'PLANNED / NOT IN APP' : 'LOCAL / NO UPLOAD'}</span></div>
     <ToolMotion key={`${family.id}-${operation.label}`} family={family} operation={operation}/>
-    <div className="desk-canvas-foot">{family.id === 'audio' ? <LockKeyhole size={15}/> : <Check size={15}/>}<span>{family.id === 'audio' ? 'Audio editor tools are design concepts only.' : 'The original stays in place.'}</span></div>
+    <div className="desk-canvas-foot">{operation.availability === 'concept' ? <LockKeyhole size={15}/> : <Check size={15}/>}<span>{operation.availability === 'concept' ? 'These editor tools are design concepts only.' : 'The original stays in place.'}</span></div>
   </div>;
   const Icon = family.Icon;
   const source = family.id === 'archives' && mode === 'tools' ? 'project.zip' : sampleFiles[family.id];
@@ -109,14 +109,16 @@ function FamilyPicker({ current, onSelect }: { current: string; onSelect: (id: s
 }
 
 export function ToolsPage({ onInstall }: { onInstall: () => void }) {
-  const [step, setStep] = useState<TourStep>(initialStep);
-  const [autoplay, setAutoplay] = useState(() => !window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const [step, setStep] = useState<TourStep>(()=>catalogueSelection(window.location.search)??initialStep);
+  const [autoplay, setAutoplay] = useState(() => !catalogueSelection(window.location.search)&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   const [tourNonce, setTourNonce] = useState(0);
   const operationListRef = useRef<HTMLDivElement>(null);
   const family = families.find(item => item.id === step.familyId) ?? families[0];
   const mode = step.mode;
-  const options = mode === 'convert' ? family.outputs : family.tools;
+  const options = familyOptions(family,mode);
   const selected = options[step.index];
+  const conceptMode=selected?.availability==='concept';
+  const optionStatus=conceptMode?'disabled':selected?.availability==='conditional'?'conditional':family.status;
   const currentIndex = selected ? step.index + 1 : 0;
   const hasBothModes = family.outputs.length > 0 && family.tools.length > 0;
   const duration = mode === 'convert' ? CONVERT_DURATION : TOOL_DURATION;
@@ -137,7 +139,12 @@ export function ToolsPage({ onInstall }: { onInstall: () => void }) {
     else if (activeBox.bottom > listBox.bottom) list.scrollTop += activeBox.bottom - listBox.bottom;
   }, [step.familyId, step.mode, step.index]);
 
-  const selectStep = (next: TourStep) => { setStep(next); setTourNonce(value => value + 1); };
+  const selectStep = (next: TourStep) => {
+    setStep(next);setAutoplay(false);setTourNonce(value => value + 1);
+    const selectedFamily=families.find(item=>item.id===next.familyId);
+    if(selectedFamily)window.history.replaceState(window.history.state,'',catalogueHref(selectedFamily,next.mode,familyOptions(selectedFamily,next.mode)[next.index]));
+  };
+  useEffect(()=>{const sync=()=>{const next=catalogueSelection(window.location.search);if(next){setStep(next);setAutoplay(false);}};window.addEventListener('popstate',sync);return()=>window.removeEventListener('popstate',sync);},[]);
   const selectFamily = (id: string) => {
     const nextFamily = families.find(item => item.id === id) ?? families[0];
     selectStep(startingStep(nextFamily));
@@ -162,18 +169,18 @@ export function ToolsPage({ onInstall }: { onInstall: () => void }) {
       <div className="desk-layout">
         <FamilyPicker current={family.id} onSelect={selectFamily}/>
         <div className="desk-workspace">
-          <div className="desk-workspace-top"><span>{family.name.toUpperCase()} / WORKFLOW</span><span className={`desk-state status-${family.status}`}>{family.id === 'audio' && mode === 'tools' ? 'EDITOR CONCEPT · NOT ENABLED' : family.status === 'bundled' ? 'BUILT IN' : family.status === 'conditional' ? 'ENGINE DEPENDENT' : 'CURRENTLY DISABLED'}</span></div>
+          <div className="desk-workspace-top"><span>{family.name.toUpperCase()} / WORKFLOW</span><span className={`desk-state status-${optionStatus}`}>{conceptMode ? 'EDITOR CONCEPT · NOT ENABLED' : optionStatus === 'bundled' ? 'BUILT IN' : optionStatus === 'conditional' ? 'ENGINE DEPENDENT' : 'CURRENTLY DISABLED'}</span></div>
           <div className="desk-tour-line"><span>{autoplay && options.length ? `AUTO TOUR / ${mode === 'convert' ? 'CONVERT' : `${String(currentIndex).padStart(2, '0')} OF ${String(options.length).padStart(2, '0')} TOOLS`}` : 'MANUAL EXPLORATION'}</span><span>{autoplay && options.length ? `${Math.round(duration / 1000)} SEC` : 'PAUSED'}</span></div>
           <div className="desk-tour-progress" aria-hidden="true">{autoplay && options.length && <span key={`${step.familyId}-${step.mode}-${step.index}-${tourNonce}`} style={{ animationDuration: `${duration}ms` }}/>}</div>
           <div className="desk-workspace-body">
             <FilePreview key={`${family.id}-${mode}-${selected?.label ?? 'empty'}-${tourNonce}`} family={family} mode={mode} operation={selected}/>
             <div className="desk-controls">
-              <div className="desk-control-head"><span>02</span><div><small>{options.length > 6 ? 'CHOOSE WHAT HAPPENS · SCROLL OPTIONS' : 'CHOOSE WHAT HAPPENS'}</small><h3>{mode === 'convert' ? 'Change the format.' : family.id === 'audio' ? 'Explore the concept.' : 'Shape the file.'}</h3></div></div>
+              <div className="desk-control-head"><span>02</span><div><small>{options.length > 6 ? 'CHOOSE WHAT HAPPENS · SCROLL OPTIONS' : 'CHOOSE WHAT HAPPENS'}</small><h3>{mode === 'convert' ? 'Change the format.' : conceptMode ? 'Explore the concept.' : 'Shape the file.'}</h3></div></div>
               {hasBothModes && <div className="desk-mode-switch" role="group" aria-label="Choose action type">
                 <button type="button" aria-pressed={mode === 'convert'} onClick={() => selectStep({ familyId: family.id, mode: 'convert', index: startingStep(family).index })}><kbd>⇧</kbd><span>Convert</span></button>
-                <button type="button" aria-pressed={mode === 'tools'} onClick={() => selectStep({ familyId: family.id, mode: 'tools', index: 0 })}><kbd>⌥</kbd><span>{family.id === 'audio' ? 'Tool concepts' : 'Tools'}</span></button>
+                <button type="button" aria-pressed={mode === 'tools'} onClick={() => selectStep({ familyId: family.id, mode: 'tools', index: 0 })}><kbd>⌥</kbd><span>{family.tools.every(option=>option.availability==='concept') ? 'Tool concepts' : 'Tools'}</span></button>
               </div>}
-              {family.id === 'audio' && mode === 'tools' && <p className="desk-concept-note"><LockKeyhole size={14}/> Design previews only. These audio editors are not in the current app.</p>}
+              {conceptMode && <p className="desk-concept-note"><LockKeyhole size={14}/> Design previews only. These editor concepts are not in the current app.</p>}
               {options.length ? <>
                 <div ref={operationListRef} className={`desk-operation-list ${options.length > 6 ? 'is-scrollable' : ''}`} role="group" aria-label={`${family.name} ${mode === 'convert' ? 'formats' : 'tools'}`}>
                   {options.map((operation, index) => <button type="button" key={operation.label} aria-pressed={selected?.label === operation.label} onClick={() => selectStep({ familyId: family.id, mode, index })} className="desk-operation">
@@ -181,7 +188,7 @@ export function ToolsPage({ onInstall }: { onInstall: () => void }) {
                   </button>)}
                 </div>
               </> : <div className="desk-empty"><LockKeyhole size={20}/><strong>{family.status === 'disabled' ? 'This route is paused.' : 'No separate tool window yet.'}</strong><p>{family.status === 'disabled' ? family.detail : family.caveat}</p></div>}
-              <div className="desk-selected" aria-live={autoplay ? 'off' : 'polite'}><div className="desk-selected-top"><span>{family.id === 'audio' && mode === 'tools' ? '03 / PLANNED INTERACTION' : '03 / EXPECTED RESULT'}</span><span>{options.length ? `${currentIndex} OF ${options.length}` : 'NO ACTION'}</span></div><h4>{selected?.label ?? 'Available when verified'}</h4><p>{selected?.detail ?? family.caveat}</p><small>{family.backend}</small></div>
+              <div className="desk-selected" aria-live={autoplay ? 'off' : 'polite'}><div className="desk-selected-top"><span>{conceptMode ? '03 / PLANNED INTERACTION' : '03 / EXPECTED RESULT'}</span><span>{options.length ? `${currentIndex} OF ${options.length}` : 'NO ACTION'}</span></div><h4>{selected?.label ?? 'Available when verified'}</h4><p>{selected?.detail ?? family.caveat}</p><small>{selected?.backend??family.backend}</small></div>
             </div>
           </div>
           <div className="desk-workspace-bottom"><p>{family.caveat}</p><span>{family.formats}</span></div>

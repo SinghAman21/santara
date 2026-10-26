@@ -26,7 +26,8 @@
     "dist:linux": "npm run tauri:dist:linux",
     "check:release": "node scripts/check-release.mjs",
     "release:report": "node scripts/release-report.mjs",
-    "preview": "vite preview --host 127.0.0.1"
+    "preview": "vite preview --host 127.0.0.1",
+    "test:website": "playwright test --config website/playwright.config.ts"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.4",
