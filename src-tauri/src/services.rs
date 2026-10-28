@@ -196,7 +196,7 @@ impl AppState {
                     for job in &mut jobs {
                         if ["queued", "preparing", "processing", "publishing"].contains(&job.status.as_str()) {
                             job.status = "failed".into();
-                            job.error = Some("Interrupted when Santara closed".into());
+                            job.error = Some("Interrupted when Santra closed".into());
                         }
                     }
                     for job in &jobs {
@@ -229,7 +229,7 @@ impl AppState {
     }
 
     fn lock(&self) -> Result<std::sync::MutexGuard<'_, Data>, String> {
-        self.data.lock().map_err(|_| "Santara state is unavailable".into())
+        self.data.lock().map_err(|_| "Santra state is unavailable".into())
     }
 
     fn update_job(&self, app: &AppHandle, id: &str, status: &str, output: Option<String>, error: Option<String>) -> Result<(), String> {
@@ -244,7 +244,7 @@ impl AppState {
         persist_json(&self.jobs_file, &data.jobs)?;
         let jobs = data.jobs.clone();
         drop(data);
-        let _ = app.emit("santara:update", serde_json::json!({ "jobs": jobs }));
+        let _ = app.emit("santra:update", serde_json::json!({ "jobs": jobs }));
         Ok(())
     }
 
@@ -286,7 +286,7 @@ impl AppState {
         drop(data);
         if !selected.is_empty() {
             let update = serde_json::json!({ "files": selected });
-            let _ = app.emit("santara:update", update);
+            let _ = app.emit("santra:update", update);
         }
         Ok(selected)
     }
@@ -637,7 +637,7 @@ fn validate_settings(mut settings: Settings, patch: Value) -> Result<Settings, S
 }
 
 fn persist_json<T: Serialize + ?Sized>(path: &Path, value: &T) -> Result<(), String> {
-    let temporary = path.with_file_name(format!(".santara-{}.tmp", Uuid::new_v4()));
+    let temporary = path.with_file_name(format!(".santra-{}.tmp", Uuid::new_v4()));
     let serialized = serde_json::to_vec_pretty(value).map_err(|error| error.to_string())?;
     let result = (|| {
         let mut options = OpenOptions::new();
@@ -695,9 +695,9 @@ pub async fn save_settings(app: AppHandle, window: tauri::WebviewWindow, state: 
     if let Some(media) = next_media { *state.media.lock().map_err(|_| "Media backend is unavailable")? = media; }
     if let Some(pdf) = next_pdf { *state.pdf.lock().map_err(|_| "PDF backend is unavailable")? = pdf; }
     if let Some(documents) = next_documents { *state.documents.lock().map_err(|_| "Document backend is unavailable")? = documents; }
-    *state.semaphore.lock().map_err(|_| "Santara queue is unavailable")? = Arc::new(Semaphore::new(usize::from(updated.concurrency)));
+    *state.semaphore.lock().map_err(|_| "Santra queue is unavailable")? = Arc::new(Semaphore::new(usize::from(updated.concurrency)));
     let snapshot = state.snapshot()?;
-    let _ = app.emit("santara:update", serde_json::json!({ "settings": updated, "backends": snapshot.backends, "capabilities": snapshot.capabilities }));
+    let _ = app.emit("santra:update", serde_json::json!({ "settings": updated, "backends": snapshot.backends, "capabilities": snapshot.capabilities }));
     #[cfg(windows)]
     if previous.shortcuts != updated.shortcuts { crate::windows_watcher::restart(&app); }
     Ok(updated)
@@ -729,7 +729,7 @@ pub struct EnqueueRequest {
 
 fn schedule_job(app: AppHandle, id: String) -> Result<(), String> {
     let state = app.state::<AppState>();
-    let semaphore = state.semaphore.lock().map_err(|_| "Santara queue is unavailable")?.clone();
+    let semaphore = state.semaphore.lock().map_err(|_| "Santra queue is unavailable")?.clone();
     tauri::async_runtime::spawn(async move {
         let Ok(_permit) = semaphore.acquire_owned().await else { return };
         let job = {
@@ -791,8 +791,8 @@ fn run_local_job(app: &AppHandle, job: &Job, settings: &Settings) -> Result<Opti
     if base.is_empty() || base.len() > 240 || base.chars().any(|ch| ch.is_control() || ch == '/' || ch == '\\') {
         return Err("Invalid output name".into());
     }
-    let temp = if job.operation == "metadata" { directory.join(format!(".santara-{}.{}", Uuid::new_v4(), job.format)) }
-        else { directory.join(format!(".santara-{}.tmp", Uuid::new_v4())) };
+    let temp = if job.operation == "metadata" { directory.join(format!(".santra-{}.{}", Uuid::new_v4(), job.format)) }
+        else { directory.join(format!(".santra-{}.tmp", Uuid::new_v4())) };
     let result = (|| {
         if let Some(bytes) = bytes {
             let mut options = OpenOptions::new();
@@ -1004,7 +1004,7 @@ pub fn enqueue(app: AppHandle, window: tauri::WebviewWindow, state: State<'_, Ap
         data.jobs.extend(jobs.clone());
         persist_json(&state.jobs_file, &data.jobs)?;
     }
-    let _ = app.emit("santara:update", serde_json::json!({ "jobs": state.lock()?.jobs }));
+    let _ = app.emit("santra:update", serde_json::json!({ "jobs": state.lock()?.jobs }));
     for job in &jobs { schedule_job(app.clone(), job.id.clone())?; }
     Ok(jobs)
 }
@@ -1016,7 +1016,7 @@ pub fn cancel(app: AppHandle, window: tauri::WebviewWindow, state: State<'_, App
     let job = data.jobs.iter_mut().find(|job| job.id == id).ok_or("Unknown job")?;
     if ["queued", "processing", "preparing"].contains(&job.status.as_str()) { job.status = "cancelled".into(); }
     persist_json(&state.jobs_file, &data.jobs)?;
-    let _ = app.emit("santara:update", serde_json::json!({ "jobs": data.jobs }));
+    let _ = app.emit("santra:update", serde_json::json!({ "jobs": data.jobs }));
     Ok(serde_json::json!({ "ok": true }))
 }
 
@@ -1031,7 +1031,7 @@ pub fn retry(app: AppHandle, window: tauri::WebviewWindow, state: State<'_, AppS
         job.error = None;
         job.progress = 0;
         persist_json(&state.jobs_file, &data.jobs)?;
-        let _ = app.emit("santara:update", serde_json::json!({ "jobs": data.jobs }));
+        let _ = app.emit("santra:update", serde_json::json!({ "jobs": data.jobs }));
     }
     schedule_job(app, id)?;
     Ok(serde_json::json!({ "ok": true }))
@@ -1092,7 +1092,7 @@ pub async fn preview(app: AppHandle, window: tauri::WebviewWindow, state: State<
         let backend = state.media.lock().map_err(|_| "Media backend is unavailable")?.clone();
         let directory = app.path().app_cache_dir().map_err(|error| error.to_string())?;
         fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
-        let output = directory.join(format!("santara-waveform-{}.png", Uuid::new_v4()));
+        let output = directory.join(format!("santra-waveform-{}.png", Uuid::new_v4()));
         let input = source.clone();
         tauri::async_runtime::spawn_blocking(move || {
             let result = backend.waveform(&input, &output, || false).and_then(|_| fs::read(&output).map_err(|_| "Cannot read audio waveform".into()));
@@ -1104,7 +1104,7 @@ pub async fn preview(app: AppHandle, window: tauri::WebviewWindow, state: State<
         let backend = state.media.lock().map_err(|_| "Media backend is unavailable")?.clone();
         let directory = app.path().app_cache_dir().map_err(|error| error.to_string())?;
         fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
-        let output = directory.join(format!("santara-video-preview-{}.mp4", Uuid::new_v4()));
+        let output = directory.join(format!("santra-video-preview-{}.mp4", Uuid::new_v4()));
         let input = source.clone();
         let preview = output.clone();
         tauri::async_runtime::spawn_blocking(move || {
@@ -1118,7 +1118,7 @@ pub async fn preview(app: AppHandle, window: tauri::WebviewWindow, state: State<
         if !backend.supports("render", "png") { return Err("PDF preview requires local Poppler".into()); }
         let directory = app.path().app_cache_dir().map_err(|error| error.to_string())?;
         fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
-        let output = directory.join(format!("santara-preview-{}.png", Uuid::new_v4()));
+        let output = directory.join(format!("santra-preview-{}.png", Uuid::new_v4()));
         let source = source.clone();
         let output_copy = output.clone();
         tauri::async_runtime::spawn_blocking(move || backend.run(&source, &output_copy, "render", "png", &serde_json::json!({ "page": 1, "dpi": 144 }), || false))
@@ -1142,7 +1142,7 @@ pub async fn preview(app: AppHandle, window: tauri::WebviewWindow, state: State<
         data.previews.insert(token.clone(), PreviewEntry { path: prepared, mime, size: prepared_info.len(), modified: prepared_info.modified().ok(),
             window: window.label().into(), expires: Instant::now() + Duration::from_secs(3600), cached });
     }
-    let url = if cfg!(windows) { format!("http://santara-media.localhost/{token}") } else { format!("santara-media://localhost/{token}") };
+    let url = if cfg!(windows) { format!("http://santra-media.localhost/{token}") } else { format!("santra-media://localhost/{token}") };
     let mut result = details.unwrap_or_else(|| serde_json::json!({}));
     result["url"] = serde_json::json!(url);
     result["waveform"] = serde_json::json!(waveform);
@@ -1229,7 +1229,7 @@ pub fn open_image_tool(app: AppHandle, window: tauri::WebviewWindow, state: Stat
     state.lock()?.image_context = Some(context.clone());
     let window = app.get_webview_window("image").ok_or("Image editor window is unavailable")?;
     window.show().map_err(|error| error.to_string())?;
-    let _ = app.emit_to("image", "santara:editor-context", &context);
+    let _ = app.emit_to("image", "santra:editor-context", &context);
     window.set_focus().map_err(|error| error.to_string())?;
     Ok(serde_json::json!({ "opened": true }))
 }
@@ -1241,7 +1241,7 @@ pub fn open_video_tool(app: AppHandle, window: tauri::WebviewWindow, state: Stat
     state.lock()?.video_context = Some(context.clone());
     let window = app.get_webview_window("video").ok_or("Video editor window is unavailable")?;
     window.show().map_err(|error| error.to_string())?;
-    let _ = app.emit_to("video", "santara:editor-context", &context);
+    let _ = app.emit_to("video", "santra:editor-context", &context);
     window.set_focus().map_err(|error| error.to_string())?;
     Ok(serde_json::json!({ "opened": true }))
 }
@@ -1350,7 +1350,7 @@ pub fn handoff_global_files(app: AppHandle, window: tauri::WebviewWindow, state:
     let workspace = app.get_webview_window("workspace").ok_or("Workspace window is unavailable")?;
     workspace.show().map_err(|error| error.to_string())?;
     workspace.set_focus().map_err(|error| error.to_string())?;
-    app.emit_to("workspace", "santara:global-files", &request).map_err(|error| error.to_string())?;
+    app.emit_to("workspace", "santra:global-files", &request).map_err(|error| error.to_string())?;
     window.hide().map_err(|error| error.to_string())?;
     Ok(())
 }
@@ -1371,7 +1371,7 @@ pub fn select_global_operation(app: AppHandle, window: tauri::WebviewWindow, sta
         let workspace = app.get_webview_window("workspace").ok_or("Workspace window is unavailable")?;
         workspace.show().map_err(|error| error.to_string())?;
         workspace.set_focus().map_err(|error| error.to_string())?;
-        app.emit_to("workspace", "santara:global-operation", &request).map_err(|error| error.to_string())?;
+        app.emit_to("workspace", "santra:global-operation", &request).map_err(|error| error.to_string())?;
     }
     window.hide().map_err(|error| error.to_string())?;
     Ok(serde_json::json!({ "opened": true }))
@@ -1388,8 +1388,8 @@ pub fn finish_global_wheel(app: AppHandle, window: tauri::WebviewWindow, page: O
         let workspace = app.get_webview_window("workspace").ok_or("Workspace window is unavailable")?;
         workspace.show().map_err(|error| error.to_string())?;
         workspace.set_focus().map_err(|error| error.to_string())?;
-        app.emit_to("workspace", "santara:global-page", page).map_err(|error| error.to_string())?;
-        if let Some(notice) = notice { app.emit_to("workspace", "santara:global-notice", notice).map_err(|error| error.to_string())?; }
+        app.emit_to("workspace", "santra:global-page", page).map_err(|error| error.to_string())?;
+        if let Some(notice) = notice { app.emit_to("workspace", "santra:global-notice", notice).map_err(|error| error.to_string())?; }
     }
     Ok(())
 }
@@ -1418,7 +1418,7 @@ pub async fn file_action(app: AppHandle, window: tauri::WebviewWindow, state: St
             let file = state.lock()?.files.iter().find(|file| file.path == paths[0].to_string_lossy()).cloned().ok_or("Select a known file")?;
             let label = format!("preview-{}", Uuid::new_v4());
             state.lock()?.preview_windows.insert(label.clone(), file.clone());
-            let result = tauri::WebviewWindowBuilder::new(&app, &label, tauri::WebviewUrl::App("index.html?santara-preview=1".into()))
+            let result = tauri::WebviewWindowBuilder::new(&app, &label, tauri::WebviewUrl::App("index.html?santra-preview=1".into()))
                 .title(format!("Quick Preview — {}", file.name))
                 .inner_size(860.0, 640.0)
                 .always_on_top(true)

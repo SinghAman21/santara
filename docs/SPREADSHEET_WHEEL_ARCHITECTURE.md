@@ -1,4 +1,4 @@
-# Santara Spreadsheet Wheel Architecture
+# Santra Spreadsheet Wheel Architecture
 
 ## Status and scope
 

@@ -1,10 +1,10 @@
-# Santara Image Wheel Architecture
+# Santra Image Wheel Architecture
 
 Tauri migration note: `src-tauri/` owns native drops and Rust raster jobs with crop, resize, rotation, flip, adjustments, and generated background canvases. Detected ExifTool adds same-format JPEG metadata editing. The GNOME extension targets Tauri's single-instance wheel command; the Windows watcher is bundled by the Tauri NSIS config. The detailed design below includes previous-release behavior and future requirements. Metadata preservation across raster transforms, codec parity, and real global drags remain unverified or incomplete; see `TAURI_PARITY_MATRIX.md`.
 
 ## Product direction
 
-Santara should feel like a desktop wheel utility. A small Tauri desktop host owns the global wheel, local workers, settings, notifications, and native integrations. The workspace stays available for history, settings, queue, and accessibility fallback.
+Santra should feel like a desktop wheel utility. A small Tauri desktop host owns the global wheel, local workers, settings, notifications, and native integrations. The workspace stays available for history, settings, queue, and accessibility fallback.
 
 This document defines the next implementation scope for image files only. Audio, video, PDF, documents, archives, and other extensions remain unchanged until a separate design is approved.
 
@@ -33,7 +33,7 @@ Drag image
   -> new output is written beside the source
 ```
 
-A single modifier press does not open the wheel. The first press and release must both happen after the drag begins and last no more than 400 ms; a modifier held before the drag cannot count as the first tap. The same key must be pressed again within 400 ms of that release. The wheel remains open after the second modifier press is released. Native drops use the pointer position to select a slice even when the webview receives no DOM drop event. Failed conversions return the files to the workspace with a visible error. The user selects a slice by hovering, dragging over it, clicking, or keyboard navigation. Enter confirms, Escape cancels, and arrow keys move between slices. When a native drag supplies no usable pre-drop type or URI metadata, Santara shows provisional image routes instead of an empty wheel and validates the actual file after drop. If the capability snapshot has not loaded, the wheel immediately offers the built-in Rust image routes; the backend validates the selected operation.
+A single modifier press does not open the wheel. The first press and release must both happen after the drag begins and last no more than 400 ms; a modifier held before the drag cannot count as the first tap. The same key must be pressed again within 400 ms of that release. The wheel remains open after the second modifier press is released. Native drops use the pointer position to select a slice even when the webview receives no DOM drop event. Failed conversions return the files to the workspace with a visible error. The user selects a slice by hovering, dragging over it, clicking, or keyboard navigation. Enter confirms, Escape cancels, and arrow keys move between slices. When a native drag supplies no usable pre-drop type or URI metadata, Santra shows provisional image routes instead of an empty wheel and validates the actual file after drop. If the capability snapshot has not loaded, the wheel immediately offers the built-in Rust image routes; the backend validates the selected operation.
 
 ## Runtime architecture
 
@@ -54,7 +54,7 @@ The host must not upload files, filenames, paths, previews, metadata, or telemet
 
 ### Visible surfaces
 
-Santara has four temporary surfaces:
+Santra has four temporary surfaces:
 
 1. **Citrus wheel** — conversion formats or image tools.
 2. **Tool window** — a compact editor for one selected image operation.
@@ -78,7 +78,7 @@ The conversion wheel is optimized for one-step output selection. For an image in
 
 SVG remains input-only unless a verified rasterization route is available. The wheel must hide unavailable formats instead of showing a dead route.
 
-When the user chooses a format, Santara should:
+When the user chooses a format, Santra should:
 
 - Inspect the dropped file locally before processing.
 - Preserve the original file.
@@ -111,7 +111,7 @@ Each slice must include a short description and indicate when it applies only to
 
 ## Compact image tool windows
 
-Tool windows are temporary, lightweight, and attached to the selected input. They should open near the wheel without exposing the full Santara workspace. Each window contains:
+Tool windows are temporary, lightweight, and attached to the selected input. They should open near the wheel without exposing the full Santra workspace. Each window contains:
 
 - A title and source filename.
 - A local preview canvas.
@@ -223,7 +223,7 @@ This remains an initial editor surface, not completion of the full tool roadmap.
 
 ## Acceptance criteria
 
-- A JPG dragged from a file manager can be converted to PNG without opening the full Santara workspace.
+- A JPG dragged from a file manager can be converted to PNG without opening the full Santra workspace.
 - The output appears beside the source with a collision-safe name.
 - Selecting Compress, Crop, Resize, Add Background, or Edit Photo opens only a compact tool window.
 - Tool previews update locally and Apply creates a new output without modifying the source.

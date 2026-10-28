@@ -1,11 +1,11 @@
 {
-  "name": "santara",
+  "name": "santra",
   "version": "0.1.0",
   "private": true,
-  "homepage": "https://example.invalid/santara",
-  "desktopName": "santara.desktop",
+  "homepage": "https://example.invalid/santra",
+  "desktopName": "santra.desktop",
   "description": "A little orange. A lot of possibilities. Private local file conversion for Windows and Linux.",
-  "author": "Santara contributors",
+  "author": "Santra contributors",
   "license": "MIT",
   "type": "module",
   "scripts": {

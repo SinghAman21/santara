@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import SantaraMark from './SantaraMark';
+import SantraMark from './SantraMark';
 import './wheel.css';
 import './wheel-polish.css';
 
@@ -47,7 +47,7 @@ export default function RadialWheel({ items, label, subtitle, selected = '', onH
         const location = point(118, -Math.PI / 2 + index * Math.PI * 2 / visible.length);
         return <button type="button" role="menuitem" data-wheel-item={item.id} key={item.id} aria-label={item.detail ? `${item.label} · ${item.detail}` : item.label} disabled={item.disabled} className={`citrus-label ${item.id === (selected || focused) ? 'chosen' : ''}`} style={{ left: `${location[0] / 3.6}%`, top: `${location[1] / 3.6}%` }} onMouseEnter={() => highlight(item.id)} onDragEnter={event => { event.preventDefault(); highlight(item.id); }} onFocus={() => highlight(item.id)} onClick={() => onChoose(item.id)}>{item.icon}<span>{item.label}</span></button>;
       })}
-      <div className="citrus-core" aria-hidden="true"><SantaraMark/></div>
+      <div className="citrus-core" aria-hidden="true"><SantraMark/></div>
     </div>
     {!hideDescription && <div className="wheel-description" aria-live="polite"><strong>{label}</strong><span>{subtitle || 'Choose a slice to continue'}</span></div>}
     {pages > 1 && <div className="wheel-pagination"><button aria-label="Previous operations" disabled={currentPage === 0} onDragEnter={() => { if (currentPage > 0) { setPage(currentPage - 1); highlight(''); } }} onClick={() => { setPage(currentPage - 1); highlight(''); }}><ChevronLeft size={16}/></button><span>{currentPage + 1} / {pages}</span><button aria-label="More operations" disabled={currentPage === pages - 1} onDragEnter={() => { if (currentPage < pages - 1) { setPage(currentPage + 1); highlight(''); } }} onClick={() => { setPage(currentPage + 1); highlight(''); }}><ChevronRight size={16}/></button></div>}

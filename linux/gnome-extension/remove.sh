@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-UUID='santara-wheel@santara.local'
+UUID='santra-wheel@santra.local'
 DEST_ROOT="${XDG_DATA_HOME:-${HOME}/.local/share}/gnome-shell/extensions"
 DEST_DIR="${DEST_ROOT}/${UUID}"
 

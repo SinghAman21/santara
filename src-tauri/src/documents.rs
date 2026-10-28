@@ -25,11 +25,11 @@ pub fn detect(overrides: &HashMap<String, String>) -> DocumentBackend {
     }
     let readers = probe(&path, &["--list-input-formats"]).unwrap_or_default();
     let writers = probe(&path, &["--list-output-formats"]).unwrap_or_default();
-    let directory = std::env::temp_dir().join(format!("santara-pandoc-probe-{}", uuid::Uuid::new_v4()));
+    let directory = std::env::temp_dir().join(format!("santra-pandoc-probe-{}", uuid::Uuid::new_v4()));
     if fs::create_dir(&directory).is_err() { return DocumentBackend::default(); }
     let result = (|| {
         let source = directory.join("input.txt");
-        fs::write(&source, "Santara local format probe\n").ok()?;
+        fs::write(&source, "Santra local format probe\n").ok()?;
         let mut supported_writers = Vec::new();
         for &(extension, writer) in OUTPUTS {
             if !writers.lines().any(|line| line.trim() == writer) { continue }
@@ -44,7 +44,7 @@ pub fn detect(overrides: &HashMap<String, String>) -> DocumentBackend {
             if !readers.lines().any(|line| line.trim() == base) { continue }
             let input = match extension {
                 "docx" | "epub" if supported_writers.iter().any(|value: &String| value == extension) => directory.join(format!("output.{extension}")),
-                "rtf" => { let path = directory.join("input.rtf"); fs::write(&path, "{\\rtf1\\ansi Santara}").ok()?; path },
+                "rtf" => { let path = directory.join("input.rtf"); fs::write(&path, "{\\rtf1\\ansi Santra}").ok()?; path },
                 "docx" | "epub" => continue,
                 _ => source.clone(),
             };

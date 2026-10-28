@@ -1,7 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 #[cfg(not(any(target_os = "linux", target_os = "windows")))]
-compile_error!("Santara supports only Linux and Windows desktop targets");
+compile_error!("Santra supports only Linux and Windows desktop targets");
 
 mod services;
 mod processing;
@@ -98,13 +98,13 @@ struct WheelRequest {
 
 fn wheel_request(args: &[String]) -> Option<WheelRequest> {
     let argument = |key: &str| args.iter().find_map(|value| value.strip_prefix(key));
-    let action = match argument("--santara-wheel-action=")? { "show" => "show", "hide" => "hide", _ => return None };
-    let mode = match argument("--santara-global-wheel=") {
+    let action = match argument("--santra-wheel-action=")? { "show" => "show", "hide" => "hide", _ => return None };
+    let mode = match argument("--santra-global-wheel=") {
         Some("convert") => Some("convert"), Some("tools") => Some("tools"), Some("actions") => Some("actions"),
         Some("") | None if action == "hide" => None,
         _ => return None,
     };
-    let point = match (argument("--santara-wheel-x="), argument("--santara-wheel-y=")) {
+    let point = match (argument("--santra-wheel-x="), argument("--santra-wheel-y=")) {
         (Some(x), Some(y)) => {
             let x = x.parse::<i32>().ok()?;
             let y = y.parse::<i32>().ok()?;
@@ -123,7 +123,7 @@ fn show_wheel(app: &tauri::AppHandle, mode: &str, point: Option<(i32, i32)>) {
         if let Ok(mut current) = app.state::<services::AppState>().wheel_mode.lock() { *current = mode.into(); }
         let new_drag = !window.is_visible().unwrap_or(false);
         if let Err(error) = place_wheel(&window, point) { eprintln!("Wheel placement unavailable: {error}"); }
-        let _ = window.emit("santara:wheel-mode", serde_json::json!({ "mode": mode, "newDrag": new_drag }));
+        let _ = window.emit("santra:wheel-mode", serde_json::json!({ "mode": mode, "newDrag": new_drag }));
         let _ = window.show();
     }
 }
@@ -157,7 +157,7 @@ fn main() {
                 }
             }
         }))
-        .register_uri_scheme_protocol("santara-media", |context, request| {
+        .register_uri_scheme_protocol("santra-media", |context, request| {
             let state = context.app_handle().state::<services::AppState>();
             state.serve_preview(context.webview_label(), request)
         })
@@ -207,14 +207,14 @@ fn main() {
             if handle_wheel_request(app.handle(), &args) {
                 if let Some(workspace) = app.get_webview_window("workspace") { let _ = workspace.hide(); }
             }
-            let workspace = MenuItem::with_id(app, "workspace", "Show Santara", true, None::<&str>)?;
+            let workspace = MenuItem::with_id(app, "workspace", "Show Santra", true, None::<&str>)?;
             let wheel = MenuItem::with_id(app, "wheel", "Show citrus wheel", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&workspace, &wheel, &quit])?;
             if let Some(icon) = app.default_window_icon() {
                 TrayIconBuilder::new()
                     .icon(icon.clone())
-                    .tooltip("Santara")
+                    .tooltip("Santra")
                     .menu(&menu)
                     .on_menu_event(|app, event| {
                         if event.id().as_ref() == "quit" {
@@ -222,7 +222,7 @@ fn main() {
                         } else if let Some(window) = app.get_webview_window(event.id().as_ref()) {
                             if window.label() == "wheel" {
                                 if let Err(error) = place_wheel(&window, None) {
-                                    eprintln!("Santara wheel placement unavailable: {error}");
+                                    eprintln!("Santra wheel placement unavailable: {error}");
                                 }
                             }
                             let _ = window.show();
@@ -245,33 +245,33 @@ fn main() {
                     window.app_handle().state::<services::AppState>().forget_window(window.label());
                 }
                 WindowEvent::DragDrop(DragDropEvent::Enter { paths, .. }) => {
-                    eprintln!("Santara drag entered {} ({} entries)", window.label(), paths.len());
+                    eprintln!("Santra drag entered {} ({} entries)", window.label(), paths.len());
                 }
                 WindowEvent::DragDrop(DragDropEvent::Over { position }) => {
                     if window.label() == "wheel" {
                         let point = position.to_logical::<f64>(window.scale_factor().unwrap_or(1.0));
-                        let _ = window.emit("santara:native-drag-over", serde_json::json!({ "x": point.x, "y": point.y }));
+                        let _ = window.emit("santra:native-drag-over", serde_json::json!({ "x": point.x, "y": point.y }));
                     }
                 }
                 WindowEvent::DragDrop(DragDropEvent::Drop { paths, position }) => {
                     let app = window.app_handle();
                     let state = app.state::<services::AppState>();
                     if let Err(error) = state.record_drop(window.label(), paths) {
-                        eprintln!("Santara drop rejected: {error}");
-                        let _ = window.emit("santara:native-drop-error", error);
+                        eprintln!("Santra drop rejected: {error}");
+                        let _ = window.emit("santra:native-drop-error", error);
                     } else {
                         let point = position.to_logical::<f64>(window.scale_factor().unwrap_or(1.0));
-                        let _ = window.emit("santara:native-drop", serde_json::json!({ "x": point.x, "y": point.y }));
+                        let _ = window.emit("santra:native-drop", serde_json::json!({ "x": point.x, "y": point.y }));
                     }
                 }
                 WindowEvent::DragDrop(DragDropEvent::Leave) => {
-                    eprintln!("Santara drag left {}", window.label());
+                    eprintln!("Santra drag left {}", window.label());
                 }
                 _ => {}
             }
         })
         .build(tauri::generate_context!())
-        .expect("Santara failed to build")
+        .expect("Santra failed to build")
         .run(|_app, event| {
             #[cfg(windows)]
             if matches!(event, tauri::RunEvent::Exit) { windows_watcher::stop(_app); }
@@ -286,9 +286,9 @@ mod tests {
 
     #[test]
     fn accepts_only_bounded_wheel_commands() {
-        let args = vec!["santara".into(), "--santara-wheel-action=show".into(), "--santara-global-wheel=tools".into(), "--santara-wheel-x=-120".into(), "--santara-wheel-y=250".into()];
+        let args = vec!["santra".into(), "--santra-wheel-action=show".into(), "--santra-global-wheel=tools".into(), "--santra-wheel-x=-120".into(), "--santra-wheel-y=250".into()];
         assert_eq!(wheel_request(&args), Some(WheelRequest { action: "show", mode: Some("tools"), point: Some((-120, 250)) }));
-        assert!(wheel_request(&["--santara-wheel-action=show".into(), "--santara-global-wheel=unknown".into()]).is_none());
-        assert_eq!(wheel_request(&["--santara-wheel-action=hide".into(), "--santara-global-wheel=".into()]).unwrap().action, "hide");
+        assert!(wheel_request(&["--santra-wheel-action=show".into(), "--santra-global-wheel=unknown".into()]).is_none());
+        assert_eq!(wheel_request(&["--santra-wheel-action=hide".into(), "--santra-global-wheel=".into()]).unwrap().action, "hide");
     }
 }

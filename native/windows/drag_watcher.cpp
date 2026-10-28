@@ -283,7 +283,7 @@ bool validMode(const char* value) {
 bool parseArguments(int argc, char** argv, bool* selfTest) {
     for (int index = 1; index < argc; ++index) {
         if (std::strcmp(argv[index], "--help") == 0) {
-            std::puts("Usage: santara-drag-watcher.exe [--shift-mode MODE] [--alt-mode MODE] [--control-mode MODE] [--ctrl-shift-mode MODE] [--self-test]; MODE=convert|tools|actions|none");
+            std::puts("Usage: santra-drag-watcher.exe [--shift-mode MODE] [--alt-mode MODE] [--control-mode MODE] [--ctrl-shift-mode MODE] [--self-test]; MODE=convert|tools|actions|none");
             return false;
         }
         if (std::strcmp(argv[index], "--self-test") == 0) {
@@ -409,7 +409,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    std::fprintf(stderr, "Santara drag watcher prototype running; Ctrl+C to stop.\n");
+    std::fprintf(stderr, "Santra drag watcher prototype running; Ctrl+C to stop.\n");
     MSG message{};
     BOOL messageResult = 0;
     while ((messageResult = GetMessageW(&message, nullptr, 0, 0)) > 0) {

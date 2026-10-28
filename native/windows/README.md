@@ -1,4 +1,4 @@
-# Santara Windows drag watcher prototype
+# Santra Windows drag watcher prototype
 
 This isolated Windows x64 helper watches the current interactive desktop for a left-button drag that crosses the Windows drag threshold and requires two complete taps of Shift, Alt, or Control during that drag. Each tap and the gap after the first release must fit within 400 ms; a key held before the drag threshold does not count. It writes one compact JSON object per line to stdout:
 
@@ -21,7 +21,7 @@ Install Visual Studio Build Tools with the Desktop development with C++ workload
 node --test .\native\windows\protocol.test.mjs
 ```
 
-The script builds `native\windows\build\santara-drag-watcher.exe` and runs the helper's transition self-test. The same commands can run in a Windows CI job after initializing the MSVC x64 developer environment. Packaging must place this helper under Tauri's `native/` resource directory; a missing helper leaves the workspace and direct drop available.
+The script builds `native\windows\build\santra-drag-watcher.exe` and runs the helper's transition self-test. The same commands can run in a Windows CI job after initializing the MSVC x64 developer environment. Packaging must place this helper under Tauri's `native/` resource directory; a missing helper leaves the workspace and direct drop available.
 
 ## Linux cross-build for the Windows installer
 
@@ -32,7 +32,7 @@ For an Ubuntu x64 helper-only cross-build, install Wine and the MinGW-w64 x64 co
 Start the executable in a console:
 
 ```powershell
-./native/windows/build/santara-drag-watcher.exe
+./native/windows/build/santra-drag-watcher.exe
 ```
 
 Drag any item across the desktop and double-tap Shift, Alt, or Control within 400 ms. A single press must produce no `show`. Observe `show`, `move`, and `hide` lines; stop with Ctrl+C. The helper does not need or receive the dragged file path. This manual check should be completed on supported Windows versions before treating the prototype as reliable.

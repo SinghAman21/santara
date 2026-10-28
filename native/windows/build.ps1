@@ -15,13 +15,13 @@ $sourcePath = Join-Path $PSScriptRoot 'drag_watcher.cpp'
 
 Push-Location $buildPath
 try {
-    & cl.exe /nologo /std:c++17 /EHsc /MT /W4 /WX /permissive- /DUNICODE /D_UNICODE $sourcePath user32.lib /Fe:santara-drag-watcher.exe
+    & cl.exe /nologo /std:c++17 /EHsc /MT /W4 /WX /permissive- /DUNICODE /D_UNICODE $sourcePath user32.lib /Fe:santra-drag-watcher.exe
     if ($LASTEXITCODE -ne 0) {
         throw "MSVC build failed with exit code $LASTEXITCODE"
     }
 
     if (-not $SkipSelfTest) {
-        & .\santara-drag-watcher.exe --self-test
+        & .\santra-drag-watcher.exe --self-test
         if ($LASTEXITCODE -ne 0) {
             throw "Watcher self-test failed with exit code $LASTEXITCODE"
         }
@@ -30,4 +30,4 @@ try {
     Pop-Location
 }
 
-Write-Output "Built $buildPath\santara-drag-watcher.exe"
+Write-Output "Built $buildPath\santra-drag-watcher.exe"

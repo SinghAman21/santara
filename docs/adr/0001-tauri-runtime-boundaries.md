@@ -10,14 +10,14 @@ Use Rust bindings to libvips for the primary local raster pipeline, with libvips
 
 Implementation note: the first Phase 3 code slice uses the local Rust `image` crate for basic raster routes while the libvips build dependency is unavailable. It removes metadata and lacks several Sharp editor recipes. It is a provisional processor, not the selected parity backend or a release claim; the gaps are listed in the parity matrix and must be closed before cleanup and release.
 
-Use Windows `webviewInstallMode: skip` with an NSIS preinstall hook that checks both per-machine and per-user WebView2 registry entries. If absent, the hook asks permission, downloads Microsoft's signed Evergreen Bootstrapper, installs the shared Runtime, and continues only after verification. This keeps the Santara setup small and reuses an existing system Runtime without a download. Linux `.deb` declares the system WebKitGTK 4.1 dependency; the AppImage's library inclusion and portability must be measured and tested on a clean Ubuntu LTS installation. The system WebView is a runtime dependency on both platforms.
+Use Windows `webviewInstallMode: skip` with an NSIS preinstall hook that checks both per-machine and per-user WebView2 registry entries. If absent, the hook asks permission, downloads Microsoft's signed Evergreen Bootstrapper, installs the shared Runtime, and continues only after verification. This keeps the Santra setup small and reuses an existing system Runtime without a download. Linux `.deb` declares the system WebKitGTK 4.1 dependency; the AppImage's library inclusion and portability must be measured and tested on a clean Ubuntu LTS installation. The system WebView is a runtime dependency on both platforms.
 
 ## Electron responsibility inventory
 
 | Existing owner | Responsibilities to replace or retain |
 | --- | --- |
 | `electron/main.mjs` | Single-instance and open-with queue, XDG user data, settings validation, inspected-file allowlist, job persistence and notifications, IPC sender checks, trusted navigation/session, tray, shutdown, window lifecycle, pointer positioning, watcher protocol, wheel state. |
-| `electron/preload.cjs` | Narrow `window.santara` methods and four event subscriptions. `webUtils.getPathForFile` is the current drag file path handoff. |
+| `electron/preload.cjs` | Narrow `window.santra` methods and four event subscriptions. `webUtils.getPathForFile` is the current drag file path handoff. |
 | `electron/integrations.mjs` | Atomic JSON store, known-path checks, dialogs, open/reveal, clipboard, terminal, copy/move, and quick preview. |
 | `electron/engine.mjs` | Signature checks, file inspection, queue/cancel/retry, output naming and atomic publication, external-process runner. |
 | `electron/registry.mjs` | Backend probes and capability routes; availability depends on tested encoders, decoders, filters, and local tools. |
@@ -43,7 +43,7 @@ The Phase 1 shell exposes only a versioned `runtime_info` command and `runtime:/
 | Previews and editors | `preview`, `imagePreview`, `openImageTool`, `imageToolContext`, `applyImageTool`, `closeImageTool`, `videoToolContext`, `applyVideoTool`, `closeVideoTool` | Context and apply/close calls are checked against the invoking window label and current editor session. Recipes are revalidated by Rust. |
 | Wheel | `finishGlobalWheel`, `selectGlobalOperation` | Window/selection/capability checks run in Rust before dispatch. |
 
-Events preserve the adapter callback signatures: `santara:update` (`Partial<Snapshot>`), `santara:wheel-mode` (`{mode,newDrag}`), `santara:global-operation` (selected operation request), and `santara:global-page` (`converter` or `activity`). Rust emits to the intended window label; subscriptions are removed on unmount/close. No broad filesystem or shell plugin permission is granted to renderer windows. The Tauri capability configuration must enumerate window labels and the minimum command/plugin permissions. Inputs are untrusted regardless of window origin.
+Events preserve the adapter callback signatures: `santra:update` (`Partial<Snapshot>`), `santra:wheel-mode` (`{mode,newDrag}`), `santra:global-operation` (selected operation request), and `santra:global-page` (`converter` or `activity`). Rust emits to the intended window label; subscriptions are removed on unmount/close. No broad filesystem or shell plugin permission is granted to renderer windows. The Tauri capability configuration must enumerate window labels and the minimum command/plugin permissions. Inputs are untrusted regardless of window origin.
 
 ## Phase 0 environment and baseline
 

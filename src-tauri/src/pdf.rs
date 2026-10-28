@@ -121,7 +121,7 @@ mod tests {
     fn renders_a_local_pdf_with_poppler_when_available() {
         let backend = detect(&Default::default());
         if !backend.supports("render", "png") { return; }
-        let directory = std::env::temp_dir().join(format!("santara-pdf-test-{}", uuid::Uuid::new_v4()));
+        let directory = std::env::temp_dir().join(format!("santra-pdf-test-{}", uuid::Uuid::new_v4()));
         fs::create_dir(&directory).unwrap();
         let input = directory.join("page.pdf");
         let output = directory.join("page.tmp");

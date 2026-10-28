@@ -20,7 +20,7 @@ for (const bundle of bundles) {
   for (const [folder, extension] of [['nsis', '.exe'], ['deb', '.deb'], ['appimage', '.AppImage']]) {
     let names = [];
     try { names = await readdir(path.join(bundle, folder)); } catch {}
-    for (const name of names.filter(value => value.startsWith('Santara_') && value.endsWith(extension))) {
+    for (const name of names.filter(value => value.startsWith('Santra_') && value.endsWith(extension))) {
       const filename = path.join(bundle, folder, name);
       packages.push({ file: path.relative(root, filename), installerBytes: (await stat(filename)).size,
         sha256: await sha256(filename),

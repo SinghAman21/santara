@@ -1,9 +1,9 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Santara",
-  "mainBinaryName": "santara",
+  "productName": "Santra",
+  "mainBinaryName": "santra",
   "version": "0.1.0",
-  "identifier": "io.santara.app",
+  "identifier": "io.santra.app",
   "build": {
     "beforeDevCommand": "npm run dev -- --port 5173 --strictPort",
     "devUrl": "http://127.0.0.1:5173",
@@ -12,13 +12,13 @@
   },
   "app": {
     "windows": [
-      { "label": "workspace", "title": "Santara", "url": "index.html", "width": 1280, "height": 840, "minWidth": 900, "minHeight": 620 },
-      { "label": "wheel", "title": "Santara wheel", "url": "index.html?santara-wheel=1", "width": 420, "height": 540, "decorations": false, "transparent": true, "alwaysOnTop": true, "skipTaskbar": true, "resizable": false, "visible": false },
-      { "label": "image", "title": "Santara image editor", "url": "index.html?santara-image-tool=1", "width": 900, "height": 700, "minWidth": 680, "minHeight": 540, "visible": false },
-      { "label": "video", "title": "Santara video editor", "url": "index.html?santara-video-tool=1", "width": 1040, "height": 760, "minWidth": 720, "minHeight": 540, "visible": false }
+      { "label": "workspace", "title": "Santra", "url": "index.html", "width": 1280, "height": 840, "minWidth": 900, "minHeight": 620 },
+      { "label": "wheel", "title": "Santra wheel", "url": "index.html?santra-wheel=1", "width": 420, "height": 540, "decorations": false, "transparent": true, "alwaysOnTop": true, "skipTaskbar": true, "resizable": false, "visible": false },
+      { "label": "image", "title": "Santra image editor", "url": "index.html?santra-image-tool=1", "width": 900, "height": 700, "minWidth": 680, "minHeight": 540, "visible": false },
+      { "label": "video", "title": "Santra video editor", "url": "index.html?santra-video-tool=1", "width": 1040, "height": 760, "minWidth": 720, "minHeight": 540, "visible": false }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: santara-media: http://santara-media.localhost; media-src 'self' blob: santara-media: http://santara-media.localhost; connect-src 'self' ws://127.0.0.1:* santara-media: http://santara-media.localhost; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: santra-media: http://santra-media.localhost; media-src 'self' blob: santra-media: http://santra-media.localhost; connect-src 'self' ws://127.0.0.1:* santra-media: http://santra-media.localhost; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'"
     }
   },
   "bundle": {

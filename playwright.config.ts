@@ -1,6 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const port = Number(process.env.SANTARA_TEST_PORT || 4173);
+const port = Number(process.env.SANTRA_TEST_PORT || 4173);
 const baseURL = `http://127.0.0.1:${port}`;
 
 export default defineConfig({
@@ -13,7 +13,7 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL,
-    channel: process.env.SANTARA_BROWSER_CHANNEL || undefined,
+    channel: process.env.SANTRA_BROWSER_CHANNEL || undefined,
     viewport: { width: 1440, height: 1000 },
     serviceWorkers: 'block',
     trace: 'retain-on-failure',

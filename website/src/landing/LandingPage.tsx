@@ -156,6 +156,6 @@ function OrchardStory() {
 export function LandingPage() {
     return <main className="citrus-landing"><OrchardStory /><FileWorkspace />
     <ToolsShowcase />
-    <section className="landing-outro"><p className="citrus-eyebrow">A LITTLE ORANGE. A LOT OF POSSIBILITIES.</p><h2>Less in the way.<br /><em>More in your hands.</em></h2><a className="citrus-button" href="/install">Bring Santara to your desktop <ArrowRight size={16}/></a><p>Free development preview · Windows & Linux x64</p></section>
+    <section className="landing-outro"><p className="citrus-eyebrow">A LITTLE ORANGE. A LOT OF POSSIBILITIES.</p><h2>Less in the way.<br /><em>More in your hands.</em></h2><a className="citrus-button" href="/install">Bring Santra to your desktop <ArrowRight size={16}/></a><p>Free development preview · Windows & Linux x64</p></section>
   </main>;
 }

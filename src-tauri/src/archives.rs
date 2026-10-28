@@ -178,7 +178,7 @@ mod tests {
 
     #[test]
     fn zip_round_trip_and_path_rejection() {
-        let root = std::env::temp_dir().join(format!("santara-archive-test-{}", uuid::Uuid::new_v4()));
+        let root = std::env::temp_dir().join(format!("santra-archive-test-{}", uuid::Uuid::new_v4()));
         fs::create_dir(&root).unwrap();
         let source = root.join("hello.txt");
         fs::write(&source, b"hello").unwrap();

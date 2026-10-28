@@ -6,11 +6,11 @@ import { resolve } from 'node:path';
 
 const releases = resolve(import.meta.dirname, '../release');
 const devDownloads: Plugin = {
-  name: 'santara-local-downloads',
+  name: 'santra-local-downloads',
   configureServer(server) {
     server.middlewares.use('/downloads', (request, response, next) => {
       const fileName = decodeURIComponent(new URL(request.url || '/', 'http://localhost').pathname.slice(1));
-      if (!['Santara-0.1.0-linux-amd64.deb', 'Santara-0.1.0-linux-x86_64.AppImage', 'Santara-0.1.0-win-x64.exe'].includes(fileName)) return next();
+      if (!['Santra-0.1.0-linux-amd64.deb', 'Santra-0.1.0-linux-x86_64.AppImage', 'Santra-0.1.0-win-x64.exe'].includes(fileName)) return next();
       const filePath = resolve(releases, fileName);
       try {
         const stats = statSync(filePath);

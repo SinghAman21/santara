@@ -1,4 +1,4 @@
-# Santara Presentation Wheel Architecture
+# Santra Presentation Wheel Architecture
 
 ## Status and scope
 

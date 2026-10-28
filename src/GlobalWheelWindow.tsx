@@ -242,7 +242,7 @@ export default function GlobalWheelWindow() {
   };
   useEffect(() => api.onNativeDragOver?.(position => nativeOverHandler.current(position)), []);
 
-  return <main className="global-wheel-shell" aria-label="Santara global drop wheel" onDragEnter={event => {
+  return <main className="global-wheel-shell" aria-label="Santra global drop wheel" onDragEnter={event => {
     event.preventDefault();
     if (!seenDrag.current) setHints(hintedFiles(event.dataTransfer));
     seenDrag.current = true;

@@ -1,4 +1,4 @@
-# Santara Archive Wheel Architecture
+# Santra Archive Wheel Architecture
 
 ## Status and scope
 

@@ -469,7 +469,7 @@ mod tests {
     fn converts_local_wav_when_ffmpeg_codec_is_available() {
         let backend = detect(&Default::default());
         if !backend.supports("audio", "convert", "wav", "mp3") { return; }
-        let directory = std::env::temp_dir().join(format!("santara-media-test-{}", uuid::Uuid::new_v4()));
+        let directory = std::env::temp_dir().join(format!("santra-media-test-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir(&directory).unwrap();
         let input = directory.join("tone.wav");
         let output = directory.join("out.tmp");
@@ -524,7 +524,7 @@ mod tests {
     fn exports_local_video_frame_and_gif_when_available() {
         let backend = detect(&Default::default());
         if !backend.supports("video", "snapshot", "mp4", "png") || !backend.supports("video", "gif", "mp4", "gif") { return; }
-        let directory = std::env::temp_dir().join(format!("santara-video-test-{}", uuid::Uuid::new_v4()));
+        let directory = std::env::temp_dir().join(format!("santra-video-test-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir(&directory).unwrap();
         let input = directory.join("input.mp4");
         let status = Command::new(backend.ffmpeg.as_ref().unwrap()).args(["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=red:s=64x64:d=1:r=2", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-y"]).arg(&input).status().unwrap();

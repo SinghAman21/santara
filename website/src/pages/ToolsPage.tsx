@@ -154,16 +154,16 @@ export function ToolsPage({ onInstall }: { onInstall: () => void }) {
   return <main className="tools-page">
     <section className="tools-intro">
       <div className="tools-intro-copy">
-        <p className="tools-kicker"><span/> SANTARA / TOOL LIBRARY</p>
+        <p className="tools-kicker"><span/> SANTRA / TOOL LIBRARY</p>
         <h1>Every file has<br/>a <em>next move.</em></h1>
-        <p>Choose the work you want done. Santara brings the relevant local action close, then saves a new copy you can keep moving with.</p>
+        <p>Choose the work you want done. Santra brings the relevant local action close, then saves a new copy you can keep moving with.</p>
       </div>
       <div className="tools-intro-aside"><span className="tools-aside-number">01—03</span><p>From source, to action, to a new file beside the original.</p><span className="tools-aside-foot">A simple path through complex formats.</span></div>
     </section>
 
-    <section id="santara-desk" className="desk-section" aria-labelledby="desk-title">
+    <section id="santra-desk" className="desk-section" aria-labelledby="desk-title">
       <div className="desk-section-heading">
-        <div><p className="tools-kicker"><span/> THE SANTARA DESK</p><div className="desk-heading-line"><h2 id="desk-title">Try the thought process.</h2><button type="button" className="desk-autoplay-toggle" role="switch" aria-checked={autoplay} aria-label="Autoplay tool tour" onClick={() => { if (!autoplay && !options.length) selectStep(initialStep); setAutoplay(value => !value); setTourNonce(value => value + 1); }}><span className="desk-toggle-track"><span/></span><span>Autoplay <strong>{autoplay ? 'On' : 'Off'}</strong></span></button></div></div>
+        <div><p className="tools-kicker"><span/> THE SANTRA DESK</p><div className="desk-heading-line"><h2 id="desk-title">Try the thought process.</h2><button type="button" className="desk-autoplay-toggle" role="switch" aria-checked={autoplay} aria-label="Autoplay tool tour" onClick={() => { if (!autoplay && !options.length) selectStep(initialStep); setAutoplay(value => !value); setTourNonce(value => value + 1); }}><span className="desk-toggle-track"><span/></span><span>Autoplay <strong>{autoplay ? 'On' : 'Off'}</strong></span></button></div></div>
         <p>Pick a file family, then an action. The preview illustrates the flow and marks planned concepts; the desktop app checks each real file and local engine before offering a route.</p>
       </div>
       <div className="desk-layout">
@@ -197,7 +197,7 @@ export function ToolsPage({ onInstall }: { onInstall: () => void }) {
     </section>
 
     <section className="tool-ledger" aria-labelledby="ledger-title">
-      <div className="tool-ledger-intro"><p className="tools-kicker"><span/> A CLEAR VIEW OF WHAT'S HERE</p><h2 id="ledger-title">Useful now.<br/><em>Honest about later.</em></h2><p>Routes appear in Santara only when the selected file and local backend support them. The web preview explains the scope; it does not process files.</p></div>
+      <div className="tool-ledger-intro"><p className="tools-kicker"><span/> A CLEAR VIEW OF WHAT'S HERE</p><h2 id="ledger-title">Useful now.<br/><em>Honest about later.</em></h2><p>Routes appear in Santra only when the selected file and local backend support them. The web preview explains the scope; it does not process files.</p></div>
       <div className="tool-ledger-rows">
         <div className="ledger-row"><span className="ledger-index">01 / BUILT IN</span><h3>Everyday work, ready locally.</h3><p>Raster images, SRT/VTT subtitles, and bounded ZIP/TAR/GZIP workflows.</p><span className="ledger-mark status-bundled"/></div>
         <div className="ledger-row"><span className="ledger-index">02 / WHEN DETECTED</span><h3>More range from local engines.</h3><p>FFmpeg media, qpdf and Poppler PDF actions, and verified Pandoc document routes.</p><span className="ledger-mark status-conditional"/></div>
@@ -205,6 +205,6 @@ export function ToolsPage({ onInstall }: { onInstall: () => void }) {
       </div>
     </section>
 
-    <section className="tools-closing"><div><p className="tools-kicker"><span/> BRING THE WORK HOME</p><h2>Keep the original.<br/><em>Make the next version.</em></h2></div><div><p>Santara is a desktop preview for Windows and Linux. The current Linux packages are available in the install section.</p><button type="button" onClick={onInstall} className="tools-install-button">Choose your installer <ArrowRight size={17}/></button></div></section>
+    <section className="tools-closing"><div><p className="tools-kicker"><span/> BRING THE WORK HOME</p><h2>Keep the original.<br/><em>Make the next version.</em></h2></div><div><p>Santra is a desktop preview for Windows and Linux. The current Linux packages are available in the install section.</p><button type="button" onClick={onInstall} className="tools-install-button">Choose your installer <ArrowRight size={17}/></button></div></section>
   </main>;
 }

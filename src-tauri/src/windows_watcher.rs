@@ -21,10 +21,10 @@ struct Event {
 }
 
 fn helper_path(app: &AppHandle) -> Option<PathBuf> {
-    let packaged = app.path().resource_dir().ok()?.join("native").join("santara-drag-watcher.exe");
+    let packaged = app.path().resource_dir().ok()?.join("native").join("santra-drag-watcher.exe");
     if packaged.is_file() { return Some(packaged); }
     if cfg!(debug_assertions) {
-        let development = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("native").join("windows").join("build").join("santara-drag-watcher.exe");
+        let development = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("native").join("windows").join("build").join("santra-drag-watcher.exe");
         if development.is_file() { return Some(development); }
     }
     None

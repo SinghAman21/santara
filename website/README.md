@@ -1,6 +1,6 @@
-# Santara website
+# Santra website
 
-A standalone React + Vite product site for the Santara Windows and Linux desktop preview. The home page has one continuous orange-to-wheel story and a context-aware desktop populated with valid PNG, PDF, Markdown, SRT, WAV, ZIP and CSV fixtures. Existing tool, use-case, pricing and installation routes are preserved.
+A standalone React + Vite product site for the Santra Windows and Linux desktop preview. The home page has one continuous orange-to-wheel story and a context-aware desktop populated with valid PNG, PDF, Markdown, SRT, WAV, ZIP and CSV fixtures. Existing tool, use-case, pricing and installation routes are preserved.
 
 ## Development
 
@@ -12,7 +12,7 @@ npm run build --prefix website
 npm run preview --prefix website
 ```
 
-The local development server serves the repository's current Windows `.exe`, Linux `.deb`, and Linux AppImage from `release/` at `/downloads/`. Production builds link to the `v0.1.0-preview` GitHub release, so the large installers do not need to be stored in Vercel's static output. Set `VITE_SANTARA_RELEASE_BASE_URL` only if the release assets move to a different host.
+The local development server serves the repository's current Windows `.exe`, Linux `.deb`, and Linux AppImage from `release/` at `/downloads/`. Production builds link to the `v0.1.0-preview` GitHub release, so the large installers do not need to be stored in Vercel's static output. Set `VITE_SANTRA_RELEASE_BASE_URL` only if the release assets move to a different host.
 
 Build output is written to `website/dist/`.
 

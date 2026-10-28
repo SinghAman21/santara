@@ -13,7 +13,7 @@ interface MockControl {
   emitVideoContext(context: VideoEditorContext): void;
 }
 
-declare global { interface Window { __santaraTest: MockControl } }
+declare global { interface Window { __santraTest: MockControl } }
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -116,8 +116,8 @@ test.beforeEach(async ({ page }) => {
       onGlobalFiles: callback => { globalFilesListeners.add(callback); return () => { globalFilesListeners.delete(callback); }; },
       onUpdate: callback => { listeners.add(callback); return () => { listeners.delete(callback); }; },
     };
-    window.__santaraTest = { state, calls, emit, emitWheelMode: (mode, newDrag) => { for (const listener of wheelModeListeners) listener(mode, newDrag); }, emitNativeDragOver: position => { for (const listener of nativeDragOverListeners) listener(position); }, emitNativeDrop: (files, position) => { for (const listener of nativeDropListeners) listener(files, position); }, emitGlobalFiles: (files, mode) => { for (const listener of globalFilesListeners) listener({ files, mode }); }, emitImageContext: context => { imageContext = structuredClone(context); for (const listener of imageContextListeners) listener(structuredClone(context)); }, emitVideoContext: context => { videoContext = structuredClone(context); for (const listener of videoContextListeners) listener(structuredClone(context)); } };
-    Object.defineProperty(window, 'santara', { configurable: true, value: api });
+    window.__santraTest = { state, calls, emit, emitWheelMode: (mode, newDrag) => { for (const listener of wheelModeListeners) listener(mode, newDrag); }, emitNativeDragOver: position => { for (const listener of nativeDragOverListeners) listener(position); }, emitNativeDrop: (files, position) => { for (const listener of nativeDropListeners) listener(files, position); }, emitGlobalFiles: (files, mode) => { for (const listener of globalFilesListeners) listener({ files, mode }); }, emitImageContext: context => { imageContext = structuredClone(context); for (const listener of imageContextListeners) listener(structuredClone(context)); }, emitVideoContext: context => { videoContext = structuredClone(context); for (const listener of videoContextListeners) listener(structuredClone(context)); } };
+    Object.defineProperty(window, 'santra', { configurable: true, value: api });
   });
 });
 
@@ -149,7 +149,7 @@ test('navigation and settings theme use the bridge', async ({ page }, testInfo) 
   await expect(page.getByRole('heading', { name: 'General', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Dark', exact: true }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-  expect(await page.evaluate(() => window.__santaraTest.state.settings.theme)).toBe('dark');
+  expect(await page.evaluate(() => window.__santraTest.state.settings.theme)).toBe('dark');
   await page.screenshot({ path: testInfo.outputPath('settings-dark.png'), fullPage: true });
   await page.getByRole('button', { name: 'Shortcuts', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Shortcuts', exact: true })).toBeVisible();
@@ -186,7 +186,7 @@ test('double-tap Shift during a drag opens compatible operations after the mocke
   await expect(page.getByRole('heading', { name: 'Good things come in new formats.' })).toBeVisible();
   const transfer = await page.evaluateHandle(() => {
     const dataTransfer = new DataTransfer();
-    dataTransfer.items.add(new File(['Santara original synthetic fixture'], 'pixel.png', { type: 'image/png' }));
+    dataTransfer.items.add(new File(['Santra original synthetic fixture'], 'pixel.png', { type: 'image/png' }));
     return dataTransfer;
   });
   try {
@@ -197,7 +197,7 @@ test('double-tap Shift during a drag opens compatible operations after the mocke
     await expect(page.getByRole('menu', { name: 'Convert', exact: true })).toHaveCount(0);
     await page.keyboard.press('Shift');
     await expect(page.getByRole('menu', { name: 'Convert', exact: true })).toBeVisible();
-    expect(await page.evaluate(() => window.__santaraTest.calls.filter(call => call.method === 'droppedFiles'))).toEqual([]);
+    expect(await page.evaluate(() => window.__santraTest.calls.filter(call => call.method === 'droppedFiles'))).toEqual([]);
     await expect(page.locator('.file-row')).toHaveCount(0);
     await app.dispatchEvent('drop', { dataTransfer: transfer, shiftKey: true });
     await expect(page.locator('.drag-overlay')).toHaveCount(0);
@@ -208,7 +208,7 @@ test('double-tap Shift during a drag opens compatible operations after the mocke
     await expect(dialog.getByRole('button', { name: 'Convert audio · MP3' })).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Convert subtitles · VTT' })).toBeVisible();
     await expect(dialog.getByRole('button', { name: /Unavailable office/ })).toHaveCount(0);
-    expect(await page.evaluate(() => window.__santaraTest.calls.filter(call => call.method === 'droppedFiles'))).toEqual([{ method: 'droppedFiles', value: ['pixel.png'] }]);
+    expect(await page.evaluate(() => window.__santraTest.calls.filter(call => call.method === 'droppedFiles'))).toEqual([{ method: 'droppedFiles', value: ['pixel.png'] }]);
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: /^pixel\.png/ }).click();
     await expect(dialog.getByRole('button', { name: 'Convert image · WEBP' })).toBeVisible();
@@ -263,12 +263,12 @@ test('citrus wheel persists after modifier release and dropping a slice queues i
     await expect(jpg).toHaveClass(/chosen/);
     await jpg.dispatchEvent('drop', { dataTransfer: transfer });
     await expect(page.locator('.drag-overlay')).toHaveCount(0);
-    expect(await page.evaluate(() => window.__santaraTest.calls.find(call => call.method === 'enqueue')?.value)).toMatchObject({ operation: 'convert', format: 'jpg' });
+    expect(await page.evaluate(() => window.__santraTest.calls.find(call => call.method === 'enqueue')?.value)).toMatchObject({ operation: 'convert', format: 'jpg' });
   } finally { await transfer.dispose(); }
 });
 
 test('global citrus overlay accepts and queues a drop directly on a wheel slice', async ({ page }) => {
-  await page.goto('/?santara-wheel=1&mode=convert');
+  await page.goto('/?santra-wheel=1&mode=convert');
   const transfer = await page.evaluateHandle(() => {
     const value = new DataTransfer();
     value.items.add(new File(['synthetic image fixture'], 'pixel.png', { type: 'image/png' }));
@@ -286,9 +286,9 @@ test('global citrus overlay accepts and queues a drop directly on a wheel slice'
     expect(accepted).toBe(true);
     await expect(slice).toHaveClass(/chosen/);
     await slice.dispatchEvent('drop', { dataTransfer: transfer });
-    await expect.poll(() => page.evaluate(() => window.__santaraTest.calls.find(call => call.method === 'enqueue')?.value)).toMatchObject({ operation: 'convert', format: 'jpg' });
-    expect(await page.evaluate(() => window.__santaraTest.calls.find(call => call.method === 'finishGlobalWheel')?.value)).toBe('background');
-    await page.evaluate(() => window.__santaraTest.emitWheelMode('convert', true));
+    await expect.poll(() => page.evaluate(() => window.__santraTest.calls.find(call => call.method === 'enqueue')?.value)).toMatchObject({ operation: 'convert', format: 'jpg' });
+    expect(await page.evaluate(() => window.__santraTest.calls.find(call => call.method === 'finishGlobalWheel')?.value)).toBe('background');
+    await page.evaluate(() => window.__santraTest.emitWheelMode('convert', true));
     const nextTransfer = await page.evaluateHandle(() => {
       const value = new DataTransfer();
       value.items.add(new File(['synthetic audio fixture'], 'tone.wav', { type: 'audio/wav' }));
@@ -303,24 +303,24 @@ test('global citrus overlay accepts and queues a drop directly on a wheel slice'
 });
 
 test('native wheel drop converts at the pointer and keeps the workspace closed', async ({ page }) => {
-  await page.goto('/?santara-wheel=1&mode=convert');
+  await page.goto('/?santra-wheel=1&mode=convert');
   const slice = page.locator('.citrus-label[data-wheel-item="image:convert|jpg"]');
   await expect(slice).toBeVisible();
   const bounds = await slice.boundingBox();
   expect(bounds).not.toBeNull();
   const position = { x: bounds!.x + bounds!.width / 2, y: bounds!.y + bounds!.height / 2 };
-  await page.evaluate(point => window.__santaraTest.emitNativeDragOver(point), position);
+  await page.evaluate(point => window.__santraTest.emitNativeDragOver(point), position);
   await expect(slice).toHaveClass(/chosen/);
-  await page.evaluate(point => window.__santaraTest.emitNativeDrop([
+  await page.evaluate(point => window.__santraTest.emitNativeDrop([
     { id: 'image', path: '/fixtures/pixel.png', name: 'pixel.png', ext: 'png', size: 120, category: 'image' },
   ], point), position);
-  await expect.poll(() => page.evaluate(() => window.__santaraTest.calls.find(call => call.method === 'enqueue')?.value)).toMatchObject({ operation: 'convert', format: 'jpg' });
-  expect(await page.evaluate(() => window.__santaraTest.calls.find(call => call.method === 'finishGlobalWheel')?.value)).toBe('background');
-  expect(await page.evaluate(() => window.__santaraTest.calls.some(call => call.method === 'handoffGlobalFiles'))).toBe(false);
+  await expect.poll(() => page.evaluate(() => window.__santraTest.calls.find(call => call.method === 'enqueue')?.value)).toMatchObject({ operation: 'convert', format: 'jpg' });
+  expect(await page.evaluate(() => window.__santraTest.calls.find(call => call.method === 'finishGlobalWheel')?.value)).toBe('background');
+  expect(await page.evaluate(() => window.__santraTest.calls.some(call => call.method === 'handoffGlobalFiles'))).toBe(false);
 });
 
 test('native drop outside a slice does not reuse a previously hovered conversion', async ({ page }) => {
-  await page.goto('/?santara-wheel=1&mode=convert');
+  await page.goto('/?santra-wheel=1&mode=convert');
   const slice = page.locator('.citrus-label[data-wheel-item="image:convert|jpg"]');
   await expect(slice).toBeVisible();
   const sliceBounds = await slice.boundingBox();
@@ -329,17 +329,17 @@ test('native drop outside a slice does not reuse a previously hovered conversion
   expect(coreBounds).not.toBeNull();
   const hovered = { x: sliceBounds!.x + sliceBounds!.width / 2, y: sliceBounds!.y + sliceBounds!.height / 2 };
   const dropped = { x: coreBounds!.x + coreBounds!.width / 2, y: coreBounds!.y + coreBounds!.height / 2 };
-  await page.evaluate(point => window.__santaraTest.emitNativeDragOver(point), hovered);
+  await page.evaluate(point => window.__santraTest.emitNativeDragOver(point), hovered);
   await expect(slice).toHaveClass(/chosen/);
-  await page.evaluate(point => window.__santaraTest.emitNativeDrop([
+  await page.evaluate(point => window.__santraTest.emitNativeDrop([
     { id: 'image', path: '/fixtures/pixel.png', name: 'pixel.png', ext: 'png', size: 120, category: 'image' },
   ], point), dropped);
-  await expect.poll(() => page.evaluate(() => window.__santaraTest.calls.some(call => call.method === 'handoffGlobalFiles'))).toBe(true);
-  expect(await page.evaluate(() => window.__santaraTest.calls.some(call => call.method === 'enqueue'))).toBe(false);
+  await expect.poll(() => page.evaluate(() => window.__santraTest.calls.some(call => call.method === 'handoffGlobalFiles'))).toBe(true);
+  expect(await page.evaluate(() => window.__santraTest.calls.some(call => call.method === 'enqueue'))).toBe(false);
 });
 
 test('global wheel hands off files when no slice was selected', async ({ page }) => {
-  await page.goto('/?santara-wheel=1&mode=convert');
+  await page.goto('/?santra-wheel=1&mode=convert');
   const transfer = await page.evaluateHandle(() => {
     const value = new DataTransfer();
     value.items.add(new File(['synthetic image fixture'], 'pixel.png', { type: 'image/png' }));
@@ -347,14 +347,14 @@ test('global wheel hands off files when no slice was selected', async ({ page })
   });
   try {
     await page.locator('.global-wheel-shell').dispatchEvent('drop', { dataTransfer: transfer });
-    await expect.poll(() => page.evaluate(() => window.__santaraTest.calls.find(call => call.method === 'handoffGlobalFiles')?.value)).toMatchObject({ mode: 'convert' });
-    expect(await page.evaluate(() => (window.__santaraTest.calls.find(call => call.method === 'handoffGlobalFiles')?.value as { files: Snapshot['files'] }).files.map(file => file.path))).toContain('/fixtures/pixel.png');
+    await expect.poll(() => page.evaluate(() => window.__santraTest.calls.find(call => call.method === 'handoffGlobalFiles')?.value)).toMatchObject({ mode: 'convert' });
+    expect(await page.evaluate(() => (window.__santraTest.calls.find(call => call.method === 'handoffGlobalFiles')?.value as { files: Snapshot['files'] }).files.map(file => file.path))).toContain('/fixtures/pixel.png');
   } finally { await transfer.dispose(); }
 });
 
 test('global wheel keeps files available when a selected route fails', async ({ page }) => {
-  await page.goto('/?santara-wheel=1&mode=convert');
-  await page.evaluate(() => { window.santara!.enqueue = async () => { throw new Error('Local encoder unavailable'); }; });
+  await page.goto('/?santra-wheel=1&mode=convert');
+  await page.evaluate(() => { window.santra!.enqueue = async () => { throw new Error('Local encoder unavailable'); }; });
   const transfer = await page.evaluateHandle(() => {
     const value = new DataTransfer();
     value.items.add(new File(['synthetic image fixture'], 'pixel.png', { type: 'image/png' }));
@@ -363,19 +363,19 @@ test('global wheel keeps files available when a selected route fails', async ({ 
   try {
     const slice = page.locator('.citrus-segments [data-wheel-item="image:convert|jpg"]');
     await slice.dispatchEvent('drop', { dataTransfer: transfer });
-    await expect.poll(() => page.evaluate(() => (window.__santaraTest.calls.find(call => call.method === 'handoffGlobalFiles')?.value as { notice?: string })?.notice)).toContain('Local encoder unavailable');
+    await expect.poll(() => page.evaluate(() => (window.__santraTest.calls.find(call => call.method === 'handoffGlobalFiles')?.value as { notice?: string })?.notice)).toContain('Local encoder unavailable');
   } finally { await transfer.dispose(); }
 });
 
 test('workspace receives files from the global wheel with its selected mode', async ({ page }) => {
   await page.goto('/');
-  await page.evaluate(() => window.__santaraTest.emitGlobalFiles([{ id: 'image', path: '/fixtures/pixel.png', name: 'pixel.png', ext: 'png', size: 120, category: 'image' }], 'tools'));
+  await page.evaluate(() => window.__santraTest.emitGlobalFiles([{ id: 'image', path: '/fixtures/pixel.png', name: 'pixel.png', ext: 'png', size: 120, category: 'image' }], 'tools'));
   await expect(page.getByRole('checkbox', { name: 'Select pixel.png' })).toBeChecked();
   await expect(page.getByRole('dialog', { name: 'Choose what happens next' }).getByRole('tab', { name: /^Tools/ })).toHaveAttribute('aria-selected', 'true');
 });
 
 test('global image tools wheel shows image tools and hides generic archive creation', async ({ page }) => {
-  await page.goto('/?santara-wheel=1&mode=tools');
+  await page.goto('/?santra-wheel=1&mode=tools');
   const transfer = await page.evaluateHandle(() => {
     const value = new DataTransfer();
     value.items.add(new File(['synthetic image fixture'], 'pixel.png', { type: 'image/png' }));
@@ -387,7 +387,7 @@ test('global image tools wheel shows image tools and hides generic archive creat
     await expect(page.getByRole('menuitem', { name: /^Edit photo/ })).toBeVisible();
     await expect(page.getByRole('menuitem', { name: /^Add background/ })).toBeVisible();
     await expect(page.getByRole('menuitem', { name: /^Create archive/ })).toHaveCount(0);
-    await expect(shell.locator('.citrus-core .santara-mark')).toBeVisible();
+    await expect(shell.locator('.citrus-core .santra-mark')).toBeVisible();
     await expect(shell.locator('.citrus-core')).toHaveText('');
     await expect(shell.getByText('Drop on a slice')).toHaveCount(0);
     await expect(shell.locator('.wheel-description')).toHaveCount(0);
@@ -395,7 +395,7 @@ test('global image tools wheel shows image tools and hides generic archive creat
 });
 
 test('global video tools wheel shows supported video operations and dispatches the selected tool', async ({ page }) => {
-  await page.goto('/?santara-wheel=1&mode=tools');
+  await page.goto('/?santra-wheel=1&mode=tools');
   const transfer = await page.evaluateHandle(() => {
     const value = new DataTransfer();
     value.items.add(new File(['synthetic video fixture'], 'clip.mp4', { type: 'video/mp4' }));
@@ -413,12 +413,12 @@ test('global video tools wheel shows supported video operations and dispatches t
     await expect(wheel.getByRole('menuitem', { name: /^Merge/ })).toHaveCount(0);
     await trim.dispatchEvent('dragenter', { dataTransfer: transfer });
     await trim.dispatchEvent('drop', { dataTransfer: transfer });
-    await expect.poll(() => page.evaluate(() => window.__santaraTest.calls.find(call => call.method === 'selectGlobalOperation')?.value)).toMatchObject({ capabilityId: 'video:trim', format: 'mp4' });
+    await expect.poll(() => page.evaluate(() => window.__santraTest.calls.find(call => call.method === 'selectGlobalOperation')?.value)).toMatchObject({ capabilityId: 'video:trim', format: 'mp4' });
   } finally { await transfer.dispose(); }
 });
 
 test('compact video editor provides exact trim values and submits a non-destructive queue recipe', async ({ page }) => {
-  await page.goto('/?santara-video-tool=1');
+  await page.goto('/?santra-video-tool=1');
   const editor = page.getByRole('dialog', { name: 'Trim video' });
   await expect(editor).toBeVisible();
   await expect(editor.getByText('clip.mp4')).toBeVisible();
@@ -426,51 +426,51 @@ test('compact video editor provides exact trim values and submits a non-destruct
   await editor.getByLabel('Start time (seconds)').fill('0.5');
   await editor.getByLabel('End time (seconds)').fill('2.5');
   await editor.getByRole('button', { name: 'Save new copy' }).click();
-  await expect.poll(() => page.evaluate(() => window.__santaraTest.calls.find(call => call.method === 'applyVideoTool')?.value)).toMatchObject({
+  await expect.poll(() => page.evaluate(() => window.__santraTest.calls.find(call => call.method === 'applyVideoTool')?.value)).toMatchObject({
     format: 'mp4', files: ['/fixtures/clip.mp4'], options: { start: 0.5, duration: 2 },
   });
 });
 
 test('preloaded image editor opens and refreshes its context on each tool launch', async ({ page }) => {
-  await page.goto('/?santara-image-tool=1');
+  await page.goto('/?santra-image-tool=1');
   await expect(page.getByText('Preparing local image preview…')).toBeVisible();
   await expect(page.getByRole('alert')).toHaveCount(0);
-  await page.evaluate(() => window.__santaraTest.emitImageContext({
-    id: 'first', capability: window.__santaraTest.state.capabilities.find(item => item.id === 'image:edit-image')!,
+  await page.evaluate(() => window.__santraTest.emitImageContext({
+    id: 'first', capability: window.__santraTest.state.capabilities.find(item => item.id === 'image:edit-image')!,
     files: [{ id: 'image', path: '/fixtures/pixel.png', name: 'pixel.png', ext: 'png', size: 120, category: 'image' }], format: 'png', options: {},
   }));
   await expect(page.getByRole('dialog', { name: 'Edit photo' })).toBeVisible();
-  await page.evaluate(() => window.__santaraTest.emitImageContext({
-    id: 'second', capability: window.__santaraTest.state.capabilities.find(item => item.id === 'image:background')!,
+  await page.evaluate(() => window.__santraTest.emitImageContext({
+    id: 'second', capability: window.__santraTest.state.capabilities.find(item => item.id === 'image:background')!,
     files: [{ id: 'image', path: '/fixtures/pixel.png', name: 'pixel.png', ext: 'png', size: 120, category: 'image' }], format: 'png', options: { padding: '32' },
   }));
   await expect(page.getByRole('dialog', { name: 'Add background' })).toBeVisible();
 });
 
 test('preloaded video editor recovers when its context arrives after startup', async ({ page }) => {
-  await page.goto('/?santara-video-tool=1&late-context=1');
+  await page.goto('/?santra-video-tool=1&late-context=1');
   await expect(page.getByText('Preparing local video preview…')).toBeVisible();
   await expect(page.getByRole('alert')).toHaveCount(0);
-  await page.evaluate(() => window.__santaraTest.emitVideoContext({
-    id: 'late', capability: window.__santaraTest.state.capabilities.find(item => item.id === 'video:trim')!,
+  await page.evaluate(() => window.__santraTest.emitVideoContext({
+    id: 'late', capability: window.__santraTest.state.capabilities.find(item => item.id === 'video:trim')!,
     files: [{ id: 'video', path: '/fixtures/clip.mp4', name: 'clip.mp4', ext: 'mp4', size: 4096, category: 'video' }], format: 'mp4', options: {},
   }));
   await expect(page.getByRole('dialog', { name: 'Trim video' })).toBeVisible();
 });
 
 test('video merge editor sends the selected clip order to the local job queue', async ({ page }) => {
-  await page.goto('/?santara-video-tool=1&operation=merge');
+  await page.goto('/?santra-video-tool=1&operation=merge');
   const editor = page.getByRole('dialog', { name: 'Join videos' });
   await expect(editor).toBeVisible();
   await editor.getByRole('button', { name: 'Move clip.mp4 down' }).click();
   await editor.getByRole('button', { name: 'Save new copy' }).click();
-  await expect.poll(() => page.evaluate(() => window.__santaraTest.calls.find(call => call.method === 'applyVideoTool')?.value)).toMatchObject({
+  await expect.poll(() => page.evaluate(() => window.__santraTest.calls.find(call => call.method === 'applyVideoTool')?.value)).toMatchObject({
     format: 'mp4', files: ['/fixtures/clip-2.mp4', '/fixtures/clip.mp4'], options: { reencode: true },
   });
 });
 
 test('global wheel shows provisional image routes without extra helper captions', async ({ page }) => {
-  await page.goto('/?santara-wheel=1&mode=tools');
+  await page.goto('/?santra-wheel=1&mode=tools');
   await expect(page.getByRole('menuitem', { name: /^Edit photo/ })).toBeVisible();
   await expect(page.getByRole('menuitem', { name: /^Add background/ })).toBeVisible();
   await expect(page.locator('.wheel-description')).toHaveCount(0);
@@ -478,7 +478,7 @@ test('global wheel shows provisional image routes without extra helper captions'
 });
 
 test('file actions wheel hides the unavailable native share route', async ({ page }) => {
-  await page.goto('/?santara-wheel=1&mode=actions');
+  await page.goto('/?santra-wheel=1&mode=actions');
   await expect(page.getByRole('menuitem', { name: /^Copy Path/ })).toBeVisible();
   await expect(page.getByRole('menuitem', { name: /^Share/ })).toHaveCount(0);
 });
@@ -549,7 +549,7 @@ test('image editor exposes a real padded background canvas and directional zoom 
 test('PDF workspace labels the source preview and exports the selected page settings', async ({ page }, testInfo) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Good things come in new formats.' })).toBeVisible();
-  await page.evaluate(() => window.__santaraTest.emit({ files: [{ id: 'pdf', path: '/fixtures/original.pdf', name: 'original.pdf', size: 100, ext: 'pdf', category: 'pdf' }] }));
+  await page.evaluate(() => window.__santraTest.emit({ files: [{ id: 'pdf', path: '/fixtures/original.pdf', name: 'original.pdf', size: 100, ext: 'pdf', category: 'pdf' }] }));
   await page.getByRole('button', { name: /^original\.pdf/ }).click();
   await page.getByRole('button', { name: 'Render PDF pages · PNG' }).click();
   const workspace = page.getByRole('dialog', { name: 'Render a page' });
@@ -559,7 +559,7 @@ test('PDF workspace labels the source preview and exports the selected page sett
   await workspace.getByLabel('Resolution (DPI)', { exact: true }).fill('144');
   await page.screenshot({ path: testInfo.outputPath('pdf-workspace.png') });
   await workspace.getByRole('button', { name: 'Render page', exact: true }).click();
-  expect(await page.evaluate(() => window.__santaraTest.calls.find(call => call.method === 'enqueue')?.value)).toMatchObject({ operation: 'render', format: 'png', options: { page: '2', dpi: '144' } });
+  expect(await page.evaluate(() => window.__santraTest.calls.find(call => call.method === 'enqueue')?.value)).toMatchObject({ operation: 'render', format: 'png', options: { page: '2', dpi: '144' } });
   await expect(workspace).toHaveCount(0);
 });
 
@@ -592,23 +592,23 @@ test('submission, cancellation, failure, and retry follow mock events', async ({
   await page.getByRole('button', { name: 'Convert subtitles · VTT' }).click();
   await page.getByRole('button', { name: 'Run operation' }).click();
   await expect(page.locator('.job-row')).toHaveCount(1);
-  expect(await page.evaluate(() => window.__santaraTest.calls.find(call => call.method === 'enqueue')?.value)).toMatchObject({ operation: 'convert', format: 'vtt', files: [{ id: 'subtitle' }], options: { quality: 85, collision: 'rename' } });
+  expect(await page.evaluate(() => window.__santraTest.calls.find(call => call.method === 'enqueue')?.value)).toMatchObject({ operation: 'convert', format: 'vtt', files: [{ id: 'subtitle' }], options: { quality: 85, collision: 'rename' } });
   await expect(page.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '0');
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(page.locator('.job-status')).toHaveText('cancelled');
   await expect(page.getByRole('progressbar')).toHaveCount(0);
-  await page.evaluate(() => window.__santaraTest.emit({ jobs: window.__santaraTest.state.jobs.map(job => ({ ...job, status: 'failed', error: 'Synthetic processor failure' })) }));
+  await page.evaluate(() => window.__santraTest.emit({ jobs: window.__santraTest.state.jobs.map(job => ({ ...job, status: 'failed', error: 'Synthetic processor failure' })) }));
   await expect(page.getByRole('alert')).toHaveText('Synthetic processor failure');
   await page.getByRole('button', { name: 'Try again', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveCount(0);
   await expect(page.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '10');
-  await page.evaluate(() => window.__santaraTest.emit({ jobs: window.__santaraTest.state.jobs.map(job => ({ ...job, status: 'completed', progress: 100, output: '/fixtures/captions.vtt' })) }));
+  await page.evaluate(() => window.__santraTest.emit({ jobs: window.__santraTest.state.jobs.map(job => ({ ...job, status: 'completed', progress: 100, output: '/fixtures/captions.vtt' })) }));
   await expect(page.getByRole('button', { name: 'Open converted file' })).toBeVisible();
-  expect(await page.evaluate(() => window.__santaraTest.calls.filter(call => ['cancel', 'retry'].includes(call.method)))).toEqual([{ method: 'cancel', value: 'job-subtitle' }, { method: 'retry', value: 'job-subtitle' }]);
+  expect(await page.evaluate(() => window.__santraTest.calls.filter(call => ['cancel', 'retry'].includes(call.method)))).toEqual([{ method: 'cancel', value: 'job-subtitle' }, { method: 'retry', value: 'job-subtitle' }]);
 });
 
 test('preview navigation makes no external network requests', async ({ page, baseURL }) => {
-  await page.addInitScript(() => { delete window.santara; });
+  await page.addInitScript(() => { delete window.santra; });
   const external: string[] = [];
   await page.route('**/*', async route => {
     const url = new URL(route.request().url());

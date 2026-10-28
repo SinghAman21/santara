@@ -1,8 +1,8 @@
-# Santara Drag Wheel GNOME prototype
+# Santra Drag Wheel GNOME prototype
 
 This GNOME Shell extension observes external XDND motion through Shell's `DND.dragMonitors` list. It uses `Main.xdndHandler` lifecycle signals to track drag start/end, polls pointer modifier state during the drag, and launches the configured command or URI when the wheel is shown, changes mode, or hides. It avoids starting a new app process for every pointer movement; the initial wheel position remains fixed while the user moves the drag over a slice.
 
-The extension **does not inspect or receive file payloads**. The Santara overlay must receive the actual drop and file list itself. Two complete taps of the same modifier during the active drag open the wheel. Each tap and the gap after the first release must fit within 400 ms. A key held when the drag begins does not count, and a single new press does nothing. Releasing the modifier keeps the wheel open at its trigger position while the pointer moves over a slice; ending the drag hides it. This prototype depends on private Shell modules and event details; GNOME can change those between releases. Test it on each GNOME version before deployment.
+The extension **does not inspect or receive file payloads**. The Santra overlay must receive the actual drop and file list itself. Two complete taps of the same modifier during the active drag open the wheel. Each tap and the gap after the first release must fit within 400 ms. A key held when the drag begins does not count, and a single new press does nothing. Releasing the modifier keeps the wheel open at its trigger position while the pointer moves over a slice; ending the drag hides it. This prototype depends on private Shell modules and event details; GNOME can change those between releases. Test it on each GNOME version before deployment.
 
 Compatibility is declared for GNOME 46 and GNOME 50. Both use the ES module extension format and expose the XDND handler and drag monitor behavior used here. GNOME 46 is a best-effort compatibility target; GNOME 47–49 are intentionally not listed as verified targets. Enable checks for the required drag monitor and XDND handler interfaces and logs a clear unsupported-version message when they are absent.
 
@@ -17,30 +17,30 @@ From this directory:
 On Wayland, log out and back in if GNOME does not load the extension immediately. Check its state and logs with:
 
 ```sh
-gnome-extensions info santara-wheel@santara.local
+gnome-extensions info santra-wheel@santra.local
 journalctl --user -f -o cat /usr/bin/gnome-shell
 ```
 
-The installer resets saved extension settings to a known-good command template and invokes Santara's single-instance CLI using dedicated `--key=value` arguments. Install the Linux package or make the Santara executable available on `PATH` before enabling the extension. It sends only action, mode, and pointer coordinates; the actual dropped files must reach the Tauri overlay. The extension invokes the app only when showing/changing or hiding the wheel, not on every pointer update.
+The installer resets saved extension settings to a known-good command template and invokes Santra's single-instance CLI using dedicated `--key=value` arguments. Install the Linux package or make the Santra executable available on `PATH` before enabling the extension. It sends only action, mode, and pointer coordinates; the actual dropped files must reach the Tauri overlay. The extension invokes the app only when showing/changing or hiding the wheel, not on every pointer update.
 
 ```sh
-EXT_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/gnome-shell/extensions/santara-wheel@santara.local"
-gsettings --schemadir "$EXT_DIR/schemas" set org.gnome.shell.extensions.santara-wheel command-template 'santara --santara-wheel-action={action} --santara-global-wheel={mode} --santara-wheel-x={x} --santara-wheel-y={y}'
+EXT_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/gnome-shell/extensions/santra-wheel@santra.local"
+gsettings --schemadir "$EXT_DIR/schemas" set org.gnome.shell.extensions.santra-wheel command-template 'santra --santra-wheel-action={action} --santra-global-wheel={mode} --santra-wheel-x={x} --santra-wheel-y={y}'
 ```
 
 The command is parsed into an argument vector and launched without a shell. Placeholders are substituted as single argument values. Configure a registered URI handler instead by setting `launch-method` to `uri` and updating `uri-template`:
 
 ```sh
-gsettings --schemadir "$EXT_DIR/schemas" set org.gnome.shell.extensions.santara-wheel launch-method 'uri'
-gsettings --schemadir "$EXT_DIR/schemas" set org.gnome.shell.extensions.santara-wheel uri-template 'santara://wheel?action={action}&mode={mode}&x={x}&y={y}'
+gsettings --schemadir "$EXT_DIR/schemas" set org.gnome.shell.extensions.santra-wheel launch-method 'uri'
+gsettings --schemadir "$EXT_DIR/schemas" set org.gnome.shell.extensions.santra-wheel uri-template 'santra://wheel?action={action}&mode={mode}&x={x}&y={y}'
 ```
 
-The URI template is an optional alternative and is not registered by Santara; leave `launch-method` set to `command` unless you configure your own URI receiver.
+The URI template is an optional alternative and is not registered by Santra; leave `launch-method` set to `command` unless you configure your own URI receiver.
 
 Modifier defaults are Shift for conversions, Alt for tools, and Ctrl for actions. Values may be `shift`, `alt`, `ctrl`, or `ctrl-shift`:
 
 ```sh
-gsettings --schemadir "$EXT_DIR/schemas" set org.gnome.shell.extensions.santara-wheel tools-modifier 'ctrl-shift'
+gsettings --schemadir "$EXT_DIR/schemas" set org.gnome.shell.extensions.santra-wheel tools-modifier 'ctrl-shift'
 ```
 
 Ctrl+Shift takes priority over either of its single modifiers. For equal-specificity bindings, file actions take precedence, then tools, then conversion.
@@ -64,4 +64,4 @@ node --input-type=module --check < extension.js && python3 -m json.tool metadata
 - Linux placement uses GNOME pointer coordinates passed to the host, falling back to the Tauri window's cursor location when unavailable; mixed-DPI and multi-monitor layouts still need manual verification.
 - The integration cannot force a wheel over arbitrary client windows or receive the drag's URI list. The Tauri window still needs to be the drop destination for file contents.
 - External XDND drag updates arrive while the pointer moves. Modifier polling runs every 20 ms during the drag; very short taps may still be missed and require native testing.
-- The command template is implemented and targets Santara's installed single-instance CLI. The optional URI receiver is not registered or supported.
+- The command template is implemented and targets Santra's installed single-instance CLI. The optional URI receiver is not registered or supported.

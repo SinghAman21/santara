@@ -1,10 +1,10 @@
-# Santara PDF Wheel Architecture
+# Santra PDF Wheel Architecture
 
 ## Status and scope
 
 This document proposes the PDF wheel and compact editor workflow. It does not claim that the planned wheel UI or every listed operation is implemented. Existing PDF support is limited to capability-gated qpdf structural operations (compression, extraction, merge, and rotation) and Poppler page rendering; PDF-to-editable reconstruction is not currently claimed. Runtime detection and tests must gate every visible operation.
 
-The design uses Santara's citrus wheel interaction and its own branding. It does not reuse third-party artwork, trademarks, copy, or macOS conventions. All PDF inspection, previews, and exports remain local and work offline.
+The design uses Santra's citrus wheel interaction and its own branding. It does not reuse third-party artwork, trademarks, copy, or macOS conventions. All PDF inspection, previews, and exports remain local and work offline.
 
 ## Modifier mapping
 
@@ -60,7 +60,7 @@ Export selected pages or all pages to PNG/JPG. Include page-range validation, ou
 
 ## Compact editor interaction
 
-Each tool opens a focused Santara window near the wheel, with a native, bounded size and a complete-page contain-fit preview. Use a thumbnail rail/page navigator, clear selection state, zoom controls, and a settings panel appropriate to that operation. Keep the preview visible while configuring output; do not show the full dashboard.
+Each tool opens a focused Santra window near the wheel, with a native, bounded size and a complete-page contain-fit preview. Use a thumbnail rail/page navigator, clear selection state, zoom controls, and a settings panel appropriate to that operation. Keep the preview visible while configuring output; do not show the full dashboard.
 
 Every editor provides:
 

@@ -2,13 +2,13 @@
 
 The `tauri-rt` branch uses Tauri and a runtime capability registry. Shift, Alt, and Ctrl each require two complete taps during an active drag before the wheel opens; a held modifier at drag start does not count. Dropping on a conversion slice queues a local job and closes the wheel without showing the workspace; failures open the workspace with an error. Rust image/subtitle/archive routes and detected FFmpeg, Poppler, qpdf, Pandoc, LibreOffice, and optional ExifTool routes are implemented in code. Rust raster processing removes metadata; detected ExifTool enables JPEG metadata editing as a same-format copy. FFmpeg includes snapshot, GIF, visualization, bounded redaction, split ranges, and ordered merge. The detailed status and native validation gaps are in `TAURI_PARITY_MATRIX.md`.
 
-Research date: 2026-10-19. Only the public [Tangerine website](https://tangerineformac.com/) was read. No application binary was downloaded, run, decompiled, or reverse engineered. Public marketing is evidence of advertised behavior, not a tested technical implementation or Santara compatibility.
+Research date: 2026-10-19. Only the public [Tangerine website](https://tangerineformac.com/) was read. No application binary was downloaded, run, decompiled, or reverse engineered. Public marketing is evidence of advertised behavior, not a tested technical implementation or Santra compatibility.
 
 ## Public reference observations
 
-The site presents local conversion across media, documents, and archives, drag-triggered contextual controls, editing operations, and file actions. It also advertises keyboard interaction. These observations motivate the independent requirements below; they do not establish that Santara implements them. The source site's format lists and counts can change.
+The site presents local conversion across media, documents, and archives, drag-triggered contextual controls, editing operations, and file actions. It also advertises keyboard interaction. These observations motivate the independent requirements below; they do not establish that Santra implements them. The source site's format lists and counts can change.
 
-| Requirement ID | Independent Santara requirement | Current acceptance status |
+| Requirement ID | Independent Santra requirement | Current acceptance status |
 | --- | --- | --- |
 | CAP-001 | Import files with clear empty and unsupported states | Parent implementation and browser tests must verify |
 | CAP-002 | Report input/output support per installed engine | Engine registry and real fixture tests required |
@@ -21,7 +21,7 @@ The site presents local conversion across media, documents, and archives, drag-t
 | CAP-009 | Keyboard-operable UI, settings, meaningful disabled states | Browser scaffold covers only selected flows |
 | CAP-010 | Desktop drag wheel and global shortcuts | OS-specific research, implementation, and accessibility testing pending |
 | CAP-011 | File actions such as copy, move, reveal, copy path | Validate destinations and destructive-action policy; no macOS-only parity claim |
-| CAP-012 | Windows NSIS and Linux deb/AppImage x64 distribution | Windows setup checks for WebView2, asks before downloading Microsoft's small bootstrapper when missing, then installs Santara; native Windows and clean-machine installation validation remain required |
+| CAP-012 | Windows NSIS and Linux deb/AppImage x64 distribution | Windows setup checks for WebView2, asks before downloading Microsoft's small bootstrapper when missing, then installs Santra; native Windows and clean-machine installation validation remain required |
 
 ## Sources
 
@@ -33,7 +33,7 @@ The site presents local conversion across media, documents, and archives, drag-t
 
 ## Evidence rules
 
-Every enabled conversion should have an engine ID, supported direction, required tool and version, original or permissively licensed fixture, asserted output properties, and failure/cancellation evidence. Record status as proposed, implemented, verified, or unavailable, with a reason. Never convert marketing format counts into a Santara support claim. Native macOS formats, AirDrop, OS-specific shortcuts, OCR, PDF-to-office reconstruction, and lossless preservation require separate feasibility work.
+Every enabled conversion should have an engine ID, supported direction, required tool and version, original or permissively licensed fixture, asserted output properties, and failure/cancellation evidence. Record status as proposed, implemented, verified, or unavailable, with a reason. Never convert marketing format counts into a Santra support claim. Native macOS formats, AirDrop, OS-specific shortcuts, OCR, PDF-to-office reconstruction, and lossless preservation require separate feasibility work.
 
 ## Current implementation inventory
 
@@ -53,7 +53,7 @@ The live Tauri `bootstrap` snapshot contains backend availability and capability
 
 ## Drag and keyboard boundaries
 
-The in-app action wheel, accessible post-drop conversion picker, and Tauri global overlay code are implemented. Shift, Alt, and Ctrl modes require two complete taps of the same modifier during a drag; a held key or single press has no wheel action. A selected conversion slice queues in the background without opening the workspace. Unselected or failed global drops are handed to the workspace with feedback, and repeated drops keep the file selection. Native Share has no provider and is hidden. During an external drag, a WebView cannot read source filenames/paths until the OS delivers the drop. When early drag metadata has no usable type, Santara shows provisional image routes instead of an empty wheel and validates the actual file on drop. If the capability snapshot is still unavailable, the wheel offers the built-in Rust image routes until the registry loads; the backend validates every selected operation. The optional GNOME bridge and Windows watcher can request the overlay, but real Explorer and GNOME Files handoff remains a Phase 8 gate.
+The in-app action wheel, accessible post-drop conversion picker, and Tauri global overlay code are implemented. Shift, Alt, and Ctrl modes require two complete taps of the same modifier during a drag; a held key or single press has no wheel action. A selected conversion slice queues in the background without opening the workspace. Unselected or failed global drops are handed to the workspace with feedback, and repeated drops keep the file selection. Native Share has no provider and is hidden. During an external drag, a WebView cannot read source filenames/paths until the OS delivers the drop. When early drag metadata has no usable type, Santra shows provisional image routes instead of an empty wheel and validates the actual file on drop. If the capability snapshot is still unavailable, the wheel offers the built-in Rust image routes until the registry loads; the backend validates every selected operation. The optional GNOME bridge and Windows watcher can request the overlay, but real Explorer and GNOME Files handoff remains a Phase 8 gate.
 
 Many primary strings are centralized, but details remain hardcoded. Full localization is a roadmap requirement, not a delivered internationalization guarantee. The Tauri image route removes metadata during raster processing; detected ExifTool adds JPEG metadata editing as a separate copy operation.
 

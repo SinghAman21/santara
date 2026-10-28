@@ -1,4 +1,4 @@
-# Santara EPUB Wheel Architecture
+# Santra EPUB Wheel Architecture
 
 ## Status and scope
 

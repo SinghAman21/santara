@@ -1,4 +1,4 @@
-# Santara Document Wheel Architecture
+# Santra Document Wheel Architecture
 
 ## Status and scope
 

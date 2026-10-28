@@ -56,7 +56,7 @@ export async function processImage(file: File, action: ImageAction): Promise<Out
     if (action.id === 'original')
         return { name: file.name, blob: file, duration: performance.now() - start, operation: action.label };
     if (typeof createImageBitmap !== 'function')
-        throw new Error('Image editing is unavailable in this browser. Use Santara desktop.');
+        throw new Error('Image editing is unavailable in this browser. Use Santra desktop.');
     let bitmap: ImageBitmap;
     try {
         bitmap = await createImageBitmap(file);
@@ -66,7 +66,7 @@ export async function processImage(file: File, action: ImageAction): Promise<Out
     }
     try {
         if (bitmap.width * bitmap.height > 24000000)
-            throw new Error('This image exceeds the browser workspace limit of 24 megapixels. Use Santara desktop.');
+            throw new Error('This image exceeds the browser workspace limit of 24 megapixels. Use Santra desktop.');
         const rotate = action.id === 'rotate';
         const scale = action.id === 'resize' ? .5 : 1;
         const canvas = document.createElement('canvas');

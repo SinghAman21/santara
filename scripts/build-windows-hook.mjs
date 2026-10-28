@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const executable = path.join(root, 'native/windows/build/santara-drag-watcher.exe');
+const executable = path.join(root, 'native/windows/build/santra-drag-watcher.exe');
 const source = path.join(root, 'native/windows/drag_watcher.cpp');
 
 function run(command, args, options = {}) {

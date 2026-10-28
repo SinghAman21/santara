@@ -4,7 +4,7 @@ export type Sample = {
     info: FileInfo;
 };
 function samplePdf() {
-    const content = 'BT /F1 20 Tf 50 760 Td (A fresh perspective.) Tj 0 -32 Td /F1 11 Tf (Santara sample brief. Your files stay local.) Tj ET';
+    const content = 'BT /F1 20 Tf 50 760 Td (A fresh perspective.) Tj 0 -32 Td /F1 11 Tf (Santra sample brief. Your files stay local.) Tj ET';
     const objects = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>', '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>', `<< /Length ${content.length} >>\nstream\n${content}\nendstream`];
     let text = '%PDF-1.4\n';
     const offsets = [0];
@@ -61,7 +61,7 @@ export async function createSamples(): Promise<Sample[]> {
     c.fillText('a fresh perspective', 37, 436);
     const image = await new Promise<Blob>(resolve => canvas.toBlob(b => resolve(b!), 'image/png'));
     const notes = new File(['# Field notes\n\nOne orange. Many possibilities.\n\n- Keep the original.\n- Work locally.\n- Make something useful.\n'], 'field-notes.md', { type: 'text/markdown' });
-    const archive = await makeZip(new File(['A safe, deterministic Santara archive fixture.\n'], 'readme.txt', { type: 'text/plain' }));
+    const archive = await makeZip(new File(['A safe, deterministic Santra archive fixture.\n'], 'readme.txt', { type: 'text/plain' }));
     const files = [new File([image], 'orchard.png', { type: 'image/png' }), samplePdf(), notes, new File(['1\n00:00:01,000 --> 00:00:02,500\nA fresh perspective.\n\n2\n00:00:03,000 --> 00:00:05,000\nYour files stay with you.\n'], 'captions.srt', { type: 'application/x-subrip' }), sampleWav(), new File([archive], 'project.zip', { type: 'application/zip' }), new File(['item,quantity\noranges,12\nleaves,24\n'], 'harvest.csv', { type: 'text/csv' })];
     return Promise.all(files.map(async (file) => ({ file, info: await inspectFile(file) })));
 }

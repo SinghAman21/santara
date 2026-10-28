@@ -73,7 +73,7 @@ export default function ImageToolWindow({ capability, file, format, initialOptio
   useEffect(() => {
     let current = true;
     const timer = window.setTimeout(async () => {
-      if (!isDesktop || !api.imagePreview) { setPreview(null); setPreviewError('Live image previews are available in the Santara desktop app.'); return; }
+      if (!isDesktop || !api.imagePreview) { setPreview(null); setPreviewError('Live image previews are available in the Santra desktop app.'); return; }
       setBusy(true); setPreviewError('');
       try {
         const previewOperation = operation === 'crop' || (operation === 'resize' && !previewRecipe.width && !previewRecipe.height) ? 'edit-image' : operation;

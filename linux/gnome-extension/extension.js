@@ -32,7 +32,7 @@ function encodeTemplate(template, values) {
         (_match, key) => encodeURIComponent(String(values[key] ?? '')));
 }
 
-export default class SantaraWheelExtension extends Extension {
+export default class SantraWheelExtension extends Extension {
     enable() {
         this._settings = this.getSettings();
         this._mode = null;
@@ -46,7 +46,7 @@ export default class SantaraWheelExtension extends Extension {
             typeof DND.removeDragMonitor !== 'function' ||
             !Array.isArray(DND.dragMonitors) ||
             !Main.xdndHandler || typeof Main.xdndHandler.connect !== 'function') {
-            log('Santara wheel requires GNOME Shell XDND lifecycle signals and DND drag monitors; this Shell version is unsupported.');
+            log('Santra wheel requires GNOME Shell XDND lifecycle signals and DND drag monitors; this Shell version is unsupported.');
             this._settings = null;
             return;
         }
@@ -131,7 +131,7 @@ export default class SantaraWheelExtension extends Extension {
             this._lastX = Math.round(x);
             this._lastY = Math.round(y);
         } catch (error) {
-            log(`Santara wheel could not read pointer coordinates: ${error.message}`);
+            log(`Santra wheel could not read pointer coordinates: ${error.message}`);
         }
     }
 
@@ -141,14 +141,14 @@ export default class SantaraWheelExtension extends Extension {
             if (Number.isInteger(pointerState))
                 return pointerState;
         } catch (error) {
-            log(`Santara wheel could not read modifier state: ${error.message}`);
+            log(`Santra wheel could not read modifier state: ${error.message}`);
         }
 
         try {
             return Clutter.get_default_backend().get_default_seat()
                 .get_pointer().get_modifier_state();
         } catch (error) {
-            log(`Santara wheel has no modifier-state fallback: ${error.message}`);
+            log(`Santra wheel has no modifier-state fallback: ${error.message}`);
         }
         return 0;
     }
@@ -223,7 +223,7 @@ export default class SantaraWheelExtension extends Extension {
         } catch (error) {
             const message = error.message;
             if (message !== this._lastLaunchError)
-                log(`Santara wheel launch failed: ${message}`);
+                log(`Santra wheel launch failed: ${message}`);
             this._lastLaunchError = message;
         }
     }

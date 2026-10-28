@@ -1,8 +1,8 @@
 [package]
-name = "santara"
+name = "santra"
 version = "0.1.0"
-description = "Santara local desktop runtime"
-authors = ["Santara contributors"]
+description = "Santra local desktop runtime"
+authors = ["Santra contributors"]
 edition = "2021"
 license = "MIT"
 

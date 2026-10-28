@@ -1,11 +1,11 @@
-# Santara Contributor Instructions
+# Santra Contributor Instructions
 
 ## Project scope
 
-- Santara is a Windows x64 and Linux x64 desktop application.
+- Santra is a Windows x64 and Linux x64 desktop application.
 - Keep processing local and offline-first. Never add uploads, accounts, analytics, cloud conversion, or telemetry by default.
 - Do not add macOS builds, DMG/PKG packaging, Apple-specific integrations, AirDrop, or iCloud behavior.
-- Preserve the original Santara citrus branding and do not copy third-party trademarks, artwork, or proprietary UI assets.
+- Preserve the original Santra citrus branding and do not copy third-party trademarks, artwork, or proprietary UI assets.
 
 ## Architecture
 

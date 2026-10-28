@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-UUID='santara-wheel@santara.local'
+UUID='santra-wheel@santra.local'
 SOURCE_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 DEST_ROOT="${XDG_DATA_HOME:-${HOME}/.local/share}/gnome-shell/extensions"
 DEST_DIR="${DEST_ROOT}/${UUID}"
@@ -10,8 +10,8 @@ mkdir -p "$DEST_DIR"
 cp -a "$SOURCE_DIR/." "$DEST_DIR/"
 glib-compile-schemas --strict "$DEST_DIR/schemas"
 
-gsettings --schemadir "$DEST_DIR/schemas" set org.gnome.shell.extensions.santara-wheel launch-method 'command'
-gsettings --schemadir "$DEST_DIR/schemas" set org.gnome.shell.extensions.santara-wheel command-template 'santara --santara-wheel-action={action} --santara-global-wheel={mode} --santara-wheel-x={x} --santara-wheel-y={y}'
+gsettings --schemadir "$DEST_DIR/schemas" set org.gnome.shell.extensions.santra-wheel launch-method 'command'
+gsettings --schemadir "$DEST_DIR/schemas" set org.gnome.shell.extensions.santra-wheel command-template 'santra --santra-wheel-action={action} --santra-global-wheel={mode} --santra-wheel-x={x} --santra-wheel-y={y}'
 
 python3 - "$UUID" <<'PY'
 import ast

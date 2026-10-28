@@ -12,7 +12,7 @@ Date: 2026-10-23. Phase 1 implementation is in progress; its gate is **not passe
 | --- | --- |
 | `npx --no-install tauri info` | Parsed the Vite/Tauri configuration; identified installed WebKitGTK 4.1 and missing `rustup`. |
 | `cargo check --manifest-path src-tauri/Cargo.toml` | Passed with Tauri 2.12.5 after a clean dependency compile. |
-| `npm run tauri:dev -- --no-watch` | Built and launched `target/debug/santara-tauri`; process remained alive until stopped with Ctrl+C. GTK emitted scale-factor critical warnings and Ayatana deprecation warning. Their visual effect remains unassessed. |
+| `npm run tauri:dev -- --no-watch` | Built and launched `target/debug/santra-tauri`; process remained alive until stopped with Ctrl+C. GTK emitted scale-factor critical warnings and Ayatana deprecation warning. Their visual effect remains unassessed. |
 | `npm run typecheck`, `npm run build` | Passed after shell scaffold was added. |
 | `npm run tauri:build -- --bundles deb,appimage` | Passed on this host for the shell prototype. Final artifact bytes: `.deb` 3,934,772; AppImage 89,553,400. Release executable: 11,118,576 bytes. AppImage AppDir payload: 285,849,465 bytes. Debian `Installed-Size` metadata: 11,095 KiB. These payload figures are not measured installed footprints. |
 | GNOME tray and accessibility | The StatusNotifier item registered. Tray opened the wheel, image and video windows; the packaged wheel's Close button hid it, the tray reopened it, and Quit ended the process. The workspace and wheel exposed accessible WebKit content. Editor windows currently show their loading states because the production Tauri bridge is not yet implemented. |

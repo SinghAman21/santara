@@ -1,10 +1,10 @@
-# Santara Video Wheel and Tool Architecture
+# Santra Video Wheel and Tool Architecture
 
 ## Status and scope
 
 The first implementation is in the current source tree: capability-gated wheel slices open a compact video editor, and accepted settings enqueue a non-destructive local FFmpeg job. This is not full format parity or release validation. The backend must detect the required FFmpeg/FFprobe codecs, muxers, and filters before a route appears. Audio editor behavior remains proposal-only in `docs/AUDIO_WHEEL_ARCHITECTURE.md`.
 
-The inspiration is the interaction and editor layout shown in `reference-tools/video/vid.png` through `vid4.png`. These are visual references only. Santara keeps its own citrus identity, copy, icons, and Windows/Linux conventions; no Tangerine branding or macOS shortcuts are used.
+The inspiration is the interaction and editor layout shown in `reference-tools/video/vid.png` through `vid4.png`. These are visual references only. Santra keeps its own citrus identity, copy, icons, and Windows/Linux conventions; no Tangerine branding or macOS shortcuts are used.
 
 ## Interaction model
 
@@ -17,7 +17,7 @@ The inspiration is the interaction and editor layout shown in `reference-tools/v
 
 ## Wheel visual proposal
 
-Use the existing Santara citrus wheel shell: warm orange active slice, quiet pale neutral inactive slices, thin segment boundaries, and the Santara mark alone in the center. Place the wheel close to the drag pointer, with a screen-edge safety margin. Show operation names directly on the slices with simple Santara-native icons; do not make users infer the action from an icon or reveal the tool list only after dropping.
+Use the existing Santra citrus wheel shell: warm orange active slice, quiet pale neutral inactive slices, thin segment boundaries, and the Santra mark alone in the center. Place the wheel close to the drag pointer, with a screen-edge safety margin. Show operation names directly on the slices with simple Santra-native icons; do not make users infer the action from an icon or reveal the tool list only after dropping.
 
 ### Shift: video conversion
 
@@ -36,7 +36,7 @@ Keep slice labels short and readable. If a future capability count makes the whe
 
 ## Shared compact video editor
 
-Each selected tool opens a small, independent Santara window—not the full dashboard—with a consistent layout:
+Each selected tool opens a small, independent Santra window—not the full dashboard—with a consistent layout:
 
 ```text
 ┌ Tool name                                      Close ┐

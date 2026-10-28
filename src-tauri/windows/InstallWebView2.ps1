@@ -3,7 +3,7 @@ $ProgressPreference = 'SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 $downloadUrl = 'https://go.microsoft.com/fwlink/p/?LinkId=2124703'
-$bootstrapper = Join-Path $env:TEMP ("Santara-WebView2-{0}.exe" -f [guid]::NewGuid())
+$bootstrapper = Join-Path $env:TEMP ("Santra-WebView2-{0}.exe" -f [guid]::NewGuid())
 
 function Test-WebView2Runtime {
   $registryPaths = @(

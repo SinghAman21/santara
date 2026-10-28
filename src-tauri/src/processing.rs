@@ -298,7 +298,7 @@ mod tests {
 
     #[test]
     fn converts_and_rotates_a_local_image_after_signature_check() {
-        let path = std::env::temp_dir().join(format!("santara-test-{}.png", uuid::Uuid::new_v4()));
+        let path = std::env::temp_dir().join(format!("santra-test-{}.png", uuid::Uuid::new_v4()));
         let source = DynamicImage::new_rgba8(4, 2);
         source.save_with_format(&path, ImageFormat::Png).unwrap();
         let converted = convert_image(&path, "rotate", "png", &json!({ "angle": 90 }), 85).unwrap();

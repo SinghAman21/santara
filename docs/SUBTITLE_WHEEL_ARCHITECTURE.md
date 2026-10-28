@@ -1,4 +1,4 @@
-# Santara Subtitle Wheel Architecture
+# Santra Subtitle Wheel Architecture
 
 ## Status and scope
 

@@ -52,7 +52,7 @@ export async function inspectFile(file: File): Promise<FileInfo> {
     if (ascii(257, 262) === 'ustar')
         return { kind: 'archives', extension: 'tar', mime: 'application/x-tar', warning: 'TAR extraction requires the desktop app.' };
     if ((ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WAVE') || ascii(0, 3) === 'ID3' || ascii(0, 4) === 'fLaC')
-        return { kind: 'audio', extension, mime: file.type, warning: 'Audio conversion requires a compatible local FFmpeg installation in Santara desktop.' };
+        return { kind: 'audio', extension, mime: file.type, warning: 'Audio conversion requires a compatible local FFmpeg installation in Santra desktop.' };
     if (ascii(4, 8) === 'ftyp' || ascii(0, 4) === 'OggS')
         return { kind: extension === 'mp4' || extension === 'mov' ? 'video' : 'audio', extension, mime: file.type, warning: 'Media processing requires detected FFmpeg in the desktop app.' };
     if (['txt', 'md', 'markdown', 'srt', 'vtt', 'csv', 'tsv'].includes(extension)) {
@@ -91,7 +91,7 @@ export function actionsFor(info: FileInfo, mode: Mode): FileAction[] {
                 id: `desktop-${kind}-${option.label.toLowerCase().replaceAll(' ', '-')}`,
                 icon: info.kind === 'archives' ? 'archive' as const : info.kind === 'audio' ? 'audio' as const : info.kind === 'video' ? 'video' as const : 'text' as const,
                 label: option.label, mode: kind, description: option.detail, engine: 'desktop' as const,
-                unavailable: option.backend ? `${option.backend} is required in Santara desktop.` : info.warning || 'This operation needs Santara desktop and a detected local engine.',
+                unavailable: option.backend ? `${option.backend} is required in Santra desktop.` : info.warning || 'This operation needs Santra desktop and a detected local engine.',
             })));
         }
     }

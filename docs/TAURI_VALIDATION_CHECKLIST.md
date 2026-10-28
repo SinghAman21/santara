@@ -46,7 +46,7 @@ Status: deferred integrated validation. Check boxes are evidence requirements, n
 ## Phase 6 packaging and licensing
 
 - [ ] Native Windows NSIS and Ubuntu `.deb`/AppImage build, install, uninstall and launch on clean target machines.
-- [ ] Windows setup on a clean machine asks permission, downloads and installs WebView2, then installs Santara; verify decline and network-failure paths stop Santara installation. A machine with an existing Runtime must skip the download. Linux WebKitGTK/AppImage dependency behavior is documented and tested.
+- [ ] Windows setup on a clean machine asks permission, downloads and installs WebView2, then installs Santra; verify decline and network-failure paths stop Santra installation. A machine with an existing Runtime must skip the download. Linux WebKitGTK/AppImage dependency behavior is documented and tested.
 - [ ] Final installer bytes, installed bytes, architecture, hashes/signatures, notices and SBOM/dependency inventory.
 
 ## Phase 7 cleanup

@@ -49,4 +49,4 @@ export interface Bridge {
   onNativeDrop?(callback: (files: LocalFile[], position?: { x: number; y: number }) => void, onError?: (message: string) => void): () => void;
   onNativeDragOver?(callback: (position: { x: number; y: number }) => void): () => void;
 }
-declare global { interface Window { santara?: Bridge } }
+declare global { interface Window { santra?: Bridge } }

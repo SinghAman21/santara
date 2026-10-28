@@ -1,4 +1,4 @@
-# Santara migration handoff
+# Santra migration handoff
 
 Branch: `tauri-rt`. Tauri 2 is the sole runtime. Do not add macOS support, touch the untracked user-owned `design/` directory, or install sudo packages on the user's behalf. The previous Electron implementation remains in Git history.
 
@@ -6,6 +6,6 @@ The wheel requires two complete Shift, Alt, or Ctrl taps during a drag. A select
 
 Current code checks passed: `npm run typecheck`, `npm run build`, `npm run test` (13 Rust and 5 Windows protocol tests), `npm run test:e2e` (27 browser tests), `npm run build:windows-hook:cross` (Wine self-test), and `npm run check:release`. The current Ubuntu `.deb` built and its extracted application stayed running through a 10-second isolated D-Bus/Xvfb smoke test. The Windows x64 Tauri application and NSIS installer cross built successfully with user-level rustup/cargo-xwin and Ubuntu NSIS/LLVM packages. `npm run release:report` records both native-target and cross-target installers. Artifact sizes and hashes are in [packaging](docs/TAURI_PACKAGING.md). Generated release reports are not retained in Git.
 
-The installed `/usr/bin/santara` is an older build. Fully quit it and install the current `.deb` before testing; do not interrupt any active local jobs. The GNOME extension files were updated earlier and report `ACTIVE`, though a logout/login may be needed for Shell to load changed code. The current AppImage predates the latest wheel change.
+The installed `/usr/bin/santra` is an older build. Fully quit it and install the current `.deb` before testing; do not interrupt any active local jobs. The GNOME extension files were updated earlier and report `ACTIVE`, though a logout/login may be needed for Shell to load changed code. The current AppImage predates the latest wheel change.
 
 Phase 8 remains open. Validate real GNOME Files and Windows Explorer drags, package installation/removal, editor and conversion output, accessibility, offline operation, and actual installed sizes on Ubuntu LTS x64 and native Windows 10/11 x64. The Windows cross build and Wine helper self-test do not establish native Windows compatibility. Do not claim feature parity or release readiness until the [validation checklist](docs/TAURI_VALIDATION_CHECKLIST.md) and [parity matrix](docs/TAURI_PARITY_MATRIX.md) pass.

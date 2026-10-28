@@ -1,15 +1,15 @@
-# Santara Tauri Runtime Migration Plan
+# Santra Tauri Runtime Migration Plan
 
 ## Objective
 
-Replace Electron with Tauri 2 while preserving Santara’s Windows x64 and Linux x64 behavior, especially the global citrus wheel, local processing, floating editors, and optional native integrations. Reuse the existing React/Vite interface where practical. Do not add macOS support or weaken privacy, safety, accessibility, or offline behavior to meet a size target.
+Replace Electron with Tauri 2 while preserving Santra’s Windows x64 and Linux x64 behavior, especially the global citrus wheel, local processing, floating editors, and optional native integrations. Reuse the existing React/Vite interface where practical. Do not add macOS support or weaken privacy, safety, accessibility, or offline behavior to meet a size target.
 
 Phase 0 is recorded in [ADR 0001](adr/0001-tauri-runtime-boundaries.md) and the [parity matrix](TAURI_PARITY_MATRIX.md). Phase 1 has an isolated Tauri shell prototype. On this migration branch, implement Phases 1–7 in order, record the checks for each phase, and run the full validation in Phase 8. The user authorized Electron removal on this branch after its replacements are implemented. Keep all processing local and offline-first; do not add macOS support.
 
 ## Baseline and constraints
 
 - Existing release artifacts (from the local build): Windows installer about 116 MiB and unpacked app about 425 MiB; Linux `.deb` about 105 MiB, AppImage about 134 MiB, and unpacked app about 339 MiB.
-- Prior Tauri/Wails size figures are planning estimates, not Santara build measurements. Measure both installer and installed/unpacked footprints from actual artifacts before choosing release budgets.
+- Prior Tauri/Wails size figures are planning estimates, not Santra build measurements. Measure both installer and installed/unpacked footprints from actual artifacts before choosing release budgets.
 - The local environment has Rust/Cargo, Go, 12 CPU threads, 7 GiB RAM, and ample disk. Linux GTK/WebKitGTK development packages are missing; installing them requires interactive `sudo`. Windows cross-build support and native Windows validation must be assessed separately.
 - Windows and Linux are the only supported targets. Windows Explorer integration and Linux GNOME/file-manager integration remain optional and must degrade gracefully.
 - Keep FFmpeg, LibreOffice, Pandoc, Poppler, qpdf, and other external engines optional and capability-detected unless a separate reviewed distribution decision says otherwise.

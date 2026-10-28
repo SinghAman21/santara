@@ -9,7 +9,7 @@ const linux = JSON.parse(await readFile(path.join(root, 'src-tauri/tauri.linux.c
 const windows = JSON.parse(await readFile(path.join(root, 'src-tauri/tauri.windows.conf.json'), 'utf8'));
 const failures = [];
 if (metadata.main || metadata.dependencies?.electron || metadata.devDependencies?.electron || metadata.devDependencies?.['electron-builder']) failures.push('Electron runtime or packaging remains');
-if (tauri.identifier !== 'io.santara.app' || tauri.productName !== 'Santara' || tauri.mainBinaryName !== 'santara') failures.push('Tauri package identity differs from Santara');
+if (tauri.identifier !== 'io.santra.app' || tauri.productName !== 'Santra' || tauri.mainBinaryName !== 'santra') failures.push('Tauri package identity differs from Santra');
 if (!['deb', 'appimage'].every(bundle => linux.bundle.targets.includes(bundle))) failures.push('Linux bundles are incomplete');
 if (!windows.bundle.targets.includes('nsis')) failures.push('Windows NSIS bundle is missing');
 if (JSON.stringify(tauri).toLowerCase().includes('dmg') || JSON.stringify(tauri).toLowerCase().includes('macos')) failures.push('Unsupported macOS packaging found');

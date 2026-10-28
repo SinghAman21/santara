@@ -1,19 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist>
-  <schema id="org.gnome.shell.extensions.santara-wheel" path="/org/gnome/shell/extensions/santara-wheel/">
+  <schema id="org.gnome.shell.extensions.santra-wheel" path="/org/gnome/shell/extensions/santra-wheel/">
     <key name="launch-method" type="s">
       <default>'command'</default>
-      <summary>How to invoke Santara</summary>
+      <summary>How to invoke Santra</summary>
       <description>Use a command template or a registered URI handler.</description>
     </key>
     <key name="command-template" type="s">
-      <default>'santara --santara-wheel-action={action} --santara-global-wheel={mode} --santara-wheel-x={x} --santara-wheel-y={y}'</default>
-      <summary>Santara command template</summary>
+      <default>'santra --santra-wheel-action={action} --santra-global-wheel={mode} --santra-wheel-x={x} --santra-wheel-y={y}'</default>
+      <summary>Santra command template</summary>
       <description>Arguments are parsed without a shell. Supported placeholders: {action}, {mode}, {x}, and {y}.</description>
     </key>
     <key name="uri-template" type="s">
-      <default>'santara://wheel?action={action}&amp;mode={mode}&amp;x={x}&amp;y={y}'</default>
-      <summary>Santara URI template</summary>
+      <default>'santra://wheel?action={action}&amp;mode={mode}&amp;x={x}&amp;y={y}'</default>
+      <summary>Santra URI template</summary>
       <description>The URI is opened when the wheel shows or hides.</description>
     </key>
     <key name="convert-modifier" type="s">
