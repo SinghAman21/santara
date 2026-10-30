@@ -1,3 +1,6 @@
+import ExtractPages from './ExtractPages';
+import Compress from './Compress';
+import RenderPage from './RenderPage';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { ArrowRight, FileText, Files, Info, LoaderCircle, RefreshCw, ShieldCheck, X } from 'lucide-react';
 import type { Capability, LocalFile } from '../../common/types';
@@ -204,9 +207,9 @@ export default function PdfWorkspace({ files, capability, format, initialOptions
               return <div className="pdf-workspace__field" key={name}><label htmlFor={`${identifier}-${name}`}>{name === 'pages' && operation === 'pdf-rotate' ? 'Pages to rotate' : fieldLabels[name]}</label>{choices ? <select id={`${identifier}-${name}`} value={values[name] ?? ''} aria-invalid={Boolean(errors[name])} aria-describedby={`${identifier}-${name}-help${errors[name] ? ` ${identifier}-${name}-error` : ''}`} onChange={event => updateValue(name, event.target.value)}>{choices.map(choice => <option key={String(choice)} value={String(choice)}>{name === 'angle' ? `${choice}° clockwise` : String(choice)}</option>)}</select> : <input id={`${identifier}-${name}`} type={name === 'pages' ? 'text' : 'number'} inputMode={name === 'pages' ? 'text' : 'numeric'} min={name === 'pages' ? undefined : range.min ?? (name === 'dpi' ? 36 : 1)} max={range.max} step={name === 'pages' ? undefined : 1} value={values[name] ?? ''} placeholder={name === 'pages' ? '3,1-2,6-z' : fieldDefaults[name]} spellCheck={false} autoComplete="off" aria-invalid={Boolean(errors[name])} aria-describedby={`${identifier}-${name}-help${errors[name] ? ` ${identifier}-${name}-error` : ''}`} onChange={event => updateValue(name, event.target.value)}/>}<p className="pdf-workspace__field-help" id={`${identifier}-${name}-help`}>{help}</p>{errors[name] && <p className="pdf-workspace__field-error" id={`${identifier}-${name}-error`}>{errors[name]}</p>}</div>;
             })}
           </fieldset>
-          {operation === 'pdf-extract' && <div className="pdf-workspace__note"><Info size={17} aria-hidden="true"/><div><strong>Your pages, your order</strong><p>qpdf follows your explicit order: <code>3,1,2</code> puts page 3 first. Ranges such as <code>5-1</code> run backwards. Page bounds are checked when the job runs.</p></div></div>}
-          {operation === 'compress' && <div className="pdf-workspace__note"><Info size={17} aria-hidden="true"/><div><strong>Structural compression</strong><p>Rebuilds PDF streams and structure without downsampling images. File size may stay the same or increase.</p></div></div>}
-          {operation === 'render' && <div className="pdf-workspace__note"><Info size={17} aria-hidden="true"/><div><strong>One selected page per PDF</strong><p>This operation saves the page number above as one image for each input PDF. The preview stays on the original first page.</p></div></div>}
+          {operation === 'pdf-extract' && <ExtractPages/>}
+          {operation === 'compress' && <Compress/>}
+          {operation === 'render' && <RenderPage/>}
           {capabilityWarning && <p className="pdf-workspace__capability-note">{capabilityWarning}</p>}
           {applyError && <div className="pdf-workspace__error" ref={errorRef} role="alert" tabIndex={-1}><strong>Could not apply these settings</strong><p>{applyError}</p></div>}
           {Object.keys(errors).length > 0 && <p className="pdf-workspace__field-error" role="alert">Check the highlighted settings before continuing.</p>}
