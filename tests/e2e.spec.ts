@@ -139,8 +139,21 @@ async function hintNativeImage(page:Page) {
 }
 
 async function doubleTap(page: Page, key: 'Shift' | 'Alt' | 'Control') {
-  await page.keyboard.press(key);
-  await page.keyboard.press(key);
+  await page.evaluate((modifier) => {
+    const target = document.activeElement instanceof HTMLElement ? document.activeElement : document.body;
+    for (let tap = 0; tap < 2; tap += 1) {
+      target.dispatchEvent(new KeyboardEvent('keydown', { key: modifier, bubbles: true }));
+      target.dispatchEvent(new KeyboardEvent('keyup', { key: modifier, bubbles: true }));
+    }
+  }, key);
+}
+
+async function tapModifier(page: Page, key: 'Shift' | 'Alt' | 'Control') {
+  await page.evaluate((modifier) => {
+    const target = document.activeElement instanceof HTMLElement ? document.activeElement : document.body;
+    target.dispatchEvent(new KeyboardEvent('keydown', { key: modifier, bubbles: true }));
+    target.dispatchEvent(new KeyboardEvent('keyup', { key: modifier, bubbles: true }));
+  }, key);
 }
 
 test('empty workspace renders without exceptions', async ({ page }, testInfo) => {
@@ -197,9 +210,9 @@ test('double-tap Shift during a drag opens compatible operations after the mocke
     const app = page.locator('.app');
     await app.dispatchEvent('dragenter', { dataTransfer: transfer });
     await app.dispatchEvent('dragover', { dataTransfer: transfer, shiftKey: true });
-    await page.keyboard.press('Shift');
+    await tapModifier(page, 'Shift');
     await expect(page.getByRole('menu', { name: 'Convert', exact: true })).toHaveCount(0);
-    await page.keyboard.press('Shift');
+    await tapModifier(page, 'Shift');
     await expect(page.getByRole('menu', { name: 'Convert', exact: true })).toBeVisible();
     expect(await page.evaluate(() => window.__santraTest.calls.filter(call => call.method === 'droppedFiles'))).toEqual([]);
     await expect(page.locator('.file-row')).toHaveCount(0);
@@ -236,9 +249,9 @@ test('a modifier held before a drag needs two new taps before the wheel opens', 
       await page.keyboard.down(key);
       await app.dispatchEvent('dragenter', { dataTransfer: transfer });
       await page.keyboard.up(key);
-      await page.keyboard.press(key);
+      await tapModifier(page, key);
       await expect(page.locator('.drag-overlay')).toHaveCount(0);
-      await page.keyboard.press(key);
+      await tapModifier(page, key);
       await expect(page.getByRole('menu', { name: mode, exact: true })).toBeVisible();
       await app.dispatchEvent('dragleave', { dataTransfer: transfer, clientX: 0, clientY: 0 });
       await expect(page.locator('.drag-overlay')).toHaveCount(0);
@@ -684,7 +697,7 @@ test('image wheel matches the white Penpot geometry and uses one orange selectio
   const wheel=page.locator('.image-wheel');
   await expect(wheel).toBeVisible();
   await expect(page.locator('.global-wheel-card')).toHaveCSS('background-color','rgba(0, 0, 0, 0)');
-  await expect(page.getByRole('heading',{name:'Shift — Convert'})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Shift — Convert'})).toHaveCount(0);
   await page.getByRole('menuitem',{name:/^JPG/}).hover();
   await expect(wheel.locator('.citrus-segments path.chosen')).toHaveCSS('fill','rgb(255, 90, 0)');
   await expect(wheel.locator('.citrus-core')).toHaveCSS('background-color','rgb(255, 255, 255)');
@@ -693,11 +706,13 @@ test('image wheel matches the white Penpot geometry and uses one orange selectio
   await expect(wheel.locator('.citrus-segments path').first()).toHaveAttribute('d',/Q /);
   await page.screenshot({animations:'disabled',path:testInfo.outputPath('image-convert-penpot.png')});
   await page.evaluate(()=>window.__santraTest.emitWheelMode('tools'));
+  await expect(page.getByRole('heading',{name:'Alt — Tools'})).toHaveCount(0);
   await page.getByRole('menuitem',{name:/^Crop/}).hover();
   await expect(wheel.locator('.image-wheel-selection')).toHaveText('Crop');
   await expect(page.getByRole('menuitem',{name:/^Crop/}).locator('svg')).toBeVisible();
   await page.screenshot({animations:'disabled',path:testInfo.outputPath('image-tools-penpot.png')});
   await page.evaluate(()=>window.__santraTest.emitWheelMode('actions'));
+  await expect(page.getByRole('heading',{name:'Ctrl — File actions'})).toHaveCount(0);
   await page.getByRole('menuitem',{name:/^Copy ·/}).hover();
   await page.screenshot({animations:'disabled',path:testInfo.outputPath('image-actions-penpot.png')});
 });
