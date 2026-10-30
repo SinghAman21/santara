@@ -1,6 +1,6 @@
 import type { Bridge, LocalFile, Settings, Snapshot } from './types';
 import { isTauriRuntime, tauriBridge } from './tauri-bridge';
-export const defaultSettings: Settings = { theme: 'system', outputFolder: '', collision: 'rename', concurrency: 2, quality: 85, stripMetadata: false, recursive: false, preserveStructure: false, namingPattern: '{name}-converted', shortcuts: { convert: 'Shift', tools: 'Alt', actions: 'Control' }, backendPaths: {}, tray: false };
+export const defaultSettings: Settings = { theme: 'light', outputFolder: '', collision: 'rename', concurrency: 2, quality: 85, stripMetadata: false, recursive: false, preserveStructure: false, namingPattern: '{name}-converted', shortcuts: { convert: 'Shift', tools: 'Alt', actions: 'Control' }, backendPaths: {}, tray: false };
 export const isDesktop = !!window.santra || isTauriRuntime;
 const category = (ext: string): LocalFile['category'] => {
   if ('jpg jpeg png webp heic tiff tif avif bmp svg gif'.split(' ').includes(ext)) return 'image';

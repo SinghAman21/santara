@@ -1,0 +1,29 @@
+/* Penpot 00 foundations: 8px controls, 16px editors, 22/28 task titles. */
+:root { color-scheme: light; --accent: #ff5a00; --accent-hover: #ff5a00; --bg: #ffffff; --panel: #ffffff; --sidebar: #ffffff; --input: #ffffff; --drop: #ffffff; }
+.editor-section-label { margin-bottom: 20px; color: var(--accent); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+.editor-cancel { min-height: 36px; padding: 8px 16px; border: 1px solid var(--line); border-radius: 8px; background: #ffffff; font-size: 13px; font-weight: 600; }
+.image-tool-window,.video-tool-window { width: min(800px, calc(100vw - 32px)); border-radius: 16px; background: #ffffff; box-shadow: 0 20px 80px #18201924; }
+.image-tool-header,.video-tool-header { min-height: 72px; padding: 16px 24px; gap: 12px; }
+.image-tool-header h2,.video-tool-header h2 { margin: 0; font-size: 22px; line-height: 28px; font-weight: 600; }
+.image-tool-header p,.video-tool-header p { margin: 2px 0 0; font-size: 12px; line-height: 18px; }
+.image-tool-header>div>span,.video-tool-header>div>span { display: none; }
+.image-tool-close,.video-tool-close { order: 3; width: 36px; height: 36px; border-radius: 12px; color: var(--text); }
+.image-tool-format,.video-tool-format { background: #ffffff; border: 1px solid var(--line); font-size: 11px; }
+.image-tool-body,.video-tool-body { grid-template-columns: minmax(0, 1.56fr) minmax(250px, 1fr); padding: 20px 24px; gap: 24px; }
+.image-tool-preview-wrap { min-height: 290px; height: min(40vh, 360px); border-radius: 8px; background-color: #ffffff; }
+.image-tool-controls,.video-tool-controls { min-width: 0; }
+.image-tool-section-title { color: var(--text); font-size: 13px; letter-spacing: 0; text-transform: none; }
+.image-tool-field,.image-tool-select,.video-tool-field { font-size: 13px; line-height: 18px; }
+.image-tool-field input,.image-tool-select select,.video-tool-field input,.video-tool-field select,.video-tool-field textarea { min-height: 36px; border-radius: 8px; font-size: 13px; background: #ffffff; }
+.image-tool-hint,.video-tool-note { font-size: 12px; line-height: 18px; }
+.image-tool-footer,.video-tool-footer { min-height: 80px; padding: 16px 24px; background: #ffffff; gap: 16px; }
+.image-tool-footer>span { font-size: 12px; line-height: 18px; }
+.image-tool-footer button,.video-tool-footer button { min-height: 36px; font-size: 13px; border-radius: 8px; }
+.image-tool-apply,.video-tool-apply { background: #ff5a00; color: #ffffff; font-weight: 600; }
+.image-tool-zoom,.image-tool-pan { background: #ffffff; }
+@media (max-width: 760px) {
+ .image-tool-body,.video-tool-body { grid-template-columns: minmax(0,1fr); }
+ .image-tool-preview-wrap { min-height: 200px; height: 220px; }
+ .image-tool-footer,.video-tool-footer { flex-wrap: wrap; }
+ .image-tool-window,.video-tool-window { max-height: calc(100vh - 24px); }
+}

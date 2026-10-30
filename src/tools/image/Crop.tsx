@@ -1,0 +1,5 @@
+import { Field, Slider } from '../../common/EditorFields';
+import { RotateCcw, RotateCw } from 'lucide-react';
+import type { ImageControls } from './controls';
+const presets = ['Free','1:1','4:3','16:9','3:2'];
+export default function Crop({values,set,preview,originalDimensions,ratio,setRatio,setCropRatio,file,format}: ImageControls) { return <><div className="image-tool-section-title">Aspect ratio</div><div className="image-tool-presets">{presets.map(item => <button key={item} className={ratio === item ? 'selected' : ''} onClick={() => setCropRatio(item)}>{item}</button>)}</div><div className="image-tool-field-grid"><Field label="Left" value={values.x} onChange={value => set('x', value)}/><Field label="Top" value={values.y} onChange={value => set('y', value)}/><Field label="Width" value={values.width || String(preview?.width || '')} onChange={value => { set('width', value); setRatio('Free'); }}/><Field label="Height" value={values.height || String(preview?.height || '')} onChange={value => { set('height', value); setRatio('Free'); }}/></div><p className="image-tool-hint">Coordinates use the auto-oriented image. Choose a preset to center the crop.</p></>; }

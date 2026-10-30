@@ -1,4 +1,4 @@
-.quick-preview { min-height: 100vh; display: flex; flex-direction: column; background: #faf9f6; color: #36372f; }
+.quick-preview { min-height: 100vh; display: flex; flex-direction: column; background: #ffffff; color: #36372f; }
 .quick-preview header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .6rem .9rem; border-bottom: 1px solid #dedbd3; }
 .quick-preview header strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .quick-preview header button { display: grid; place-items: center; width: 2rem; height: 2rem; border: 0; border-radius: .5rem; background: transparent; color: inherit; cursor: pointer; }

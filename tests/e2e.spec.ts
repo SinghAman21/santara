@@ -142,22 +142,14 @@ test('empty workspace renders without exceptions', async ({ page }, testInfo) =>
   expect(errors).toEqual([]);
 });
 
-test('navigation and settings theme use the bridge', async ({ page }, testInfo) => {
+test('navigation keeps the white theme even with a dark system preference', async ({ page }, testInfo) => {
+  await page.emulateMedia({ colorScheme: 'dark' });
   await page.goto('/');
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Your flow. Your way.' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'General', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Dark', exact: true }).click();
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-  expect(await page.evaluate(() => window.__santraTest.state.settings.theme)).toBe('dark');
-  await page.screenshot({ path: testInfo.outputPath('settings-dark.png'), fullPage: true });
-  await page.getByRole('button', { name: 'Shortcuts', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Shortcuts', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Local engines', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Local engines', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Converter', exact: true }).click();
-  await page.getByRole('button', { name: 'Activity', exact: true }).click();
-  await expect(page.getByText('Nothing in the works. Yet.')).toBeVisible();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  await expect(page.getByRole('button', { name: 'Toggle color theme' })).toHaveCount(0);
+  await expect(page.locator('body')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await page.screenshot({ path: testInfo.outputPath('settings-white.png') });
 });
 
 test('add files populates rows and mixed selections respect per-file routes', async ({ page }, testInfo) => {
@@ -521,10 +513,10 @@ test('image editor exposes a real padded background canvas and directional zoom 
   await expect(backgroundEditor.getByLabel('Canvas width')).toHaveValue('864');
   await expect(backgroundEditor.getByLabel('Canvas height')).toHaveValue('664');
   await expect(backgroundEditor.getByLabel('Padding')).toHaveValue('32');
-  const color = backgroundEditor.getByRole('button', { name: 'Choose #ef8354 background' });
+  const color = backgroundEditor.getByRole('button', { name: 'Choose #ff5a00 background' });
   await color.click();
   await expect(color).toHaveAttribute('aria-pressed', 'true');
-  await expect(backgroundEditor.locator('.image-tool-preview-wrap')).toHaveCSS('background-color', 'rgb(239, 131, 84)');
+  await expect(backgroundEditor.locator('.image-tool-preview-wrap')).toHaveCSS('background-color', 'rgb(255, 90, 0)');
   await backgroundEditor.getByRole('button', { name: 'Close editor' }).click();
 
   await page.getByRole('button', { name: 'Choose an operation' }).click();

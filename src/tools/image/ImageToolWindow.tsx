@@ -1,8 +1,19 @@
+import './image-tool-window.css';
+import '../../common/editor.css';
+import Crop from './Crop';
+import Resize from './Resize';
+import Rotate from './Rotate';
+import Flip from './Flip';
+import Background from './Background';
+import Adjust from './Adjust';
+import Compress from './Compress';
+import Metadata from './Metadata';
+import StripMetadata from './StripMetadata';
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, Maximize, Minus, Plus, RotateCcw, RotateCw, X } from 'lucide-react';
 import type { Capability, LocalFile } from '../../common/types';
 import { api, isDesktop } from '../../common/bridge';
-import './image-tool-window.css';
+
 
 type Props = {
   capability: Capability;
@@ -17,17 +28,7 @@ const labels: Record<string, string> = {
   'edit-image': 'Edit photo', background: 'Add background', crop: 'Crop image', resize: 'Resize image',
   rotate: 'Rotate image', flip: 'Flip image', compress: 'Compress', metadata: 'Edit metadata', 'strip-metadata': 'Edit metadata',
 };
-const presets = ['Free', '1:1', '4:3', '16:9', '3:2'];
 const ratios: Record<string, number> = { '1:1': 1, '4:3': 4 / 3, '16:9': 16 / 9, '3:2': 3 / 2 };
-
-function Field({ label, value, onChange, min = 0, max = 16384 }: { label: string; value: string; onChange: (value: string) => void; min?: number; max?: number }) {
-  return <label className="image-tool-field"><span>{label}</span><input type="number" min={min} max={max} value={value} onChange={event => onChange(event.target.value)}/></label>;
-}
-
-function Slider({ label, value, min, max, step = 0.05, onChange }: { label: string; value: string; min: number; max: number; step?: number; onChange: (value: string) => void }) {
-  const number = Number(value);
-  return <label className="image-tool-slider"><span>{label}<b>{Number.isFinite(number) ? number.toFixed(step < 1 ? 2 : 0) : value}</b></span><input type="range" min={min} max={max} step={step} value={Number.isFinite(number) ? number : 1} onChange={event => onChange(event.target.value)}/></label>;
-}
 
 export default function ImageToolWindow({ capability, file, format, initialOptions, onClose, onApply }: Props) {
   const windowRef = useRef<HTMLElement>(null);
@@ -37,7 +38,7 @@ export default function ImageToolWindow({ capability, file, format, initialOptio
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   const operation = capability.operation || capability.id.split(':').pop() || '';
-  const [values, setValues] = useState<Record<string, string>>(() => ({ quality: '85', brightness: '1', saturation: '1', contrast: '1', width: '', height: '', x: '0', y: '0', angle: operation === 'rotate' ? '90' : '0', direction: 'horizontal', backgroundType: 'solid', backgroundColor: '#fff4e8', backgroundColor2: '#e69b73', padding: operation === 'background' ? '32' : '0', fit: operation === 'background' ? 'contain' : 'inside', stripMetadata: 'false', title: '', artist: '', copyright: '', description: '', dateTime: '', ...initialOptions }));
+  const [values, setValues] = useState<Record<string, string>>(() => ({ quality: '85', brightness: '1', saturation: '1', contrast: '1', width: '', height: '', x: '0', y: '0', angle: operation === 'rotate' ? '90' : '0', direction: 'horizontal', backgroundType: 'solid', backgroundColor: '#fff4e8', backgroundColor2: '#ff5a00', padding: operation === 'background' ? '32' : '0', fit: operation === 'background' ? 'contain' : 'inside', stripMetadata: 'false', title: '', artist: '', copyright: '', description: '', dateTime: '', ...initialOptions }));
   const [preview, setPreview] = useState<{ url: string; width?: number; height?: number; sourceWidth?: number; sourceHeight?: number } | null>(null);
   const originalDimensions = useRef<{ width: number; height: number } | null>(null);
   const [previewError, setPreviewError] = useState('');
@@ -186,6 +187,8 @@ export default function ImageToolWindow({ capability, file, format, initialOptio
     setRatio('Free');
   }
 
+  const controls = { values, set, preview, originalDimensions, ratio, setRatio, setCropRatio, file, format };
+
   return <div className="image-tool-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
     <section ref={windowRef} className="image-tool-window" role="dialog" aria-modal="true" aria-label={title}>
       <header className="image-tool-header"><button className="image-tool-close" aria-label="Close editor" onClick={onClose}><X size={17}/></button><div><span>IMAGE TOOL</span><h2>{title}</h2><p title={file.name}>{file.name}</p></div><span className="image-tool-format">{format.toUpperCase()}</span></header>
@@ -201,20 +204,20 @@ export default function ImageToolWindow({ capability, file, format, initialOptio
           </div>}
           {preview?.sourceWidth && preview.sourceHeight && <span className="image-tool-dimensions">{preview.sourceWidth} × {preview.sourceHeight} px</span>}
         </div>
-        <div className="image-tool-controls">
-          {operation === 'crop' && <><div className="image-tool-section-title">Aspect ratio</div><div className="image-tool-presets">{presets.map(item => <button key={item} className={ratio === item ? 'selected' : ''} onClick={() => setCropRatio(item)}>{item}</button>)}</div><div className="image-tool-field-grid"><Field label="Left" value={values.x} onChange={value => set('x', value)}/><Field label="Top" value={values.y} onChange={value => set('y', value)}/><Field label="Width" value={values.width || String(preview?.width || '')} onChange={value => { set('width', value); setRatio('Free'); }}/><Field label="Height" value={values.height || String(preview?.height || '')} onChange={value => { set('height', value); setRatio('Free'); }}/></div><p className="image-tool-hint">Coordinates use the auto-oriented image. Choose a preset to center the crop.</p></>}
-          {operation === 'resize' && <><div className="image-tool-section-title">Output dimensions</div><div className="image-tool-field-grid"><Field label="Width (px)" value={values.width || String(preview?.width || '')} onChange={value => set('width', value)} min={1}/><Field label="Height (px)" value={values.height || String(preview?.height || '')} onChange={value => set('height', value)} min={1}/></div><label className="image-tool-select">Fit mode<select value={values.fit} onChange={event => set('fit', event.target.value)}><option value="inside">Fit inside</option><option value="cover">Fill and crop</option><option value="fill">Stretch</option></select></label></>}
-          {operation === 'rotate' && <><div className="image-tool-section-title">Rotation</div><div className="image-tool-rotate-buttons"><button onClick={() => set('angle', String(Number(values.angle || 0) - 90))}><RotateCcw size={17}/> 90° left</button><button onClick={() => set('angle', String(Number(values.angle || 0) + 90))}><RotateCw size={17}/> 90° right</button></div><Slider label="Angle" min={-180} max={180} step={1} value={values.angle} onChange={value => set('angle', value)}/></>}
-          {operation === 'flip' && <><div className="image-tool-section-title">Flip direction</div><label className="image-tool-select">Direction<select value={values.direction} onChange={event => set('direction', event.target.value)}><option value="horizontal">Horizontal</option><option value="vertical">Vertical</option></select></label></>}
-          {operation === 'background' && <><div className="image-tool-section-title">Canvas and background</div><div className="image-tool-field-grid"><Field label="Canvas width" value={values.width || String(originalDimensions.current?.width || '')} onChange={value => set('width', value)} min={1}/><Field label="Canvas height" value={values.height || String(originalDimensions.current?.height || '')} onChange={value => set('height', value)} min={1}/><Field label="Padding" value={values.padding} onChange={value => set('padding', value)}/></div><label className="image-tool-select">Background<select value={values.backgroundType} onChange={event => set('backgroundType', event.target.value)}><option value="solid">Solid color</option><option value="gradient">Gradient</option><option value="transparent">Transparent</option></select></label>{values.backgroundType !== 'transparent' && <><div className="image-tool-color-row"><label>Color<input type="color" value={values.backgroundColor} onChange={event => set('backgroundColor', event.target.value)}/></label>{values.backgroundType === 'gradient' && <label>Second color<input type="color" value={values.backgroundColor2} onChange={event => set('backgroundColor2', event.target.value)}/></label>}</div><div className="image-tool-swatches" aria-label="Background color presets">{['#fff4e8', '#f4d6be', '#ffd166', '#ef8354', '#6cc4b8', '#94a8ff', '#ffffff', '#242424'].map(color => <button key={color} aria-label={`Choose ${color} background`} aria-pressed={values.backgroundColor.toLowerCase() === color} className={values.backgroundColor.toLowerCase() === color ? 'selected' : ''} title={color} style={{ background: color }} onClick={() => set('backgroundColor', color)}/>)}</div></>}<label className="image-tool-select">Image fit<select value={values.fit} onChange={event => set('fit', event.target.value)}><option value="contain">Contain on canvas</option><option value="cover">Cover canvas</option><option value="fill">Stretch to canvas</option></select></label></>}
-          {operation === 'edit-image' && <><div className="image-tool-section-title">Adjustments</div><Slider label="Brightness" min={0} max={2} value={values.brightness} onChange={value => set('brightness', value)}/><Slider label="Contrast" min={0} max={2} value={values.contrast} onChange={value => set('contrast', value)}/><Slider label="Saturation" min={0} max={2} value={values.saturation} onChange={value => set('saturation', value)}/><p className="image-tool-hint">Changes stay in this recipe until you save a copy.</p></>}
-          {operation === 'compress' && <><div className="image-tool-section-title">Compression</div><p className="image-tool-hint">Original size · {(file.size / 1024 / 1024).toFixed(2)} MB · {preview?.width || '—'} × {preview?.height || '—'} px</p><div className="image-tool-presets"><button className={Number(values.quality) >= 75 ? 'selected' : ''} onClick={() => set('quality', '82')}>Balanced</button><button className={Number(values.quality) < 75 ? 'selected' : ''} onClick={() => set('quality', '58')}>Strong</button></div><Slider label="Quality" min={1} max={100} step={1} value={values.quality} onChange={value => set('quality', value)}/><p className="image-tool-hint">Lower quality usually makes a smaller file. The original stays untouched.</p></>}
-          {operation === 'metadata' && <><div className="image-tool-section-title">Editable metadata</div><p className="image-tool-hint">{format.toUpperCase()} · {preview?.sourceWidth || '—'} × {preview?.sourceHeight || '—'} px · {(file.size / 1024 / 1024).toFixed(2)} MB</p><label className="image-tool-field">Artist<input type="text" maxLength={512} value={values.artist} onChange={event => set('artist', event.target.value)}/></label><label className="image-tool-field">Copyright<input type="text" maxLength={512} value={values.copyright} onChange={event => set('copyright', event.target.value)}/></label><label className="image-tool-field">Description<input type="text" maxLength={512} value={values.description} onChange={event => set('description', event.target.value)}/></label><label className="image-tool-field">Date taken (EXIF)<input type="text" maxLength={512} placeholder="YYYY:MM:DD HH:MM:SS" value={values.dateTime} onChange={event => set('dateTime', event.target.value)}/></label><p className="image-tool-hint">Updates standard EXIF fields in a new copy. Other metadata is preserved where supported.</p></>}
-          {operation === 'strip-metadata' && <><div className="image-tool-section-title">Delete metadata</div><p className="image-tool-hint">Save a new copy without copied metadata. Your original image remains unchanged.</p></>}
+        <div className="image-tool-controls"><div className="editor-section-label">Output settings</div>
+          {operation === 'crop' && <Crop {...controls}/>}
+          {operation === 'resize' && <Resize {...controls}/>}
+          {operation === 'rotate' && <Rotate {...controls}/>}
+          {operation === 'flip' && <Flip {...controls}/>}
+          {operation === 'background' && <Background {...controls}/>}
+          {operation === 'edit-image' && <Adjust {...controls}/>}
+          {operation === 'compress' && <Compress {...controls}/>}
+          {operation === 'metadata' && <Metadata {...controls}/>}
+          {operation === 'strip-metadata' && <StripMetadata {...controls}/>}
           <label className="image-tool-check"><input type="checkbox" checked={!capability.preservesMetadata || values.stripMetadata === 'true'} disabled={!capability.preservesMetadata} onChange={event => set('stripMetadata', String(event.target.checked))}/> {capability.preservesMetadata ? 'Remove metadata from the copy' : 'This local image backend removes metadata from the copy'}</label>
         </div>
       </div>
-      <footer className="image-tool-footer"><span>{applyError || capability.warning || 'Your source image will not be changed.'}</span><div><button className="image-tool-reset" disabled={applying} onClick={() => { setRatio('Free'); setZoom(1); setPan({ x: 0, y: 0 }); setApplyError(''); const padding = operation === 'background' ? 32 : 0; setValues({ quality: '85', brightness: '1', saturation: '1', contrast: '1', width: operation === 'background' ? String((originalDimensions.current?.width || 0) + padding * 2) : '', height: operation === 'background' ? String((originalDimensions.current?.height || 0) + padding * 2) : '', x: '0', y: '0', angle: operation === 'rotate' ? '90' : '0', direction: 'horizontal', backgroundType: 'solid', backgroundColor: '#fff4e8', backgroundColor2: '#e69b73', padding: String(padding), fit: operation === 'background' ? 'contain' : 'inside', stripMetadata: 'false', title: '', artist: '', copyright: '', description: '', dateTime: '' }); }}><RotateCcw size={15}/> Reset</button>{operation === 'metadata' && <button className="image-tool-delete" disabled={applying} onClick={async () => { setApplying(true); setApplyError(''); try { await onApply({ ...values, stripMetadata: 'true' }); } catch (error) { setApplyError(error instanceof Error ? error.message : String(error)); } finally { setApplying(false); } }}><X size={15}/> Delete metadata</button>}<button className="image-tool-apply" disabled={applying} onClick={async () => { setApplying(true); setApplyError(''); try { await onApply(values); } catch (error) { setApplyError(error instanceof Error ? error.message : String(error)); } finally { setApplying(false); } }}>{applying ? <RotateCw className="spin" size={16}/> : <Check size={16}/>} {applying ? 'Queueing…' : operation === 'metadata' ? 'Save metadata copy' : 'Save copy'}</button></div></footer>
+      <footer className="image-tool-footer"><span>{applyError || capability.warning || 'Your source image will not be changed.'}</span><div><button className="image-tool-reset" disabled={applying} onClick={() => { setRatio('Free'); setZoom(1); setPan({ x: 0, y: 0 }); setApplyError(''); const padding = operation === 'background' ? 32 : 0; setValues({ quality: '85', brightness: '1', saturation: '1', contrast: '1', width: operation === 'background' ? String((originalDimensions.current?.width || 0) + padding * 2) : '', height: operation === 'background' ? String((originalDimensions.current?.height || 0) + padding * 2) : '', x: '0', y: '0', angle: operation === 'rotate' ? '90' : '0', direction: 'horizontal', backgroundType: 'solid', backgroundColor: '#fff4e8', backgroundColor2: '#ff5a00', padding: String(padding), fit: operation === 'background' ? 'contain' : 'inside', stripMetadata: 'false', title: '', artist: '', copyright: '', description: '', dateTime: '' }); }}><RotateCcw size={15}/> Reset</button>{operation === 'metadata' && <button className="image-tool-delete" disabled={applying} onClick={async () => { setApplying(true); setApplyError(''); try { await onApply({ ...values, stripMetadata: 'true' }); } catch (error) { setApplyError(error instanceof Error ? error.message : String(error)); } finally { setApplying(false); } }}><X size={15}/> Delete metadata</button>}<button className="editor-cancel" disabled={applying} onClick={onClose}>Cancel</button><button className="image-tool-apply" disabled={applying} onClick={async () => { setApplying(true); setApplyError(''); try { await onApply(values); } catch (error) { setApplyError(error instanceof Error ? error.message : String(error)); } finally { setApplying(false); } }}>{applying ? <RotateCw className="spin" size={16}/> : <Check size={16}/>} {applying ? 'Queueing…' : operation === 'metadata' ? 'Save metadata copy' : 'Save copy'}</button></div></footer>
     </section>
   </div>;
 }

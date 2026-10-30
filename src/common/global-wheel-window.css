@@ -46,7 +46,3 @@ html.global-wheel-document body { min-width: 0; }
   font-size: 18px;
   line-height: 1;
 }
-
-[data-theme=dark] .global-wheel-card { background: #26221de8; border-color: #fff2; }
-[data-theme=dark] .global-wheel-cancel { background: #3b3026; color: #f1d8be; border-color: #855b3e; }
-[data-theme=dark] .global-wheel-shell { color: #f1d8be; }

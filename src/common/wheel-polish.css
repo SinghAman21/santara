@@ -40,16 +40,3 @@
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-
-[data-theme=dark] .citrus-rind {
-  background: radial-gradient(circle at 36% 27%, #d68c57, #9e512e 76%, #703d2a);
-  box-shadow: inset 0 0 0 4px #724a34, 0 17px 44px #0008;
-}
-[data-theme=dark] .citrus-segments path { fill: #664c34; stroke: #a77752; }
-[data-theme=dark] .citrus-segments path:nth-child(even) { fill: #755239; }
-[data-theme=dark] .citrus-segments path.chosen { fill: #cc7140; stroke: #ebad75; }
-[data-theme=dark] .citrus-label { color: #f3e3ca; text-shadow: 0 1px #3c2b20; }
-[data-theme=dark] .citrus-core {
-  background: radial-gradient(circle at 35% 28%, #493b2c, #302a23);
-  box-shadow: inset 0 0 0 5px #a37552, 0 4px 14px #0008;
-}

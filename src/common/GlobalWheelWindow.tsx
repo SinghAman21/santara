@@ -91,14 +91,7 @@ export default function GlobalWheelWindow() {
   }, []);
 
   useEffect(() => {
-    const media = matchMedia('(prefers-color-scheme: dark)');
-    const applyTheme = () => {
-      const preference = snapshot.settings.theme || 'system';
-      document.documentElement.dataset.theme = preference === 'system' ? (media.matches ? 'dark' : 'light') : preference;
-    };
-    applyTheme();
-    media.addEventListener('change', applyTheme);
-    return () => media.removeEventListener('change', applyTheme);
+    document.documentElement.dataset.theme = 'light';
   }, [snapshot.settings.theme]);
 
   useEffect(() => {
