@@ -30,7 +30,7 @@
 
 .reference-wheel-shell .global-wheel-card { height:100%; display:flex; flex-direction:column; }
 .reference-wheel-shell .reference-wheel { margin:0 auto; }
-.reference-wheel.has-empty .reference-wheel-empty { margin-top:54px; min-height:220px; align-items:flex-start; padding:28px 24px; border-radius:16px; text-align:left; gap:20px; }
+.reference-wheel.has-empty .reference-wheel-empty { margin-top:0; min-height:220px; align-items:flex-start; padding:28px 24px; border-radius:16px; text-align:left; gap:20px; }
 .reference-wheel.has-empty .image-wheel-source { display:none; }
 
 .reference-wheel-shell .global-wheel-card .reference-wheel { margin:0 auto; }

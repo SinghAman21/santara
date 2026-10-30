@@ -78,12 +78,8 @@ function InstallPage() {
   const [platform, setPlatform] = useState<'linux' | 'windows'>(() => /Win/i.test(navigator.userAgent) ? 'windows' : 'linux');
   const [packageType, setPackageType] = useState<'deb' | 'AppImage'>('deb');
   const isWindows = platform === 'windows';
-  const file = isWindows
-    ? 'Santra-0.1.0-win-x64.exe'
-    : packageType === 'deb'
-      ? 'Santra-0.1.0-linux-amd64.deb'
-      : 'Santra-0.1.0-linux-x86_64.AppImage';
-  const releaseBase = (import.meta.env.VITE_SANTRA_RELEASE_BASE_URL ?? 'https://github.com/SinghAman21/santra/releases/download/v0.1.0-preview').replace(/\/$/, '');
+  const file = isWindows ? 'santra.exe' : packageType === 'deb' ? 'santra.deb' : 'santra.AppImage';
+  const releaseBase = (import.meta.env.VITE_SANTRA_RELEASE_BASE_URL ?? 'https://github.com/SinghAman21/santra/releases/latest/download').replace(/\/$/, '');
   const downloadUrl = import.meta.env.DEV ? `/downloads/${file}` : `${releaseBase}/${file}`;
   const packageName = isWindows ? 'Windows installer' : packageType === 'deb' ? 'Debian package' : 'AppImage';
 
@@ -119,12 +115,12 @@ function InstallPage() {
           <div className="mt-7 flex flex-wrap items-start gap-4">
             <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-orange-wash text-action"><HardDriveDownload size={21}/></span>
             <div className="min-w-0 flex-1">
-              <Badge>{isWindows ? 'WINDOWS' : 'LINUX'} · X64 · VERSION 0.1.0</Badge>
+              <Badge>{isWindows ? 'WINDOWS' : 'LINUX'} · X64 · LATEST RELEASE</Badge>
               <h2 className="mt-3 font-display text-3xl tracking-tight">{isWindows ? 'Santra for Windows' : packageType === 'deb' ? 'Santra for Debian & Ubuntu' : 'Santra AppImage'}</h2>
               <p className="max-w-[590px] text-sm leading-7 text-muted">{isWindows ? 'Download the Windows installer and follow the setup steps. This preview may show an unsigned app warning.' : packageType === 'deb' ? 'Install with your software manager or use the apt command below.' : 'Mark the AppImage executable, then open it. Desktop integration varies by Linux distribution.'}</p>
               <div className="mt-5 rounded-2xl border border-line bg-paper p-4">
                 <p className="m-0 text-[10px] font-bold tracking-[.12em] text-muted">{isWindows ? 'SETUP' : 'QUICK INSTALL'}</p>
-                {isWindows ? <p className="mb-0 mt-2 text-xs leading-6 text-ink">Open <strong>{file}</strong> after downloading.</p> : <code className="mt-2 block max-w-full break-all text-xs leading-6 text-ink">{packageType === 'deb' ? 'sudo apt install ./Santra-0.1.0-linux-amd64.deb' : 'chmod +x Santra-0.1.0-linux-x86_64.AppImage'}</code>}
+                {isWindows ? <p className="mb-0 mt-2 text-xs leading-6 text-ink">Open <strong>{file}</strong> after downloading.</p> : <code className="mt-2 block max-w-full break-all text-xs leading-6 text-ink">{packageType === 'deb' ? 'sudo apt install ./santra.deb' : 'chmod +x santra.AppImage'}</code>}
               </div>
               <div className="mt-5 flex flex-wrap items-center gap-3">
                 <a href={downloadUrl} className="site-cta inline-flex min-h-12 items-center gap-2 rounded-full bg-action px-5 py-3 text-sm font-semibold text-white transition hover:bg-action-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-action">Download {packageName} <ArrowDown size={16}/></a>

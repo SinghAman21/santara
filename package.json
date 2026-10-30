@@ -22,7 +22,7 @@
     "test": "cargo test --manifest-path src-tauri/Cargo.toml --locked && node --test native/windows/protocol.test.mjs",
     "test:e2e": "playwright test",
     "dist": "npm run tauri:build",
-    "dist:windows": "npm run tauri:dist:windows",
+    "dist:windows": "node scripts/dist-windows.mjs",
     "dist:linux": "npm run tauri:dist:linux",
     "check:release": "node scripts/check-release.mjs",
     "release:report": "node scripts/release-report.mjs",

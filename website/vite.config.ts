@@ -10,8 +10,14 @@ const devDownloads: Plugin = {
   configureServer(server) {
     server.middlewares.use('/downloads', (request, response, next) => {
       const fileName = decodeURIComponent(new URL(request.url || '/', 'http://localhost').pathname.slice(1));
-      if (!['Santra-0.1.0-linux-amd64.deb', 'Santra-0.1.0-linux-x86_64.AppImage', 'Santra-0.1.0-win-x64.exe'].includes(fileName)) return next();
-      const filePath = resolve(releases, fileName);
+      const localFiles: Record<string, string> = {
+        'santra.deb': 'Santra-0.1.0-linux-amd64.deb',
+        'santra.AppImage': 'Santra-0.1.0-linux-x86_64.AppImage',
+        'santra.exe': 'Santra-0.1.0-win-x64.exe',
+      };
+      const sourceName = localFiles[fileName];
+      if (!sourceName) return next();
+      const filePath = resolve(releases, sourceName);
       try {
         const stats = statSync(filePath);
         response.statusCode = 200;

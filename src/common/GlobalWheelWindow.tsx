@@ -117,7 +117,6 @@ export default function GlobalWheelWindow() {
       .flat().map(item => [item.id, item])).values()];
 
   const isImage = family === 'image';
-  const shortcut = snapshot.settings.shortcuts[mode];
 
   function highlight(id: string) {
     choiceRef.current = id;
@@ -220,7 +219,6 @@ export default function GlobalWheelWindow() {
     event.dataTransfer.dropEffect = 'copy';
   }} onDrop={event => void onDrop(event)}>
     <div className="global-wheel-card">
-      {<header className="image-wheel-heading"><h1>{shortcut} — {mode==='convert'?'Convert':mode==='tools'?'Tools':'File actions'}</h1><p>Double-tap {shortcut} during drag</p></header>}
       {failure && <p role="alert" className="global-wheel-error">{failure}</p>}
       <RadialWheel
         family={family}
