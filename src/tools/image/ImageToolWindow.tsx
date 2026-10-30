@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, Maximize, Minus, Plus, RotateCcw, RotateCw, X } from 'lucide-react';
-import type { Capability, LocalFile } from './types';
-import { api, isDesktop } from './bridge';
+import type { Capability, LocalFile } from '../../common/types';
+import { api, isDesktop } from '../../common/bridge';
 import './image-tool-window.css';
 
 type Props = {

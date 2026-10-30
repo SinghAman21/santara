@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import type { Bridge, ImageEditorContext, Job, Snapshot, VideoEditorContext } from '../src/types';
+import type { Bridge, ImageEditorContext, Job, Snapshot, VideoEditorContext } from '../src/common/types';
 
 interface MockControl {
   state: Snapshot;

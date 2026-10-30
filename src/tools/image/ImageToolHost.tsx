@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import type { ImageEditorContext } from './types';
-import { api } from './bridge';
+import type { ImageEditorContext } from '../../common/types';
+import { api } from '../../common/bridge';
 import ImageToolWindow from './ImageToolWindow';
 import './image-tool-window.css';
 

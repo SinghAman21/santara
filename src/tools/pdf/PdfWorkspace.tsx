@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { ArrowRight, FileText, Files, Info, LoaderCircle, RefreshCw, ShieldCheck, X } from 'lucide-react';
-import type { Capability, LocalFile } from './types';
+import type { Capability, LocalFile } from '../../common/types';
 import './pdf-workspace.css';
 
 export interface PdfWorkspaceProps {

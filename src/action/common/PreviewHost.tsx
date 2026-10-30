@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
-import { api } from './bridge';
-import type { LocalFile } from './types';
+import { api } from '../../common/bridge';
+import type { LocalFile } from '../../common/types';
 import './preview-window.css';
 
 export default function PreviewHost() {

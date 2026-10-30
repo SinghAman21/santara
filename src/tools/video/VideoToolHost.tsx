@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import type { VideoEditorContext } from './types';
-import { api } from './bridge';
+import type { VideoEditorContext } from '../../common/types';
+import { api } from '../../common/bridge';
 import VideoToolWindow from './VideoToolWindow';
 import './video-tool-window.css';
 

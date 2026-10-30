@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent } from 'react';
 import { ArrowDown, ArrowUp, Pause, Play, Plus, RotateCcw, Scissors, Trash2, X } from 'lucide-react';
-import type { Capability, LocalFile } from './types';
-import { api } from './bridge';
+import type { Capability, LocalFile } from '../../common/types';
+import { api } from '../../common/bridge';
 
 type Mask = { x: number; y: number; width: number; height: number; start: number; end: number; color: string };
 type Preview = { url: string; duration?: number; previewDuration?: number; width?: number; height?: number; metadata?: Record<string, unknown> };

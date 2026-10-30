@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState, type DragEvent, type ReactNode } from 'react';
 import { ArrowDown, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, AudioLines, Check, CheckCheck, ChevronDown, ChevronRight, CircleHelp, Clipboard, Copy, CornerDownLeft, File, FileArchive, FileAudio, FileImage, FileSliders, FileSpreadsheet, FileText, FileVideo, Files, Folder, FolderOpen, History, Image, Info, Keyboard, Layers, Leaf, ListFilter, LoaderCircle, LockKeyhole, Maximize, Monitor, Moon, MoreHorizontal, Music2, Package, PanelLeftClose, Play, Plus, RefreshCw, ScanLine, Search, Settings2, ShieldCheck, SlidersHorizontal, Sparkles, Sun, Terminal, Trash2, Upload, WandSparkles, X, Zap } from 'lucide-react';
-import { api, defaultSettings, isDesktop } from './bridge';
-import { en as t, settingsLabels } from './strings';
-import type { Capability, Job, LocalFile, Settings, Snapshot } from './types';
-import OperationFields from './OperationFields';
-import RadialWheel, { type WheelItem } from './RadialWheel';
-import PdfWorkspace from './PdfWorkspace';
-import ImageToolWindow from './ImageToolWindow';
+import { api, defaultSettings, isDesktop } from '../common/bridge';
+import { en as t, settingsLabels } from '../common/strings';
+import type { Capability, Job, LocalFile, Settings, Snapshot } from '../common/types';
+import OperationFields from '../common/OperationFields';
+import RadialWheel, { type WheelItem } from '../common/RadialWheel';
+import PdfWorkspace from '../tools/pdf/PdfWorkspace';
+import ImageToolWindow from '../tools/image/ImageToolWindow';
 import { Crop, RotateCw, FlipHorizontal, Scissors, VolumeX, Gauge, Camera, Paintbrush, Palette, Merge, Split, type LucideIcon } from 'lucide-react';
 
 type Page = 'converter' | 'activity' | 'formats' | 'settings';

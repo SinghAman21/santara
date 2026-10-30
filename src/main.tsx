@@ -1,11 +1,11 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import './styles.css';
-import App from './App';
-import GlobalWheelWindow from './GlobalWheelWindow';
-import ImageToolHost from './ImageToolHost';
-import VideoToolHost from './VideoToolHost';
-import PreviewHost from './PreviewHost';
+import './common/styles.css';
+import App from './workspace/App';
+import GlobalWheelWindow from './common/GlobalWheelWindow';
+import ImageToolHost from './tools/image/ImageToolHost';
+import VideoToolHost from './tools/video/VideoToolHost';
+import PreviewHost from './action/common/PreviewHost';
 const root = createRoot(document.getElementById('root')!);
 const isGlobalWheel = new URLSearchParams(window.location.search).get('santra-wheel') === '1';
 const isImageTool = new URLSearchParams(window.location.search).get('santra-image-tool') === '1';
