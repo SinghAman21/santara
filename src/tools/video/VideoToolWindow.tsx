@@ -1,10 +1,26 @@
+import { decimal, clock, type Mask, type Preview } from './media';
+import './video-tool-window.css';
+import '../../common/editor.css';
+import CompressControls from './CompressControls';
+import TrimControls from './TrimControls';
+import SplitControls from './SplitControls';
+import CropControls from './CropControls';
+import ResizeControls from './ResizeControls';
+import RotateControls from './RotateControls';
+import FlipControls from './FlipControls';
+import SpeedControls from './SpeedControls';
+import GifControls from './GifControls';
+import ExtractAudioControls from './ExtractAudioControls';
+import MuteControls from './MuteControls';
+import SnapshotControls from './SnapshotControls';
+import MergeControls from './MergeControls';
+import RedactControls from './RedactControls';
+import StripMetadataControls from './StripMetadataControls';
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent } from 'react';
 import { ArrowDown, ArrowUp, Pause, Play, Plus, RotateCcw, Scissors, Trash2, X } from 'lucide-react';
 import type { Capability, LocalFile } from '../../common/types';
 import { api } from '../../common/bridge';
 
-type Mask = { x: number; y: number; width: number; height: number; start: number; end: number; color: string };
-type Preview = { url: string; duration?: number; previewDuration?: number; width?: number; height?: number; metadata?: Record<string, unknown> };
 type Props = { capability: Capability; files: LocalFile[]; format: string; initialOptions: Record<string, unknown>; onClose: () => void; onApply: (format: string, options: Record<string, unknown>, orderedFiles: string[]) => Promise<unknown> };
 
 const operationTitle: Record<string, string> = {
@@ -12,16 +28,6 @@ const operationTitle: Record<string, string> = {
   speed: 'Change speed', snapshot: 'Extract frames', mute: 'Remove audio', redact: 'Redact video',
   'strip-metadata': 'Delete metadata', resize: 'Resize video', rotate: 'Rotate video', flip: 'Flip video',
   gif: 'Create GIF', 'extract-audio': 'Extract audio',
-};
-
-const decimal = (value: number) => Number.isFinite(value) ? value.toFixed(2).replace(/\.00$/, '') : '0';
-const clock = (value: number) => {
-  const safe = Math.max(0, Number.isFinite(value) ? value : 0);
-  const hours = Math.floor(safe / 3600);
-  const minutes = Math.floor(safe / 60) % 60;
-  const seconds = Math.floor(safe % 60);
-  const centiseconds = Math.floor((safe % 1) * 100);
-  return `${hours ? `${hours}:` : ''}${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(centiseconds).padStart(2, '0')}`;
 };
 
 export default function VideoToolWindow({ capability, files: originalFiles, format: initialFormat, initialOptions, onClose, onApply }: Props) {
@@ -193,29 +199,29 @@ export default function VideoToolWindow({ capability, files: originalFiles, form
           {preview?.previewDuration && <p className="video-tool-fileinfo">Playback previews the first 30 seconds. Time fields can target the full source.</p>}
           <p className="video-tool-fileinfo">{file?.size ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : ''}{preview?.width && preview.height ? ` · ${preview.width} × ${preview.height}` : ''}{duration ? ` · ${clock(duration)}` : ''}</p>
         </div>
-        <div className="video-tool-controls">
+        <div className="video-tool-controls"><div className="editor-section-label">Output settings</div>
           <div className="video-tool-section-title">Operation settings</div>
           {outputFormats.length > 1 && <label className="video-tool-field">Output format<select aria-label="Output format" value={format} onChange={event => setFormat(event.target.value)}>{outputFormats.map(output => <option key={output} value={output}>{output.toUpperCase()}</option>)}</select></label>}
-          {operation === 'compress' && <><p className="video-tool-note">Re-encodes the video locally. Compression may increase file size; the source is kept untouched.</p><label className="video-tool-slider">Video quality <b>{values.quality || '75'}</b><input aria-label="Video quality" type="range" min="1" max="100" value={values.quality || '75'} onChange={event => set('quality', event.target.value)}/></label><label className="video-tool-field">Audio bitrate (kbps)<input aria-label="Audio bitrate" type="number" min="16" max="512" step="16" value={values.bitrate || '128'} onChange={event => set('bitrate', event.target.value)}/></label></>}
-          {operation === 'trim' && <><p className="video-tool-note">Drag the playhead to inspect, then enter an exact range. Export is re-encoded for accurate boundaries.</p><div className="video-tool-grid"><label className="video-tool-field">Start (seconds)<input aria-label="Start time (seconds)" type="number" min="0" max={duration || 604800} step="0.01" value={values.start ?? '0'} onChange={event => set('start', event.target.value)}/></label><label className="video-tool-field">End (seconds)<input aria-label="End time (seconds)" type="number" min="0" max={duration || 604800} step="0.01" value={values.end ?? String(duration || 10)} onChange={event => set('end', event.target.value)}/></label></div><div className="video-tool-range-actions"><button onClick={() => set('start', decimal(playhead))}>Set start to playhead</button><button onClick={() => set('end', decimal(playhead))}>Set end to playhead</button></div></>}
-          {operation === 'split' && <><p className="video-tool-note">Enter each start–end range in seconds. Each range exports as a numbered clip.</p><label className="video-tool-field">Segments (seconds)<textarea aria-label="Segments (seconds)" rows={4} value={segmentsText} onChange={event => set('segments', event.target.value)}/></label><div className="video-tool-range-actions"><button onClick={() => set('segments', `${segmentsText ? `${segmentsText}, ` : ''}${decimal(playhead)}-${decimal(Math.min(duration || playhead + 5, playhead + 5))}`)}><Plus size={13}/> Add segment at playhead</button></div></>}
-          {operation === 'crop' && <><p className="video-tool-note">Drag on the frame to set a crop. Width and height must be even for common video codecs.</p><div className="video-tool-grid">{[['x','Left (px)'],['y','Top (px)'],['width','Width (px)'],['height','Height (px)']].map(([key,label]) => <label className="video-tool-field" key={key}>{label}<input aria-label={label} type="number" min="0" step="2" value={values[key] || (key === 'width' ? String(videoWidth) : key === 'height' ? String(videoHeight) : '0')} onChange={event => set(key, event.target.value)}/></label>)}</div></>}
-          {operation === 'resize' && <><div className="video-tool-grid"><label className="video-tool-field">Width (px)<input aria-label="Width (px)" type="number" min="2" max="16384" step="2" value={values.width || String(videoWidth || 1280)} onChange={event => set('width', event.target.value)}/></label><label className="video-tool-field">Height (px)<input aria-label="Height (px)" type="number" min="2" max="16384" step="2" value={values.height || String(videoHeight || 720)} onChange={event => set('height', event.target.value)}/></label></div><p className="video-tool-note">Resizing re-encodes the video and can change its quality.</p></>}
-          {operation === 'rotate' && <label className="video-tool-field">Rotation<select aria-label="Rotation" value={values.angle || '90'} onChange={event => set('angle', event.target.value)}><option value="90">90° clockwise</option><option value="180">180°</option><option value="270">90° counterclockwise</option></select></label>}
-          {operation === 'flip' && <label className="video-tool-field">Direction<select aria-label="Direction" value={values.direction || 'horizontal'} onChange={event => set('direction', event.target.value)}><option value="horizontal">Horizontal</option><option value="vertical">Vertical</option></select></label>}
-          {operation === 'speed' && <><label className="video-tool-slider">Playback speed <b>{values.factor || '1'}×</b><input aria-label="Playback speed" type="range" min="0.25" max="4" step="0.05" value={values.factor || '1'} onChange={event => set('factor', event.target.value)}/></label><div className="video-tool-presets">{[0.5, 1, 1.5, 2, 4].map(factor => <button className={Number(values.factor || 1) === factor ? 'selected' : ''} key={factor} onClick={() => set('factor', String(factor))}>{factor}×</button>)}</div><p className="video-tool-note">The export is re-encoded. Audio pitch correction is not currently offered; audio tempo changes with the clip.</p></>}
-          {operation === 'gif' && <><p className="video-tool-note">Creates a silent animated GIF. High resolutions and frame rates can produce large files.</p><div className="video-tool-grid"><label className="video-tool-field">Width (px)<input aria-label="Width (px)" type="number" min="2" max="2048" step="2" value={values.width || '480'} onChange={event => set('width', event.target.value)}/></label><label className="video-tool-field">Frames per second<input aria-label="Frames per second" type="number" min="1" max="60" value={values.fps || '12'} onChange={event => set('fps', event.target.value)}/></label></div></>}
-          {operation === 'extract-audio' && <p className="video-tool-note">Exports the first audio stream only. Select an available audio format above.</p>}
-          {operation === 'mute' && <p className="video-tool-note">Removes the audio stream from a new video copy. This is not a playback-only mute.</p>}
-          {operation === 'snapshot' && <><p className="video-tool-note">Seek to a frame and add it. Selected frames export at source resolution as PNG copies.</p><div className="video-tool-range-actions"><button onClick={() => setFrames(current => current.includes(playhead) ? current : [...current, playhead].sort((a,b) => a-b))}><Plus size={13}/> Add frame at {clock(playhead)}</button></div><div className="video-tool-frame-list">{frames.map((time,index) => <div key={`${time}-${index}`}><button aria-label={`Seek to frame ${index + 1}`} onClick={() => seek(time)}>{clock(time)}</button><button aria-label={`Remove frame ${index + 1}`} onClick={() => setFrames(current => current.filter((_,position) => position !== index))}><Trash2 size={13}/></button></div>)}</div></>}
-          {operation === 'merge' && <><p className="video-tool-note">Clips are joined in this order. Santra validates stream compatibility before export; re-encoding is enabled by default.</p><label className="video-tool-check"><input type="checkbox" checked={values.reencode !== 'false'} onChange={event => set('reencode', String(event.target.checked))}/> Re-encode clips for compatibility</label><ol className="video-tool-clip-list">{files.map((clip,index) => <li key={clip.path}><span>{index + 1}. {clip.name}</span><div><button aria-label={`Move ${clip.name} up`} disabled={index === 0} onClick={() => setFiles(current => { const next=[...current]; [next[index-1],next[index]]=[next[index],next[index-1]]; return next; })}><ArrowUp size={14}/></button><button aria-label={`Move ${clip.name} down`} disabled={index === files.length-1} onClick={() => setFiles(current => { const next=[...current]; [next[index+1],next[index]]=[next[index],next[index+1]]; return next; })}><ArrowDown size={14}/></button></div></li>)}</ol></>}
-          {operation === 'redact' && <><p className="video-tool-note">Draw solid masks over the preview. Masks use fixed frame coordinates—not motion tracking. A moving subject can leave the covered area.</p><div className="video-tool-mask-list">{masks.map((mask,index) => <div key={`${index}-${mask.x}-${mask.y}`}><span>Mask {index+1} · {mask.width}×{mask.height}</span><label>From<input aria-label={`Mask ${index+1} start`} type="number" min="0" max={duration || 604800} step="0.01" value={mask.start} onChange={event => setMasks(current => current.map((item,position) => position===index ? {...item,start:Number(event.target.value)} : item))}/></label><label>To<input aria-label={`Mask ${index+1} end`} type="number" min="0" max={duration || 604800} step="0.01" value={mask.end} onChange={event => setMasks(current => current.map((item,position) => position===index ? {...item,end:Number(event.target.value)} : item))}/></label><button aria-label={`Remove mask ${index+1}`} onClick={() => setMasks(current => current.filter((_,position) => position!==index))}><Trash2 size={13}/></button></div>)}</div><label className="video-tool-field">New mask color<input aria-label="New mask color" type="color" value={values.maskColor || '#000000'} onChange={event => set('maskColor', event.target.value)}/></label></>}
-          {operation === 'strip-metadata' && <><p className="video-tool-note">Review locally detected stream details, then save a new copy with copied metadata and chapters removed. Encoder-generated tags may remain.</p><div className="video-tool-metadata">{preview?.metadata ? Object.entries(preview.metadata).map(([key,value]) => <div key={key}><span>{key}</span><b>{String(value)}</b></div>) : <span>{previewError || 'Metadata details are unavailable until the preview is inspected.'}</span>}</div></>}
+          {operation === 'compress' && <CompressControls values={values} set={set}/ >}
+          {operation === 'trim' && <TrimControls duration={duration} values={values} set={set} playhead={playhead}/ >}
+          {operation === 'split' && <SplitControls segmentsText={segmentsText} set={set} playhead={playhead} duration={duration}/ >}
+          {operation === 'crop' && <CropControls values={values} videoWidth={videoWidth} videoHeight={videoHeight} set={set}/ >}
+          {operation === 'resize' && <ResizeControls values={values} videoWidth={videoWidth} set={set} videoHeight={videoHeight}/ >}
+          {operation === 'rotate' && <RotateControls values={values} set={set}/ >}
+          {operation === 'flip' && <FlipControls values={values} set={set}/ >}
+          {operation === 'speed' && <SpeedControls values={values} set={set}/ >}
+          {operation === 'gif' && <GifControls values={values} set={set}/ >}
+          {operation === 'extract-audio' && <ExtractAudioControls / >}
+          {operation === 'mute' && <MuteControls / >}
+          {operation === 'snapshot' && <SnapshotControls setFrames={setFrames} playhead={playhead} frames={frames} seek={seek}/ >}
+          {operation === 'merge' && <MergeControls values={values} set={set} files={files} setFiles={setFiles}/ >}
+          {operation === 'redact' && <RedactControls masks={masks} duration={duration} setMasks={setMasks} values={values} set={set}/ >}
+          {operation === 'strip-metadata' && <StripMetadataControls preview={preview} previewError={previewError}/ >}
           {operation === 'compress' && <label className="video-tool-check"><input type="checkbox" checked={values.stripMetadata === 'true'} onChange={event => set('stripMetadata', String(event.target.checked))}/> Remove copied metadata</label>}
           {capability.warning && <p className="video-tool-warning">{capability.warning}</p>}
         </div>
       </div>
-      <footer className="video-tool-footer"><span>{validation || error || 'The original is kept. Output is processed locally.'}</span><div><button className="video-tool-cancel" onClick={onClose}>Cancel</button><button className="video-tool-apply" disabled={busy || Boolean(validation)} onClick={() => void apply()}>{busy ? 'Queueing…' : <><Scissors size={14}/> Save new copy</>}</button></div></footer>
+      <footer className="video-tool-footer"><span>{validation || error || 'The original is kept. Output is processed locally.'}</span><div><button className="video-tool-cancel" onClick={onClose}>Cancel</button><button className="editor-cancel" disabled={busy} onClick={onClose}>Cancel</button><button className="video-tool-apply" disabled={busy || Boolean(validation)} onClick={() => void apply()}>{busy ? 'Queueing…' : <><Scissors size={14}/> Save new copy</>}</button></div></footer>
     </section>
   </main>;
 }
