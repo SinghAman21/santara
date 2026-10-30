@@ -855,3 +855,45 @@ test('archive destination and collision choices affect only the submitted local 
  expect(await page.evaluate(()=>window.__santraTest.state.settings.collision)).toBe('rename');
  expect(await page.evaluate(()=>window.__santraTest.state.settings.outputFolder)).toBe('');
 });
+
+test('workspace wheel opens with its ring centered at the drag cursor and stays still while choosing',async({page})=>{
+ await page.setViewportSize({width:1440,height:1000});
+ await page.goto('/');
+ const data=await page.evaluateHandle(()=>{const data=new DataTransfer();data.items.add(new File(['fixture'],'pixel.png',{type:'image/png'}));return data});
+ try {
+  const app=page.locator('.app');
+  await app.dispatchEvent('dragenter',{dataTransfer:data,clientX:800,clientY:480});
+  await app.dispatchEvent('dragover',{dataTransfer:data,clientX:800,clientY:480});
+  await doubleTap(page,'Shift');
+  const ring=page.locator('.floating-wheel .citrus-rind');
+  await expect(ring).toBeVisible();
+  const bounds=await ring.boundingBox();
+  expect(bounds!.x+bounds!.width/2).toBeCloseTo(800,0);
+  expect(bounds!.y+bounds!.height/2).toBeCloseTo(480,0);
+  await app.dispatchEvent('dragover',{dataTransfer:data,clientX:900,clientY:520});
+  expect(await ring.boundingBox()).toEqual(bounds);
+  await page.keyboard.press('Escape');
+  await app.dispatchEvent('dragenter',{dataTransfer:data,clientX:1435,clientY:995});
+  await app.dispatchEvent('dragover',{dataTransfer:data,clientX:1435,clientY:995});
+  await doubleTap(page,'Alt');
+  const panel=await page.locator('.floating-wheel').boundingBox();
+  expect(panel!.x).toBeGreaterThanOrEqual(0);expect(panel!.y).toBeGreaterThanOrEqual(0);
+  expect(panel!.x+panel!.width).toBeLessThanOrEqual(1440);
+  expect(panel!.y+panel!.height).toBeLessThanOrEqual(1000);
+ }finally{await data.dispose()}
+});
+
+test('native host ring shares the window center in all modes and after file detection',async({page})=>{
+ await page.setViewportSize({width:520,height:620});
+ await page.goto('/?santra-wheel=1&mode=tools');
+ await expect(page.getByText('Detecting file type',{exact:true})).toBeVisible();
+ let box=await page.locator('.reference-wheel-empty').boundingBox();
+ expect(box!.x+box!.width/2).toBeCloseTo(260,0);expect(box!.y+box!.height/2).toBeCloseTo(310,0);
+ await hintNativeImage(page);
+ for(const mode of ['convert','tools','actions'] as const){
+  await page.evaluate(mode=>window.__santraTest.emitWheelMode(mode),mode);
+  await expect(page.getByRole('menu',{name:mode==='actions'?'File actions':mode==='tools'?'Tools':'Convert',exact:true})).toBeVisible();
+  box=await page.locator('.citrus-rind').boundingBox();
+  expect(box!.x+box!.width/2).toBeCloseTo(260,0);expect(box!.y+box!.height/2).toBeCloseTo(310,0);
+ }
+});

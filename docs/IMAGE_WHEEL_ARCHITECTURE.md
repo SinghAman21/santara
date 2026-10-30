@@ -255,3 +255,7 @@ Image editor layout is owned by `image-reference.css`: an 800×560 surface, 72px
 If GNOME still shows the old brown wheel after installing Santra, inspect its saved command template: the legacy `santara` binary and flags launch a separate application. The current command is `santra --santra-wheel-action={action} --santra-global-wheel={mode} --santra-wheel-x={x} --santra-wheel-y={y}`.
 
 The global wheel no longer assumes an image when the OS has not exposed file details. Native drag-enter inspection and shared extension/MIME hints select the family. A known MKV opens the video wheel; an unknown drag stays neutral until inspected.
+
+## Cursor-centered wheel placement
+
+The native ring now shares the undecorated host window's center; headings, source captions, and pagination do not offset it. Native placement uses the configured size at the target monitor's scale, including when a hidden window reports zero dimensions on startup, and clamps the host to that monitor's work area. The workspace fallback measures the rendered ring rather than using fixed offsets, anchors it at the cursor that opened it, and keeps it stationary while selecting. Screen-edge clamping may shift the center. Unknown-file cards use the same center so drag-enter detection can begin without moving to a distant panel.

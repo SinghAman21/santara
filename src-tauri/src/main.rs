@@ -59,8 +59,16 @@ fn native_drag_generation(label: &str) -> &'static std::sync::atomic::AtomicU64 
     if label == "wheel" { &WHEEL_DRAG_GENERATION } else { &WORKSPACE_DRAG_GENERATION }
 }
 
+fn centered_wheel_origin(point: (i32, i32), size: (u32, u32), area: (i32, i32, u32, u32)) -> (i32, i32) {
+    let clamp = |cursor: i32, length: u32, start: i32, available: u32| {
+        let start = i64::from(start);
+        let end = (start + i64::from(available) - i64::from(length)).max(start);
+        (i64::from(cursor) - i64::from(length) / 2).clamp(start, end) as i32
+    };
+    (clamp(point.0, size.0, area.0, area.2), clamp(point.1, size.1, area.1, area.3))
+}
+
 fn place_wheel(window: &WebviewWindow, requested: Option<(i32, i32)>) -> Result<(), String> {
-    let size = window.outer_size().map_err(|error| error.to_string())?;
     let cursor = window.cursor_position().ok();
     let point = requested.or_else(|| cursor.map(|value| (value.x.round() as i32, value.y.round() as i32)));
     let monitors = window.available_monitors().map_err(|error| error.to_string())?;
@@ -74,25 +82,24 @@ fn place_wheel(window: &WebviewWindow, requested: Option<(i32, i32)>) -> Result<
         .or(window.primary_monitor().map_err(|error| error.to_string())?)
         .ok_or("No monitor is available for the wheel")?;
     let area = monitor.work_area();
-    let point_x = point.map(|value| value.0).unwrap_or(area.position.x + area.size.width as i32 / 2);
-    let point_y = point.map(|value| value.1).unwrap_or(area.position.y + area.size.height as i32 / 2);
-    let max_x = area
-        .position
-        .x
-        .saturating_add(area.size.width as i32)
-        .saturating_sub(size.width as i32)
-        .max(area.position.x);
-    let max_y = area
-        .position
-        .y
-        .saturating_add(area.size.height as i32)
-        .saturating_sub(size.height as i32)
-        .max(area.position.y);
-    let x = (point_x - size.width as i32 / 2).clamp(area.position.x, max_x);
-    let y = (point_y - size.height as i32 / 2).clamp(area.position.y, max_y);
-    window
-        .set_position(PhysicalPosition::new(x, y))
-        .map_err(|error| error.to_string())
+    let point = point.unwrap_or((area.position.x + area.size.width as i32 / 2, area.position.y + area.size.height as i32 / 2));
+    // Hidden GTK windows can report a zero size on cold startup. Use the configured
+    // logical size and target monitor's scale instead of positioning that zero rect.
+    let config = window.app_handle().config().app.windows.iter().find(|config| config.label == window.label())
+        .ok_or("Wheel window configuration is unavailable")?;
+    let scale = monitor.scale_factor();
+    let size = tauri::PhysicalSize::new(
+        ((config.width * scale).round() as u32).min(area.size.width).max(1),
+        ((config.height * scale).round() as u32).min(area.size.height).max(1),
+    );
+    let (x, y) = centered_wheel_origin(point, (size.width, size.height), (area.position.x, area.position.y, area.size.width, area.size.height));
+    window.set_position(PhysicalPosition::new(x, y)).map_err(|error| error.to_string())?;
+    // Apply the physical size after moving to the target monitor, so its DPI
+    // transition cannot scale a size chosen on the previous monitor a second time.
+    if window.inner_size().ok() != Some(size) {
+        window.set_size(size).map_err(|error| error.to_string())?;
+    }
+    Ok(())
 }
 
 #[derive(Debug, PartialEq)]
@@ -303,6 +310,16 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wheel_centers_on_cursor_and_clamps_to_monitor_work_area() {
+        assert_eq!(centered_wheel_origin((900, 500), (520, 620), (0, 0, 1920, 1080)), (640, 190));
+        assert_eq!(centered_wheel_origin((5, 5), (520, 620), (0, 0, 1920, 1080)), (0, 0));
+        assert_eq!(centered_wheel_origin((1919, 1079), (520, 620), (0, 0, 1920, 1080)), (1400, 460));
+        assert_eq!(centered_wheel_origin((-900, 500), (520, 620), (-1920, 40, 1920, 1040)), (-1160, 190));
+        assert_eq!(centered_wheel_origin((150, 150), (520, 620), (0, 0, 320, 240)), (0, 0));
+        assert_eq!(centered_wheel_origin((1800, 1200), (1040, 1240), (0, 0, 3840, 2160)), (1280, 580));
+    }
 
     #[test]
     fn accepts_only_bounded_wheel_commands() {

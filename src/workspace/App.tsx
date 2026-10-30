@@ -6,7 +6,7 @@ import ConversionDetails from '../convert/ConversionDetails';
 import ArchiveWindow from '../tools/archive/ArchiveWindow';
 import AudioToolWindow, { audioEditorOperations } from '../tools/audio/AudioToolWindow';
 import Modal from '../common/Modal';
-import { useEffect, useRef, useState, type DragEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type DragEvent, type ReactNode } from 'react';
 import { ArrowDown, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, AudioLines, Check, CheckCheck, ChevronDown, ChevronRight, CircleHelp, Clipboard, Copy, CornerDownLeft, File, FileArchive, FileAudio, FileImage, FileSliders, FileSpreadsheet, FileText, FileVideo, Files, Folder, FolderOpen, History, Image, Info, Keyboard, Layers, Leaf, ListFilter, LoaderCircle, LockKeyhole, Maximize, Monitor, Moon, MoreHorizontal, Music2, Package, PanelLeftClose, Play, Plus, RefreshCw, ScanLine, Search, Settings2, ShieldCheck, SlidersHorizontal, Sparkles, Sun, Terminal, Trash2, Upload, WandSparkles, X, Zap } from 'lucide-react';
 import { api, defaultSettings, isDesktop } from '../common/bridge';
 import { en as t, settingsLabels } from '../common/strings';
@@ -55,6 +55,8 @@ export default function App() {
   const [dragMode, setDragMode] = useState<PickerTab | null>(null);
   const [wheelChoice, setWheelChoice] = useState('');
   const [dragSource, setDragSource] = useState<LocalFile[]>([]);
+  const floatingWheelRef = useRef<HTMLDivElement>(null);
+  const wheelOrigin = useRef({x:400,y:350});
   const [wheelAnchor, setWheelAnchor] = useState({ x: 300, y: 200 });
   const [pdfEditor, setPdfEditor] = useState<{ capability: Capability; files: LocalFile[]; format: string; options: Record<string, string> } | null>(null);
   const [imageEditor, setImageEditor] = useState<{ capability: Capability; files: LocalFile[]; format: string; options: Record<string, string> } | null>(null);
@@ -127,6 +129,26 @@ export default function App() {
     return () => { window.removeEventListener('keydown', handle); window.removeEventListener('keyup', released); };
   });
 
+  useLayoutEffect(()=>{
+    if(!dragMode)return;
+    const element=floatingWheelRef.current;
+    if(!element)return;
+    const place=()=>{
+      const panel=element.getBoundingClientRect();
+      const target=element.querySelector('.citrus-rind, .reference-wheel-empty')?.getBoundingClientRect();
+      if(!target)return;
+      const margin=8;
+      const clamp=(value:number,available:number,length:number)=>Math.max(margin,Math.min(Math.max(margin,available-length-margin),value));
+      const x=clamp(wheelOrigin.current.x-(target.left-panel.left+target.width/2),window.innerWidth,panel.width);
+      const y=clamp(wheelOrigin.current.y-(target.top-panel.top+target.height/2),window.innerHeight,panel.height);
+      setWheelAnchor(previous=>Math.abs(previous.x-x)<.5&&Math.abs(previous.y-y)<.5?previous:{x,y});
+    };
+    place();
+    const observer=new ResizeObserver(place);observer.observe(element);
+    window.addEventListener('resize',place);
+    return()=>{observer.disconnect();window.removeEventListener('resize',place)};
+  },[dragMode,dragSource]);
+
   async function runSafe<T,>(task: () => Promise<T>): Promise<T | undefined> { try { return await task(); } catch (error) { setNotice(error instanceof Error ? error.message : String(error)); } }
   async function addFiles(folder = false) { setBusy(true); await runSafe(async () => { const incoming = await (folder ? api.addFolder() : api.addFiles()); appendFiles(incoming); }); setBusy(false); }
   function appendFiles(incoming: LocalFile[]) { if (!incoming?.length) return; setFiles(previous => { const paths = new Set(previous.map(file => file.path)); return [...previous, ...incoming.filter(file => !paths.has(file.path))]; }); setSelected(previous => [...new Set([...previous, ...incoming.map(file => file.id)])]); setPage('converter'); setOperation(null); }
@@ -198,7 +220,10 @@ export default function App() {
   function resetDrag() { dragActive.current = false; setDragging(false); setDragMode(null); dragModeRef.current = null; dragDepth.current = 0; dragInternal.current = null; dragChoice.current = ''; modifierTap.current.lastReleased = ''; modifierTap.current.pressed.clear(); setWheelChoice(''); }
   function highlightWheel(id: string) { dragChoice.current = id; setWheelChoice(id); }
   function activateWheel(mode: PickerTab) {
-    if (!dragMode) setWheelAnchor({ x: Math.max(20, Math.min(window.innerWidth - 380, dragPosition.current.x - 180)), y: Math.max(70, Math.min(window.innerHeight - 480, dragPosition.current.y - 225)) });
+    if (!dragModeRef.current) {
+      wheelOrigin.current = {...dragPosition.current};
+      setWheelAnchor(wheelOrigin.current);
+    }
     if (mode !== dragMode) highlightWheel('');
     dragModeRef.current = mode;
     setDragMode(mode);
@@ -234,6 +259,7 @@ export default function App() {
 
   return <div className="app" onDragEnter={event => {
     event.preventDefault();
+    dragPosition.current = {x:event.clientX,y:event.clientY};
     if (pdfEditor || (!event.dataTransfer.types.includes('Files') && !dragInternal.current)) return;
     if (!dragActive.current) { pendingNativeMode.current = null; modifierTap.current.lastReleased = ''; modifierTap.current.pressed.clear(); setDragSource(dragInternal.current || dragHints(event.dataTransfer)); highlightWheel(''); }
     dragActive.current = true; setDragging(true);
@@ -308,7 +334,7 @@ export default function App() {
     {guide && <Modal title={t.guide} onClose={() => setGuide(false)}><div className="guide-content"><Orange sliced/><p>{t.guideIntro}</p><div className="guide-keys">{([{ key: 'convert', label: t.convertKey }, { key: 'tools', label: t.toolsKey }, { key: 'actions', label: t.actionsKey }] as const).map(item => <div key={item.key}><kbd>{settings.shortcuts[item.key]}</kbd><span>{item.label}</span></div>)}</div><p>{t.keyboardHelp}</p><div className="privacy-callout"><ShieldCheck size={21}/><span>{t.noUploads}</span></div>{!isDesktop && <p className="inline-warning">{t.previewNotice}</p>}<button className="button primary full" onClick={() => setGuide(false)}>Let’s make something fresh<ArrowRight size={16}/></button></div></Modal>}
     {privacy && <Modal title="Private by nature." onClose={() => setPrivacy(false)}><div className="guide-content"><span className="privacy-big-icon"><ShieldCheck size={35}/></span><h3>{t.noUploads}</h3><p>{t.privacyText}</p><button className="button full" onClick={() => { setPrivacy(false); setSettingsTab('privacy'); setPage('settings'); }}>More about your local data<ArrowRight size={16}/></button></div></Modal>}
     {dragging && dragMode && <div className="drag-overlay wheel-overlay" aria-label="File drop target">
-      {dragMode ? <div className="floating-wheel" style={{ left: wheelAnchor.x, top: wheelAnchor.y - 40 }}>
+      {dragMode ? <div ref={floatingWheelRef} className="floating-wheel" style={{ left: wheelAnchor.x, top: wheelAnchor.y }}>
         <div className="wheel-mode-bar">{(['convert', 'tools', 'actions'] as const).map(mode => <button key={mode} className={mode === dragMode ? 'active' : ''} onDragEnter={() => activateWheel(mode)} onClick={() => activateWheel(mode)}><kbd>{settings.shortcuts[mode]}</kbd>{t[mode]}</button>)}</div>
         <RadialWheel family={wheelFamily(dragSource)} sourceName={dragSource[0]?.name} sourceFile={dragSource[0]} label={dragMode === 'convert' ? 'Convert' : dragMode === 'tools' ? 'Tools' : 'File actions'} subtitle={dragSource.some(file => !file.ext) ? 'Drop to inspect files and choose a supported operation' : 'Hover a slice, then drop'} dragging selected={wheelChoice} onHighlight={highlightWheel} onChoose={id => highlightWheel(id)} items={wheelItems(dragMode, dragSource)}/>
       </div> : <div className="drag-welcome"><Orange/><h2>Drop a little possibility.</h2><p>{t.dropHint}</p><div className="drag-shortcuts"><span><kbd>{settings.shortcuts.convert}</kbd>{t.convert}</span><span><kbd>{settings.shortcuts.tools}</kbd>{t.tools}</span><span><kbd>{settings.shortcuts.actions}</kbd>{t.actions}</span></div></div>}

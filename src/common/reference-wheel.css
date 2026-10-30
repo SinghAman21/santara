@@ -35,3 +35,17 @@
 
 .reference-wheel-shell .global-wheel-card .reference-wheel { margin:0 auto; }
 .reference-wheel.has-empty .reference-wheel-empty { justify-content:flex-start; }
+/* The native host and ring share one center, independent of captions/pagination. */
+.reference-wheel-shell { --wheel-diameter:min(440px,calc(100vw - 64px),calc(100dvh - 170px)); }
+.reference-wheel-shell .global-wheel-card { position:relative; }
+.reference-wheel-shell .global-wheel-card .reference-wheel { position:absolute; left:50%; top:50%; width:var(--wheel-diameter); transform:translate(-50%,-50%); }
+.reference-wheel-shell .image-wheel-heading { position:absolute; top:max(8px,calc(50% - var(--wheel-diameter)/2 - 74px)); left:32px; right:32px; margin:0; }
+.reference-wheel-shell .image-wheel-source { position:absolute; top:100%; left:0; width:100%; }
+.reference-wheel-shell .wheel-pagination { position:absolute; top:calc(100% + 30px); left:0; width:100%; }
+.reference-wheel-shell .reference-wheel.has-empty .reference-wheel-empty { margin-top:0; }
+@media(max-height:540px) {
+ .reference-wheel-shell .citrus-core { padding:8px; gap:4px; }
+ .reference-wheel-shell .image-wheel-thumbnail { width:48px; height:32px; }
+ .reference-wheel-shell .image-wheel-thumbnail>svg { width:28px; height:28px; }
+ .reference-wheel-shell .image-wheel-selection { font-size:9px; padding:4px; min-width:50px; }
+}
