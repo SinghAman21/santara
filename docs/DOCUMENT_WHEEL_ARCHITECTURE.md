@@ -52,3 +52,7 @@ Each route declares accepted signature/type, detected backend and version, reade
 3. Expand format coverage only with sandboxed readers/writers, fixtures, dependency/license review, and round-trip quality checks.
 4. Design document-specific tools separately; do not crowd the conversion wheel with unimplemented editor ideas.
 
+
+## UI source migration (Penpot frame 06)
+
+Frontend ownership now follows `src/tools/<family>`, `src/convert/<family>`, `src/action`, and `src/common`. See [UI structure](UI_STRUCTURE.md) for exact files and implemented/deferred frame coverage. Editors use white surfaces and `#ff5a00` accents; shortcuts remain configurable. This UI migration does not enable any additional backend route or certify proposed features above.

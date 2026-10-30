@@ -110,3 +110,7 @@ Windows and Linux packaging, native file-manager reveal, and real external drag 
 6. Add secure redaction only after the output-verification test proves source content is unrecoverable.
 7. Add Shift editable-format routes only after backend isolation, licensing review, and representative fidelity tests; expose warnings before the user commits.
 8. Update `docs/CAPABILITIES.md` and `docs/ROADMAP.md` as each route becomes implemented and verified; do not promote proposed routes to supported claims before tests pass.
+
+## UI source migration (Penpot frame 04)
+
+Frontend ownership now follows `src/tools/<family>`, `src/convert/<family>`, `src/action`, and `src/common`. See [UI structure](UI_STRUCTURE.md) for exact files and implemented/deferred frame coverage. Editors use white surfaces and `#ff5a00` accents; shortcuts remain configurable. This UI migration does not enable any additional backend route or certify proposed features above.

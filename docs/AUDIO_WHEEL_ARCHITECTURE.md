@@ -2,7 +2,7 @@
 
 ## Status and scope
 
-**Proposal only.** This document describes a possible audio wheel and editor experience from the visible assets in `reference-tools/audio/`. It does not state that any audio wheel route, editor, backend, or conversion is implemented. No source code or existing documentation is changed by this proposal.
+**Reference proposal with implemented subset.** The dedicated audio UI now supports detected normalize, trim, channels, visualize, compress, and metadata-removal routes; see [UI structure](UI_STRUCTURE.md). The remaining interaction details below describe a possible audio wheel and editor experience from the visible assets in `reference-tools/audio/`. It does not state that any audio wheel route, editor, backend, or conversion is implemented. The capability registry remains the source of truth.
 
 The references are interaction and layout inspiration only. Santra keeps its own citrus identity and Windows/Linux desktop conventions; do not reuse third-party branding, artwork, or copy. Processing remains local and offline-first, with no upload, account, cloud service, or default telemetry.
 
@@ -87,3 +87,7 @@ The supplied references do **not** show audio split, merge, speed, extraction, c
 5. Map approved actions to verified local backends and capabilities before exposing any wheel slice.
 
 Until these decisions and a separate implementation review are complete, this document is design guidance only and makes no audio feature availability claim.
+
+## UI source migration (Penpot frame 03)
+
+Frontend ownership now follows `src/tools/<family>`, `src/convert/<family>`, `src/action`, and `src/common`. See [UI structure](UI_STRUCTURE.md) for exact files and implemented/deferred frame coverage. Editors use white surfaces and `#ff5a00` accents; shortcuts remain configurable. This UI migration does not enable any additional backend route or certify proposed features above.

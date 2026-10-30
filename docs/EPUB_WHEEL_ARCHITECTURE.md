@@ -45,3 +45,7 @@ Each registry route records input/output, reader/writer and version, sandbox sta
 3. Add EPUB validation as a separate capability after dependency/license review and local integration.
 4. Expand EPUB metadata, cover, language, and TOC controls only where read-back tests verify them.
 
+
+## UI source migration (Penpot frame 07)
+
+Frontend ownership now follows `src/tools/<family>`, `src/convert/<family>`, `src/action`, and `src/common`. See [UI structure](UI_STRUCTURE.md) for exact files and implemented/deferred frame coverage. Editors use white surfaces and `#ff5a00` accents; shortcuts remain configurable. This UI migration does not enable any additional backend route or certify proposed features above.

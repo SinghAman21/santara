@@ -112,3 +112,7 @@ The current wheel/editor includes capability-gated conversion and these local to
 Redaction is a fixed-position solid color `drawbox`, not blur, face detection, or motion tracking. It must not be treated as recovery-proof privacy redaction when content moves. Metadata deletion removes copied tags and chapters where FFmpeg supports it; encoder/container-generated tags may remain. Compression may make an output larger. Merge validates stream compatibility and defaults to re-encoding; direct stream-copy is opt-in and may reject differing stream layouts/settings.
 
 Remaining verification: run typecheck/unit/E2E/desktop tests, exercise all routes against generated fixtures and each installed FFmpeg build, then manually test pointer-near wheel placement and real Explorer/GNOME drag handoff. Native-platform manual tests and packaged artifact checks are not implied by automated tests.
+
+## UI source migration (Penpot frame 02)
+
+Frontend ownership now follows `src/tools/<family>`, `src/convert/<family>`, `src/action`, and `src/common`. See [UI structure](UI_STRUCTURE.md) for exact files and implemented/deferred frame coverage. Editors use white surfaces and `#ff5a00` accents; shortcuts remain configurable. This UI migration does not enable any additional backend route or certify proposed features above.

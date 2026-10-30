@@ -33,3 +33,7 @@ Register SRT→VTT, VTT→SRT, and SRT/VTT→TXT as explicit directed routes wit
 3. Add a compact cue preview only if it remains useful for format confirmation and supports keyboard navigation.
 4. Treat retiming, styling, synchronization, and subtitle editing as separate future tools with explicit tests.
 
+
+## UI source migration (Penpot frame 10)
+
+Frontend ownership now follows `src/tools/<family>`, `src/convert/<family>`, `src/action`, and `src/common`. See [UI structure](UI_STRUCTURE.md) for exact files and implemented/deferred frame coverage. Editors use white surfaces and `#ff5a00` accents; shortcuts remain configurable. This UI migration does not enable any additional backend route or certify proposed features above.

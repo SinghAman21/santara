@@ -47,3 +47,7 @@ All operations are offline. Do not upload archive contents, filenames, paths, or
 3. Validate staging and destination containment against symlink races on Windows and Linux.
 4. Consider DEFLATE, RAR, 7z, encryption, or additional formats only after backend/license review, explicit limits, and adversarial fixtures.
 
+
+## UI source migration (Penpot frame 05)
+
+Frontend ownership now follows `src/tools/<family>`, `src/convert/<family>`, `src/action`, and `src/common`. See [UI structure](UI_STRUCTURE.md) for exact files and implemented/deferred frame coverage. Editors use white surfaces and `#ff5a00` accents; shortcuts remain configurable. This UI migration does not enable any additional backend route or certify proposed features above.

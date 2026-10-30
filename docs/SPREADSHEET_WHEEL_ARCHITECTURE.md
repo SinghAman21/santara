@@ -50,3 +50,7 @@ Each route must specify input signatures, backend and per-filter support, worksh
 4. Add conditional XLS input support only after a tested safe reader exists.
 5. Add PDF export only after office isolation and worksheet/page layout handling are validated.
 
+
+## UI source migration (Penpot frame 09)
+
+Frontend ownership now follows `src/tools/<family>`, `src/convert/<family>`, `src/action`, and `src/common`. See [UI structure](UI_STRUCTURE.md) for exact files and implemented/deferred frame coverage. Editors use white surfaces and `#ff5a00` accents; shortcuts remain configurable. This UI migration does not enable any additional backend route or certify proposed features above.
