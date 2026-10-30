@@ -1,0 +1,1 @@
+export default function ExportPdf() { return <p className="conversion-review">Animations, transitions, and media playback do not carry over to PDF. Font substitutions may change slide layout. Only verified local export routes are offered.</p>; }

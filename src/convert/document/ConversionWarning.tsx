@@ -1,0 +1,1 @@
+export default function ConversionWarning() { return <p className="conversion-review">Complex tables, fonts, equations, comments, and tracked changes may change or be lost. Review the saved document before sharing.</p>; }

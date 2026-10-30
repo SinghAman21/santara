@@ -1,0 +1,1 @@
+export default function Export() { return <p className="conversion-review">PDF exports depend on the detected local route. Page rendering produces a raster image; it does not preserve selectable text.</p>; }

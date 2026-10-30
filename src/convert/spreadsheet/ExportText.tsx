@@ -1,0 +1,1 @@
+export default function ExportText() { return <p className="conversion-review">CSV and TSV cannot preserve multiple worksheets, formatting, charts, or formulas. Only verified local export routes are offered.</p>; }

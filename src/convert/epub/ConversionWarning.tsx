@@ -1,0 +1,1 @@
+export default function ConversionWarning() { return <p className="conversion-review">Book layout, chapter navigation, images, and styles may change. A parseable EPUB package is not a certification of standards conformance.</p>; }

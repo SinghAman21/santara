@@ -1,0 +1,1 @@
+export default function ConfirmFormat() { return <p className="conversion-review">SRT and VTT preserve cue order and timing while dropping styling and cue settings. TXT omits timestamps and markup. Invalid cues stop the job without partial output.</p>; }

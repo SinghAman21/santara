@@ -1,3 +1,7 @@
+import { performFileAction } from '../action';
+import { enqueueLocalOperation } from '../convert/common/queue';
+import ConversionWindow from '../convert/ConversionWindow';
+import ConversionDetails from '../convert/ConversionDetails';
 import ArchiveWindow from '../tools/archive/ArchiveWindow';
 import AudioToolWindow, { audioEditorOperations } from '../tools/audio/AudioToolWindow';
 import Modal from '../common/Modal';
@@ -42,6 +46,7 @@ function formatSize(size: number) { return size < 1024 ? `${size} B` : size < 10
 function Orange({ className = '', sliced = false }: { className?: string; sliced?: boolean }) { return <img className={`santra-logo ${sliced ? 'santra-logo--illustration' : ''} ${className}`} src="./santra.png" alt="" aria-hidden="true"/>; }
 function FileIcon({ file }: { file: LocalFile }) { const family = families.find(item => item.id === file.category); const Icon = file.isDirectory ? Folder : family?.icon || File; return <span className={`file-icon ${family?.color || 'sand'}`}><Icon size={23}/></span>; }
 export default function App() {
+  const [conversionEditor, setConversionEditor] = useState<{capability:Capability;files:LocalFile[];format:string;options:Record<string,string>}|null>(null);
   const [archiveEditor, setArchiveEditor] = useState<{capability:Capability;files:LocalFile[];format:string;options:Record<string,string>}|null>(null);
   const [audioEditor, setAudioEditor] = useState<{capability:Capability;files:LocalFile[];format:string;options:Record<string,string>}|null>(null);
   const [data, setData] = useState<Snapshot>({ files: [], jobs: [], capabilities: [], backends: {}, settings: defaultSettings, platform: 'browser' });
@@ -52,6 +57,7 @@ export default function App() {
   const [guide, setGuide] = useState(false);
   const [privacy, setPrivacy] = useState(false);
   const [licenses, setLicenses] = useState(false);
+  const dragActive = useRef(false);
   const [dragging, setDragging] = useState(false);
   const [dragMode, setDragMode] = useState<PickerTab | null>(null);
   const [wheelChoice, setWheelChoice] = useState('');
@@ -102,7 +108,7 @@ export default function App() {
       if (event.key === 'Escape') { resetDrag(); setPicker(null); }
       if (editing) return;
       if (event.key === 'Enter' && selected.length && page === 'converter' && !(event.target as HTMLElement)?.closest('button,a,input,select,textarea') && !picker && !guide && !privacy && !licenses) { event.preventDefault(); setPicker('convert'); }
-      if (!dragging && !picker) return;
+      if (!dragActive.current && !picker) return;
       const modifier = ['Shift', 'Alt', 'Control'].includes(event.key) ? event.key : '';
       if (!modifier || event.repeat || modifierTap.current.pressed.has(modifier)) return;
       const now = performance.now();
@@ -112,14 +118,14 @@ export default function App() {
       if (!doubleTap) return;
       const key = event.ctrlKey && event.shiftKey ? 'Ctrl+Shift' : modifier;
       const match = Object.entries(settings.shortcuts).find(([, value]) => value === key || (value === 'Ctrl' && key === 'Control'));
-      if (match) { event.preventDefault(); if (dragging) activateWheel(match[0] as PickerTab); else setPicker(match[0] as PickerTab); }
+      if (match) { event.preventDefault(); if (dragActive.current) activateWheel(match[0] as PickerTab); else setPicker(match[0] as PickerTab); }
     };
     const released = (event: KeyboardEvent) => {
       const pressedAt = modifierTap.current.pressed.get(event.key);
       if (pressedAt === undefined) return;
       modifierTap.current.pressed.delete(event.key);
       const now = performance.now();
-      if ((dragging || picker) && now - pressedAt <= 400) { modifierTap.current.lastReleased = event.key; modifierTap.current.releasedAt = now; }
+      if ((dragActive.current || picker) && now - pressedAt <= 400) { modifierTap.current.lastReleased = event.key; modifierTap.current.releasedAt = now; }
       else modifierTap.current.lastReleased = '';
     };
     window.addEventListener('keydown', handle);
@@ -149,6 +155,7 @@ export default function App() {
     if (cap) pickRoute(cap, format || undefined, source);
   }
   function pickRoute(cap: Capability, format?: string, source = selectedFiles) {
+    if (!cap.available) { setNotice('This operation is unavailable. Check local engines in Settings.'); return; }
     const id = operationName(cap);
     const presets: Record<string, Record<string, string>> = { trim: { start: '0', duration: '10' }, rotate: { angle: '90' }, 'pdf-rotate': { angle: '90', pages: '1-z' }, 'pdf-extract': { pages: '1-z' }, flip: { direction: 'horizontal' }, gif: { fps: '12', width: '480' }, render: { page: '1', dpi: '300' } };
     const target = format || (cap.outputs.includes(source[0]?.ext) ? source[0].ext : cap.outputs[0]) || '';
@@ -156,7 +163,8 @@ export default function App() {
     const skipped = source.filter(file => !compatible(cap, file)).length;
     const normalized = { ...cap, id, operation: id, warning: skipped ? `${skipped} selected ${skipped === 1 ? 'file does' : 'files do'} not support this operation and will be recorded as skipped. ${cap.warning || ''}` : cap.warning };
     setOperation(normalized); setOutputFormat(target); setPicker(null); setOptions(nextOptions); setPage('converter');
-    if (cap.category === 'archive') setArchiveEditor({capability:normalized,files:source.filter(file=>compatible(cap,file)),format:target,options:nextOptions});
+    if (id === 'convert' && ['document','presentation','spreadsheet','subtitle'].includes(cap.category)) setConversionEditor({capability:normalized,files:source.filter(file=>compatible(cap,file)),format:target,options:nextOptions});
+    else if (cap.category === 'archive') setArchiveEditor({capability:normalized,files:source.filter(file=>compatible(cap,file)),format:target,options:nextOptions});
     else if (cap.category === 'audio' && audioEditorOperations.includes(id)) setAudioEditor({capability:normalized,files:source.filter(file=>compatible(cap,file)),format:target,options:nextOptions});
     else if (cap.category === 'pdf') setPdfEditor({ capability: normalized, files: source, format: target, options: nextOptions });
     else if (cap.category === 'image' && ['edit-image', 'background', 'crop', 'resize', 'rotate', 'flip', 'compress', 'metadata', 'strip-metadata'].includes(id)) {
@@ -188,18 +196,12 @@ export default function App() {
     return () => { removeFiles?.(); removeOperation?.(); removePage?.(); removeNotice?.(); };
   }, [data.capabilities]);
   async function queueOperation(cap: Capability, format: string, values: Record<string, string>, source = selectedFiles) {
-    const options: Record<string, unknown> = { quality: settings.quality, stripMetadata: settings.stripMetadata, outputFolder: settings.outputFolder, collision: settings.collision, recursive: settings.recursive, preserveStructure: settings.preserveStructure, ...values };
-    for (const key of ['stripMetadata', 'reencode', 'flipHorizontal', 'flipVertical']) if (typeof options[key] === 'string') {
-      if (!['true', 'false'].includes(options[key] as string)) throw new Error(`Invalid ${key}`);
-      options[key] = options[key] === 'true';
-    }
-    if (typeof options.quality === 'string') options.quality = Number(options.quality);
-    await api.enqueue({ files: source, operation: operationName(cap), format, options });
+    await enqueueLocalOperation(cap, format, source, settings, values);
     setPage('activity'); setNotice('Your files are in the local queue.');
   }
   async function startConversion() { if (!operation || !selectedFiles.length) return; await runSafe(() => queueOperation(operation, outputFormat, options)); }
-  async function fileAction(action: string, source = selectedFiles) { await runSafe(async () => { const result = await api.fileAction({ action, files: source }) as { ok?: boolean; canceled?: boolean; reason?: string; results?: { ok: boolean; input: string; output: string; error?: string }[] } | string; if (typeof result === 'string') setNotice(result); else if (result?.canceled) return; else if (result?.ok === false) setNotice(result.reason || result.results?.filter(item => !item.ok).map(item => item.error).join('; ') || 'Some files could not be processed.'); else setNotice(action === 'copy-path' ? 'Paths copied to clipboard.' : result?.results ? result.results.map(item => `${item.input} → ${item.output}`).join('; ') : 'File action completed.'); }); setPicker(null); }
-  function resetDrag() { setDragging(false); setDragMode(null); dragModeRef.current = null; dragDepth.current = 0; dragInternal.current = null; dragChoice.current = ''; modifierTap.current.lastReleased = ''; modifierTap.current.pressed.clear(); setWheelChoice(''); }
+  async function fileAction(action: string, source = selectedFiles) { await runSafe(async () => { const result = await performFileAction({ action, files: source }) as { ok?: boolean; canceled?: boolean; reason?: string; results?: { ok: boolean; input: string; output: string; error?: string }[] } | string; if (typeof result === 'string') setNotice(result); else if (result?.canceled) return; else if (result?.ok === false) setNotice(result.reason || result.results?.filter(item => !item.ok).map(item => item.error).join('; ') || 'Some files could not be processed.'); else setNotice(action === 'copy-path' ? 'Paths copied to clipboard.' : result?.results ? result.results.map(item => `${item.input} → ${item.output}`).join('; ') : 'File action completed.'); }); setPicker(null); }
+  function resetDrag() { dragActive.current = false; setDragging(false); setDragMode(null); dragModeRef.current = null; dragDepth.current = 0; dragInternal.current = null; dragChoice.current = ''; modifierTap.current.lastReleased = ''; modifierTap.current.pressed.clear(); setWheelChoice(''); }
   function highlightWheel(id: string) { dragChoice.current = id; setWheelChoice(id); }
   function activateWheel(mode: PickerTab) {
     if (!dragMode) setWheelAnchor({ x: Math.max(20, Math.min(window.innerWidth - 380, dragPosition.current.x - 180)), y: Math.max(70, Math.min(window.innerHeight - 480, dragPosition.current.y - 225)) });
@@ -239,8 +241,8 @@ export default function App() {
   return <div className="app" onDragEnter={event => {
     event.preventDefault();
     if (pdfEditor || (!event.dataTransfer.types.includes('Files') && !dragInternal.current)) return;
-    if (!dragging) { pendingNativeMode.current = null; modifierTap.current.lastReleased = ''; modifierTap.current.pressed.clear(); setDragSource(dragInternal.current || dragHints(event.dataTransfer)); highlightWheel(''); }
-    setDragging(true);
+    if (!dragActive.current) { pendingNativeMode.current = null; modifierTap.current.lastReleased = ''; modifierTap.current.pressed.clear(); setDragSource(dragInternal.current || dragHints(event.dataTransfer)); highlightWheel(''); }
+    dragActive.current = true; setDragging(true);
   }} onDragOver={event => {
     event.preventDefault(); event.dataTransfer.dropEffect = 'copy';
     if (pdfEditor) return;
@@ -267,7 +269,7 @@ export default function App() {
             <header className="section-row"><h2>{t.queue}<span className="count-badge">{files.length}</span></h2><div className="row-actions"><button className="text-button" onClick={() => setSelected(selected.length === files.length ? [] : files.map(file => file.id))}>{selected.length === files.length ? t.clear : t.selectAll}</button><button className="icon-button" aria-label={t.addFolder} onClick={() => void addFiles(true)}><Folder size={17}/></button></div></header>
             <div className="file-list">{files.map(file => <div key={file.id} draggable className={`file-row ${selected.includes(file.id) ? 'selected' : ''}`} onDragStart={event => {
               const source = selected.includes(file.id) ? selectedFiles : [file];
-              dragInternal.current = source; setDragSource(source); setSelected(source.map(item => item.id)); setDragging(true); setDragMode(null); highlightWheel('');
+              dragInternal.current = source; setDragSource(source); setSelected(source.map(item => item.id)); dragActive.current = true; setDragging(true); setDragMode(null); highlightWheel('');
               event.dataTransfer.setData('application/x-santra-selection', source.map(item => item.id).join(',')); event.dataTransfer.effectAllowed = 'copy';
               dragPosition.current = { x: event.clientX, y: event.clientY };
             }} onDragEnd={resetDrag} onContextMenu={event => { event.preventDefault(); if (!selected.includes(file.id)) setSelected([file.id]); setPicker('actions'); }}>
@@ -279,7 +281,7 @@ export default function App() {
           {!!files.length && <div className="selection-tools" aria-label="Selected file operations">{(['convert', 'tools', 'actions'] as const).map(mode => <button key={mode} disabled={!selectedFiles.length} onClick={() => setPicker(mode)}>{mode === 'convert' ? <ArrowDownToLine size={15}/> : mode === 'tools' ? <WandSparkles size={15}/> : <Folder size={15}/>} {t[mode]}<kbd>{settings.shortcuts[mode]}</kbd></button>)}</div>}
           <section className="quick-tools"><div className="section-row"><div><h2>{t.quickTools}</h2><p>{t.quickSubtitle}</p></div><button className="text-button" onClick={() => { if (files.length) setPicker('tools'); else { setPage('formats'); setQuery(''); } }}>{t.allTools}<ArrowUpRight size={14}/></button></div><div className="tool-grid">{[{ title: t.compress, text: t.compressDescription, icon: Package, color: 'peach', operation: 'compress' }, { title: t.resize, text: t.resizeDescription, icon: Maximize, color: 'lavender', operation: 'resize' }, { title: t.extract, text: t.extractDescription, icon: AudioLines, color: 'mint', operation: 'extract-audio' }, { title: t.pdf, text: t.pdfDescription, icon: Files, color: 'sand', operation: 'pdf-extract' }].map(tool => <button className="tool-card" key={tool.title} onClick={() => { const cap = validRoutes(tool.operation === 'convert' ? 'convert' : 'tools').find(item => (item.operation || item.id.split(':').pop()) === tool.operation); if (cap) pickRoute(cap); else if (files.length) setPicker(tool.operation === 'convert' ? 'convert' : 'tools'); else { setNotice(t.noFilesHint); fileInput.current?.focus(); } }}><span className={`tool-icon ${tool.color}`}><tool.icon size={22}/></span><ArrowUpRight className="tool-arrow" size={16}/><strong>{tool.title}</strong><span>{tool.text}</span></button>)}</div></section>
           <section className="format-strip"><span>HAPPILY WORKS WITH</span><div>{['JPG', 'PNG', 'MP4', 'MP3', 'PDF', 'DOCX', 'ZIP'].map(ext => <span key={ext}>{ext}</span>)}<button onClick={() => setPage('formats')}>and more <ArrowRight size={13}/></button></div><small>{t.optional}</small></section>
-        </div><aside className="right-rail">{operation && files.length ? <section className="output-card"><div className="section-row"><span className="eyebrow">{t.output}</span><button className="icon-button" aria-label="Clear operation" onClick={() => setOperation(null)}><X size={16}/></button></div><h2>{operation.label}</h2><label className="field-label">{t.selectedFormat}<select value={outputFormat} onChange={event => setOutputFormat(event.target.value)}>{operation.outputs?.map(format => <option key={format} value={format}>{format.toUpperCase()}</option>)}</select></label><label className="field-label">{t.quality}<div className="range-label"><span>{t.balanced}</span><strong>{settings.quality}%</strong></div><input type="range" min="1" max="100" value={settings.quality} onChange={event => void saveSettings({ quality: Number(event.target.value) })}/></label><OperationFields capability={operation} values={options} onChange={setOptions}/><div className="output-destination"><Folder size={18}/><div><strong>{t.saveTo}</strong><span title={settings.outputFolder}>{settings.outputFolder || t.alongside}</span></div><button className="icon-button" aria-label={t.change} onClick={() => void runSafe(async () => { const folder = await api.pickOutput(); if (folder) await saveSettings({ outputFolder: folder }); })}><MoreHorizontal size={18}/></button></div><label className="checkbox-label"><input type="checkbox" checked={operation.preservesMetadata && !settings.stripMetadata} disabled={!operation.preservesMetadata} onChange={event => void saveSettings({ stripMetadata: !event.target.checked })}/><span>{operation.preservesMetadata ? t.metadata : "This local backend removes metadata"}</span></label>{['jpg','jpeg'].includes(outputFormat) && <p className="inline-warning"><Info size={16}/>{t.transparency}</p>}{operation.warning && <p className="inline-warning"><Info size={16}/>{operation.warning}</p>}<button className="button primary full" disabled={!selectedFiles.length} onClick={() => void startConversion()}><Zap size={17}/>{t.run}</button><p className="fine-print">{t.outputWarning}</p></section> : <section className="privacy-card"><div className="privacy-visual"><div className="privacy-orbit"/><Orange sliced/><span className="shield-float"><ShieldCheck size={22}/></span><span className="privacy-star">✦</span></div><span className="eyebrow">A LITTLE PEACE OF MIND</span><h2>{t.deviceTitle.split('\n').map((line, index) => <span key={index}>{line}<br/></span>)}</h2><p>{t.deviceText}</p><button onClick={() => setPrivacy(true)}>{t.privacyLink}<ArrowUpRight size={15}/></button><div className="privacy-bottom"><LockKeyhole size={13}/>{t.privacyFootnote}</div></section>}
+        </div><aside className="right-rail">{operation && files.length ? <section className="output-card"><div className="section-row"><span className="eyebrow">{t.output}</span><button className="icon-button" aria-label="Clear operation" onClick={() => setOperation(null)}><X size={16}/></button></div><h2>{operation.label}</h2><label className="field-label">{t.selectedFormat}<select value={outputFormat} onChange={event => setOutputFormat(event.target.value)}>{operation.outputs?.map(format => <option key={format} value={format}>{format.toUpperCase()}</option>)}</select></label><label className="field-label">{t.quality}<div className="range-label"><span>{t.balanced}</span><strong>{settings.quality}%</strong></div><input type="range" min="1" max="100" value={settings.quality} onChange={event => void saveSettings({ quality: Number(event.target.value) })}/></label><ConversionDetails capability={operation} files={selectedFiles}/><OperationFields capability={operation} values={options} onChange={setOptions}/><div className="output-destination"><Folder size={18}/><div><strong>{t.saveTo}</strong><span title={settings.outputFolder}>{settings.outputFolder || t.alongside}</span></div><button className="icon-button" aria-label={t.change} onClick={() => void runSafe(async () => { const folder = await api.pickOutput(); if (folder) await saveSettings({ outputFolder: folder }); })}><MoreHorizontal size={18}/></button></div><label className="checkbox-label"><input type="checkbox" checked={operation.preservesMetadata && !settings.stripMetadata} disabled={!operation.preservesMetadata} onChange={event => void saveSettings({ stripMetadata: !event.target.checked })}/><span>{operation.preservesMetadata ? t.metadata : "This local backend removes metadata"}</span></label>{['jpg','jpeg'].includes(outputFormat) && <p className="inline-warning"><Info size={16}/>{t.transparency}</p>}{operation.warning && <p className="inline-warning"><Info size={16}/>{operation.warning}</p>}<button className="button primary full" disabled={!selectedFiles.length} onClick={() => void startConversion()}><Zap size={17}/>{t.run}</button><p className="fine-print">{t.outputWarning}</p></section> : <section className="privacy-card"><div className="privacy-visual"><div className="privacy-orbit"/><Orange sliced/><span className="shield-float"><ShieldCheck size={22}/></span><span className="privacy-star">✦</span></div><span className="eyebrow">A LITTLE PEACE OF MIND</span><h2>{t.deviceTitle.split('\n').map((line, index) => <span key={index}>{line}<br/></span>)}</h2><p>{t.deviceText}</p><button onClick={() => setPrivacy(true)}>{t.privacyLink}<ArrowUpRight size={15}/></button><div className="privacy-bottom"><LockKeyhole size={13}/>{t.privacyFootnote}</div></section>}
           <section className="workflow-card"><div className="section-row"><h3>{t.workflowTitle}</h3><Sparkles size={17}/></div>{[{ title: t.workflowDrag, text: t.workflowDragText }, { title: t.workflowChoose, text: t.workflowChooseText }, { title: t.workflowDone, text: t.workflowDoneText }].map((step, index) => <div className="workflow-step" key={step.title}><span>{index + 1}</span><div><strong>{step.title}</strong><p>{step.text}</p></div></div>)}<button className="text-button" onClick={() => setGuide(true)}>{t.learnMore}<ArrowRight size={14}/></button></section>
         </aside></div>
       </>}
@@ -304,6 +306,7 @@ export default function App() {
       }}>{picker === 'actions' ? actionItems.map(item => <button className="operation-choice" key={item.id} onClick={() => void fileAction(item.id)}><span className="tool-icon sand"><item.icon size={21}/></span><span><strong>{item.label}</strong><small>{item.id === 'preview' ? 'Always-on-top local preview' : 'Local file action'}</small></span><ChevronRight size={17}/></button>) : validRoutes(picker).length ? validRoutes(picker).flatMap(cap => (picker === 'convert' ? cap.outputs : ['']).map(format => <button className="operation-choice" key={`${cap.id}-${cap.backend}-${format}-${cap.category}`} onClick={() => pickRoute(cap, format || undefined)}><span className="tool-icon peach">{picker === 'convert' ? <File size={21}/> : <WandSparkles size={21}/>}</span><span><strong>{picker === 'convert' ? `${cap.label} · ${format.toUpperCase()}` : cap.label}</strong><small>{selectedFiles.filter(file => compatible(cap, file)).length} of {selectedFiles.length} files · {cap.backend}{cap.warning ? ' · Review fidelity warning' : ' · Processed locally'}</small></span><ChevronRight size={17}/></button>)) : <div className="picker-empty"><Package size={32}/><h3>{t.noRoutes}</h3><p>{!isDesktop ? t.previewNotice : t.noRoutesHint}</p><button className="button" onClick={() => { setPicker(null); setPage('settings'); setSettingsTab('engines'); }}>{t.viewSettings}<ArrowRight size={15}/></button></div>}</div>
       <footer className="picker-footer"><span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span><span><kbd>Enter</kbd> Choose</span><span><kbd>Esc</kbd> Close</span></footer>
     </Modal>}
+    {conversionEditor && <ConversionWindow {...conversionEditor} initialOptions={conversionEditor.options} onClose={()=>setConversionEditor(null)} onApply={(format,values)=>queueOperation(conversionEditor.capability,format,values,conversionEditor.files)}/>}
     {archiveEditor && <ArchiveWindow {...archiveEditor} initialOptions={archiveEditor.options} onClose={()=>setArchiveEditor(null)} onApply={(format,values)=>queueOperation(archiveEditor.capability,format,values,archiveEditor.files)}/>}
     {audioEditor && <AudioToolWindow {...audioEditor} initialOptions={audioEditor.options} onClose={()=>setAudioEditor(null)} onApply={(format,values)=>queueOperation(audioEditor.capability,format,values,audioEditor.files)}/>}
     {pdfEditor && <PdfWorkspace files={pdfEditor.files.filter(file => compatible(pdfEditor.capability, file))} capability={pdfEditor.capability} format={pdfEditor.format} initialOptions={pdfEditor.options} onClose={() => setPdfEditor(null)} loadPreview={file => api.preview ? api.preview(file.path) : Promise.reject(new Error('PDF preview needs the desktop app and Poppler.'))} onApply={async (format, values) => { await queueOperation(pdfEditor.capability, format, values, pdfEditor.files); setPdfEditor(null); }}/ >}

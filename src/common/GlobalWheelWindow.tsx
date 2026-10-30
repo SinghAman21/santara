@@ -1,3 +1,4 @@
+import { performFileAction } from '../action';
 import { useEffect, useRef, useState, type DragEvent } from 'react';
 import { Camera, Crop, EyeOff, Film, FlipHorizontal2, Gauge, Layers, Minimize2, Music2, RotateCw, Scaling, Scissors, Split, Tag, VolumeX, type LucideIcon } from 'lucide-react';
 import { api, defaultSettings } from './bridge';
@@ -174,7 +175,7 @@ export default function GlobalWheelWindow() {
       }
       if (mode === 'actions') {
         const action = selectedChoice;
-        const result = await api.fileAction({ action, files: incoming }) as { ok?: boolean; canceled?: boolean; reason?: string };
+        const result = await performFileAction({ action, files: incoming }) as { ok?: boolean; canceled?: boolean; reason?: string };
         if (result?.ok === false) throw new Error(result.reason || 'The file action could not be completed.');
         await api.finishGlobalWheel?.('converter', result?.canceled ? 'File action canceled.' : action === 'copy-path' ? 'Paths copied to clipboard.' : 'File action completed.');
         return;

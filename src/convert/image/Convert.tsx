@@ -1,0 +1,1 @@
+export default function Convert() { return <p className="conversion-review">Transparent pixels need a solid background when saving as JPG. The current raster processor removes metadata. Originals are kept.</p>; }
