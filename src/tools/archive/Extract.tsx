@@ -1,0 +1,1 @@
+export default function Extract() { return <p>Extracts into a new output directory using your configured destination. Unsafe paths, links, and unsupported archive entries reject the job. Nothing is executed.</p>; }

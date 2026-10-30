@@ -1,0 +1,1 @@
+export default function CreateArchive() { return <p>ZIP uses STORE to package files without compression gains. GZIP accepts one regular file. Folder recursion follows your settings and is off by default.</p>; }
