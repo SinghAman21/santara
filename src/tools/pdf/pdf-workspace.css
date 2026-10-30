@@ -81,14 +81,14 @@
 .pdf-workspace__merge li svg { display: inline-block; vertical-align: middle; color: var(--pdf-mint-text); margin-right: 7px; }
 .pdf-workspace__merge li span { overflow-wrap: anywhere; vertical-align: middle; }
 .pdf-workspace__merge > p { margin-top: 10px; color: var(--muted, #85877d); font-size: 11px; line-height: 1.8; }
-.pdf-workspace__error { border: 1px solid #b9584240; background: #fbeee7; color: var(--pdf-error); border-radius: 10px; padding: 13px; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; margin-bottom: 20px; }
+.pdf-workspace__error { border: 1px solid #ff5a0040; background: #fbeee7; color: var(--pdf-error); border-radius: 10px; padding: 13px; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; margin-bottom: 20px; }
 .pdf-workspace__error strong { font-weight: 600; }
 .pdf-workspace__error p { margin-top: 4px; }
 .pdf-workspace__footer { flex-shrink: 0; padding: 19px 25px 16px; border-top: 1px solid var(--line, #e8e7df); background: var(--panel, #ffffff); }
 .pdf-workspace__footer > p { display: flex; align-items: center; gap: 7px; font-size: 10px; color: var(--text, #33372e); margin-bottom: 13px; }
 .pdf-workspace__footer > p > span:last-child { color: var(--muted, #85877d); margin-left: auto; }
 .pdf-workspace__citrus-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent, #ff5a00); box-shadow: 0 0 0 3px var(--accent-soft, #f9ece4); }
-.pdf-workspace__apply { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 44px; border-radius: 10px; padding: 12px; background: var(--accent, #ff5a00); color: #fff9ef; font-size: 13px; font-weight: 550; box-shadow: 0 4px 10px #cf6a371a; }
+.pdf-workspace__apply { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 44px; border-radius: 10px; padding: 12px; background: var(--accent, #ff5a00); color: #fff9ef; font-size: 13px; font-weight: 550; box-shadow: 0 4px 10px #ff5a001a; }
 .pdf-workspace__apply:hover:not(:disabled) { background: var(--accent-hover, #ff5a00); }
 .pdf-workspace__cancel { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; color: var(--muted, #85877d); font-size: 11px; padding: 12px 8px 0; }
 .pdf-workspace__cancel kbd { font: inherit; font-size: 10px; padding: 0 5px; }

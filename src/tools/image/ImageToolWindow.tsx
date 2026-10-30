@@ -1,5 +1,4 @@
 import './image-tool-window.css';
-import '../../common/editor.css';
 import Crop from './Crop';
 import Resize from './Resize';
 import Rotate from './Rotate';

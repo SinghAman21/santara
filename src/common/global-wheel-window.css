@@ -26,13 +26,13 @@ html.global-wheel-document body { min-width: 0; }
   padding: 8px;
   border: 1px solid #fff9;
   border-radius: 26px;
-  background: #fffcf2e8;
+  background: #ffffff;
   box-shadow: 0 16px 56px #38200a55;
   backdrop-filter: blur(14px);
 }
 
 .global-wheel-card .citrus-wheel { width: 360px; margin: auto; }
-.global-wheel-error { margin: 8px 12px; color: #9c3021; font-size: 12px; line-height: 1.4; }
+.global-wheel-error { margin: 8px 12px; color: #ff5a00; font-size: 12px; line-height: 1.4; }
 .global-wheel-cancel {
   position: absolute;
   top: 4px;
@@ -41,7 +41,7 @@ html.global-wheel-document body { min-width: 0; }
   height: 28px;
   border: 1px solid #edc8a0;
   border-radius: 50%;
-  background: #fff9ee;
+  background: #ffffff;
   color: #69452f;
   font-size: 18px;
   line-height: 1;

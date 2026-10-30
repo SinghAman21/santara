@@ -1,42 +1,11 @@
-.citrus-rind {
-  background: radial-gradient(circle at 36% 27%, #ffcd8b, #f5a058 62%, #c96a37);
-  box-shadow: inset 0 0 0 4px #fff5dc, 0 17px 44px #713a1e3b;
-}
-
-.citrus-segments path {
-  fill: #ffe2b8;
-  stroke: #fff7e8;
-  stroke-width: 5;
-  filter: drop-shadow(0 3px 3px #a65c3033);
-}
-
-.citrus-segments path:nth-child(even) { fill: #ffdaaa; }
-.citrus-segments path.chosen { fill: #ef8748; stroke: #fff6df; }
-.citrus-label { color: #493526; text-shadow: 0 1px #fff8; }
-.citrus-label.chosen { color: #fff; text-shadow: 0 1px 2px #7d3d20; }
-.citrus-core {
-  pointer-events: none;
-  cursor: default;
-  background: radial-gradient(circle at 35% 28%, #fffdf6, #fff0da);
-  box-shadow: inset 0 0 0 5px #fff8ec, 0 4px 14px #824c2d38;
-}
-.citrus-core .santra-mark { width: 50px; height: 50px; border-radius: 11px; filter: drop-shadow(0 2px 2px #8f4a2830); }
-.wheel-file-badge {
-  display: grid;
-  place-items: center;
-  width: 54px;
-  height: 54px;
-  border-radius: 16px;
-  background: linear-gradient(145deg, #f69c58, #e97843);
-  box-shadow: 0 5px 14px #bc633c43, inset 0 1px #fff6;
-  color: #fff;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: .03em;
-  white-space: nowrap;
-}
+/* White wheel from Penpot 00/01, shared by every capability family. */
+.citrus-rind { background: #ffffff; border: 1px solid var(--line); box-shadow: 0 12px 40px #18201924; }
+.citrus-segments path,.citrus-segments path:nth-child(even) { fill: #ffffff; stroke: #dde2e2; stroke-width: 1; filter: none; }
+.citrus-segments path.chosen { fill: #ff5a00; stroke: #ff5a00; }
+.citrus-label { color: #262b2b; text-shadow: none; font-size: 11px; font-weight: 600; }
+.citrus-label.chosen { color: #ffffff; text-shadow: none; }
+.citrus-core { pointer-events: none; cursor: default; background: #ffffff; box-shadow: 0 2px 14px #18201914; border: 1px solid var(--line); }
+.citrus-core .santra-mark { width: 44px; height: 44px; border-radius: 10px; filter: none; }
+.wheel-file-badge { display: grid; place-items: center; width: 54px; height: 54px; border-radius: 12px; background: #ffffff; border: 1px solid var(--line); color: var(--text); font-size: 12px; font-weight: 600; white-space: nowrap; }
 .wheel-mode-bar button { white-space: nowrap; flex-shrink: 0; }
-.wheel-mode-bar button:focus-visible, .wheel-pagination button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
+.wheel-mode-bar button:focus-visible,.wheel-pagination button:focus-visible { outline: 2px solid #ff5a00; outline-offset: 2px; }

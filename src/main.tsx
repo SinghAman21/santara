@@ -6,6 +6,7 @@ import GlobalWheelWindow from './common/GlobalWheelWindow';
 import ImageToolHost from './tools/image/ImageToolHost';
 import VideoToolHost from './tools/video/VideoToolHost';
 import PreviewHost from './action/common/PreviewHost';
+import './common/editor.css';
 const root = createRoot(document.getElementById('root')!);
 const isGlobalWheel = new URLSearchParams(window.location.search).get('santra-wheel') === '1';
 const isImageTool = new URLSearchParams(window.location.search).get('santra-image-tool') === '1';

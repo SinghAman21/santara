@@ -1,6 +1,5 @@
 import { decimal, clock, type Mask, type Preview } from './media';
 import './video-tool-window.css';
-import '../../common/editor.css';
 import CompressControls from './CompressControls';
 import TrimControls from './TrimControls';
 import SplitControls from './SplitControls';
@@ -200,7 +199,7 @@ export default function VideoToolWindow({ capability, files: originalFiles, form
           <p className="video-tool-fileinfo">{file?.size ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : ''}{preview?.width && preview.height ? ` · ${preview.width} × ${preview.height}` : ''}{duration ? ` · ${clock(duration)}` : ''}</p>
         </div>
         <div className="video-tool-controls"><div className="editor-section-label">Output settings</div>
-          <div className="video-tool-section-title">Operation settings</div>
+
           {outputFormats.length > 1 && <label className="video-tool-field">Output format<select aria-label="Output format" value={format} onChange={event => setFormat(event.target.value)}>{outputFormats.map(output => <option key={output} value={output}>{output.toUpperCase()}</option>)}</select></label>}
           {operation === 'compress' && <CompressControls values={values} set={set}/ >}
           {operation === 'trim' && <TrimControls duration={duration} values={values} set={set} playhead={playhead}/ >}
@@ -221,7 +220,7 @@ export default function VideoToolWindow({ capability, files: originalFiles, form
           {capability.warning && <p className="video-tool-warning">{capability.warning}</p>}
         </div>
       </div>
-      <footer className="video-tool-footer"><span>{validation || error || 'The original is kept. Output is processed locally.'}</span><div><button className="video-tool-cancel" onClick={onClose}>Cancel</button><button className="editor-cancel" disabled={busy} onClick={onClose}>Cancel</button><button className="video-tool-apply" disabled={busy || Boolean(validation)} onClick={() => void apply()}>{busy ? 'Queueing…' : <><Scissors size={14}/> Save new copy</>}</button></div></footer>
+      <footer className="video-tool-footer"><span>{validation || error || 'The original is kept. Output is processed locally.'}</span><div><button className="video-tool-cancel" onClick={onClose}>Cancel</button><button className="video-tool-apply" disabled={busy || Boolean(validation)} onClick={() => void apply()}>{busy ? 'Queueing…' : <><Scissors size={14}/> Save new copy</>}</button></div></footer>
     </section>
   </main>;
 }

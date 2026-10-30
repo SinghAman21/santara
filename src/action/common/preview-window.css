@@ -2,7 +2,7 @@
 .quick-preview header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .6rem .9rem; border-bottom: 1px solid #dedbd3; }
 .quick-preview header strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .quick-preview header button { display: grid; place-items: center; width: 2rem; height: 2rem; border: 0; border-radius: .5rem; background: transparent; color: inherit; cursor: pointer; }
-.quick-preview header button:focus-visible { outline: 2px solid #e97824; outline-offset: 2px; }
+.quick-preview header button:focus-visible { outline: 2px solid #ff5a00; outline-offset: 2px; }
 .quick-preview-content { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 1rem; }
 .quick-preview-content img, .quick-preview-content video { max-width: 100%; max-height: calc(100vh - 5rem); object-fit: contain; }
 .quick-preview-content audio { width: min(90%, 42rem); }

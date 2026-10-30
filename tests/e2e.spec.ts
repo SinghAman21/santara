@@ -138,7 +138,7 @@ test('empty workspace renders without exceptions', async ({ page }, testInfo) =>
   await expect(page.getByRole('heading', { name: 'Good things come in new formats.' })).toBeVisible();
   await expect(page.getByText('Drop files or folders here to get started')).toBeVisible();
   await expect(page.locator('.file-row')).toHaveCount(0);
-  await page.screenshot({ path: testInfo.outputPath('empty-workspace.png'), fullPage: true });
+  await page.screenshot({ animations: 'disabled', path: testInfo.outputPath('empty-workspace.png'), fullPage: true });
   expect(errors).toEqual([]);
 });
 
@@ -149,7 +149,7 @@ test('navigation keeps the white theme even with a dark system preference', asyn
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   await expect(page.getByRole('button', { name: 'Toggle color theme' })).toHaveCount(0);
   await expect(page.locator('body')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
-  await page.screenshot({ path: testInfo.outputPath('settings-white.png') });
+  await page.screenshot({ animations: 'disabled', path: testInfo.outputPath('settings-white.png') });
 });
 
 test('add files populates rows and mixed selections respect per-file routes', async ({ page }, testInfo) => {
@@ -162,7 +162,7 @@ test('add files populates rows and mixed selections respect per-file routes', as
   await expect(dialog.getByRole('button', { name: 'Convert image · JPG' })).toBeVisible();
   await expect(dialog.getByRole('button', { name: 'Convert audio · MP3' })).toBeVisible();
   await expect(dialog.getByRole('button', { name: /Unavailable office/ })).toHaveCount(0);
-  await page.screenshot({ path: testInfo.outputPath('mixed-file-picker.png'), fullPage: true });
+  await page.screenshot({ animations: 'disabled', path: testInfo.outputPath('mixed-file-picker.png'), fullPage: true });
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: /^pixel\.png/ }).click();
   await expect(dialog.getByRole('button', { name: 'Convert image · WEBP' })).toBeVisible();
@@ -249,7 +249,7 @@ test('citrus wheel persists after modifier release and dropping a slice queues i
     await app.dispatchEvent('dragover', { dataTransfer: transfer, clientX: 710, clientY: 420, shiftKey: false });
     const wheel = page.getByRole('menu', { name: 'Convert', exact: true });
     await expect(wheel).toBeVisible();
-    await page.screenshot({ path: testInfo.outputPath('citrus-wheel.png') });
+    await page.screenshot({ animations: 'disabled', path: testInfo.outputPath('citrus-wheel.png') });
     const jpg = wheel.getByRole('menuitem', { name: /^JPG/ });
     await jpg.dispatchEvent('dragenter', { dataTransfer: transfer });
     await expect(jpg).toHaveClass(/chosen/);
@@ -409,7 +409,7 @@ test('global video tools wheel shows supported video operations and dispatches t
   } finally { await transfer.dispose(); }
 });
 
-test('compact video editor provides exact trim values and submits a non-destructive queue recipe', async ({ page }) => {
+test('compact video editor provides exact trim values and submits a non-destructive queue recipe', async ({ page }, testInfo) => {
   await page.goto('/?santra-video-tool=1');
   const editor = page.getByRole('dialog', { name: 'Trim video' });
   await expect(editor).toBeVisible();
@@ -417,6 +417,8 @@ test('compact video editor provides exact trim values and submits a non-destruct
   await expect(editor.getByRole('slider', { name: 'Video preview timeline' })).toBeVisible();
   await editor.getByLabel('Start time (seconds)').fill('0.5');
   await editor.getByLabel('End time (seconds)').fill('2.5');
+  await expect(editor.getByRole('button', {name:'Cancel', exact:true})).toHaveCount(1);
+  await page.screenshot({animations:'disabled',path:testInfo.outputPath('02-video-trim.png')});
   await editor.getByRole('button', { name: 'Save new copy' }).click();
   await expect.poll(() => page.evaluate(() => window.__santraTest.calls.find(call => call.method === 'applyVideoTool')?.value)).toMatchObject({
     format: 'mp4', files: ['/fixtures/clip.mp4'], options: { start: 0.5, duration: 2 },
@@ -503,7 +505,7 @@ test('single modifier presses leave the action picker unchanged; Ctrl double tap
   await expect(dialog.getByRole('tab', { name: /^File actions/ })).toHaveAttribute('aria-selected', 'true');
 });
 
-test('image editor exposes a real padded background canvas and directional zoom navigation', async ({ page }) => {
+test('image editor exposes a real padded background canvas and directional zoom navigation', async ({ page }, testInfo) => {
   await page.goto('/');
   await addFiles(page);
   await page.getByRole('button', { name: 'Choose an operation' }).click();
@@ -517,6 +519,7 @@ test('image editor exposes a real padded background canvas and directional zoom 
   await color.click();
   await expect(color).toHaveAttribute('aria-pressed', 'true');
   await expect(backgroundEditor.locator('.image-tool-preview-wrap')).toHaveCSS('background-color', 'rgb(255, 90, 0)');
+  await page.screenshot({animations:'disabled',path:testInfo.outputPath('01-image-background.png')});
   await backgroundEditor.getByRole('button', { name: 'Close editor' }).click();
 
   await page.getByRole('button', { name: 'Choose an operation' }).click();
@@ -549,7 +552,7 @@ test('PDF workspace labels the source preview and exports the selected page sett
   await expect(workspace.getByRole('img')).toBeVisible();
   await workspace.getByLabel('Page to render', { exact: true }).fill('2');
   await workspace.getByLabel('Resolution (DPI)', { exact: true }).fill('144');
-  await page.screenshot({ path: testInfo.outputPath('pdf-workspace.png') });
+  await page.screenshot({ animations: 'disabled', path: testInfo.outputPath('pdf-workspace.png') });
   await workspace.getByRole('button', { name: 'Render page', exact: true }).click();
   expect(await page.evaluate(() => window.__santraTest.calls.find(call => call.method === 'enqueue')?.value)).toMatchObject({ operation: 'render', format: 'png', options: { page: '2', dpi: '144' } });
   await expect(workspace).toHaveCount(0);
@@ -582,7 +585,7 @@ test('submission, cancellation, failure, and retry follow mock events', async ({
   await addFiles(page);
   await page.getByRole('button', { name: /^captions\.srt/ }).click();
   await page.getByRole('button', { name: 'Convert subtitles · VTT' }).click();
-  await page.getByRole('button', { name: 'Run operation' }).click();
+  await page.getByRole('dialog', { name: 'Convert subtitles', exact: true }).getByRole('button', { name: 'Save new copy' }).click();
   await expect(page.locator('.job-row')).toHaveCount(1);
   expect(await page.evaluate(() => window.__santraTest.calls.find(call => call.method === 'enqueue')?.value)).toMatchObject({ operation: 'convert', format: 'vtt', files: [{ id: 'subtitle' }], options: { quality: 85, collision: 'rename' } });
   await expect(page.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '0');
@@ -614,4 +617,42 @@ test('preview navigation makes no external network requests', async ({ page, bas
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'General', exact: true })).toBeVisible();
   expect(external).toEqual([]);
+});
+
+test('audio normalization opens its own editor and queues only compatible files', async ({ page }, testInfo) => {
+  await page.goto('/');
+  await addFiles(page);
+  await page.evaluate(() => window.__santraTest.emit({ capabilities: [...window.__santraTest.state.capabilities, { id:'audio:normalize', operation:'normalize', label:'Normalize audio', category:'audio', inputs:['wav'], outputs:['wav'], backend:'ffmpeg', available:true, batch:true, preservesMetadata:true }] }));
+  await page.getByRole('button', { name:'Choose an operation' }).click();
+  await page.getByRole('tab', { name:/^Tools/ }).click();
+  await page.getByRole('button', { name:/^Normalize audio/ }).click();
+  const editor=page.getByRole('dialog', { name:'Normalize audio', exact:true });
+  await expect(editor).toBeVisible();
+  await editor.getByRole('spinbutton', { name:'Target loudness (LUFS)' }).fill('-18');
+  await expect(editor.getByRole('spinbutton', { name:'True peak (dBTP)' })).toHaveValue('-1.5');
+  await page.screenshot({ animations: 'disabled', path:testInfo.outputPath('03-audio-normalize.png') });
+  await editor.getByRole('button', { name:'Save new copy' }).click();
+  await expect(editor).toHaveCount(0);
+  const call=await page.evaluate(()=>window.__santraTest.calls.find(c=>c.method==='enqueue')?.value as {files:Snapshot['files'];options:Record<string,unknown>});
+  expect(call.files.map(f=>f.category)).toEqual(['audio']);
+  expect(call.options.loudness).toBe('-18');
+});
+
+test('document conversion review preserves its warning and recovers from a queue error', async ({ page }, testInfo) => {
+  await page.goto('/');
+  await page.evaluate(()=>{
+    const file:Snapshot['files'][number]={id:'doc',name:'notes.md',path:'/fixtures/notes.md',ext:'md',size:123,category:'document'};
+    window.__santraTest.emit({capabilities:[...window.__santraTest.state.capabilities,{id:'document:convert',operation:'convert',label:'Convert document',category:'document',inputs:['md'],outputs:['html'],backend:'pandoc',available:true,batch:true,preservesMetadata:false}]});
+    window.__santraTest.emitGlobalFiles([file],'convert');
+  });
+  await page.getByRole('button',{name:/^Convert document · HTML/}).click();
+  const editor=page.getByRole('dialog',{name:'Convert document',exact:true});
+  await expect(editor.getByText(/Complex tables, fonts/)).toBeVisible();
+  await page.screenshot({ animations: 'disabled',path:testInfo.outputPath('06-document-conversion.png')});
+  await page.evaluate(()=>{window.santra!.enqueue=async()=>{throw new Error('Output folder is read-only')};});
+  await editor.getByRole('button',{name:'Save new copy'}).click();
+  await expect(editor.getByRole('alert')).toHaveText('Output folder is read-only');
+  await expect(editor.getByRole('button',{name:'Save new copy'})).toBeEnabled();
+  await editor.getByRole('button',{name:'Cancel',exact:true}).click();
+  await expect(editor).toHaveCount(0);
 });
