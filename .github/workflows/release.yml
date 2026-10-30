@@ -36,9 +36,9 @@ jobs:
             echo 'A short release summary is required.' >&2
             exit 1
           fi
-          echo "version=$INPUT_VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=v$INPUT_VERSION" >> "$GITHUB_OUTPUT"
           {
+            echo "version=$INPUT_VERSION"
+            echo "tag=v$INPUT_VERSION"
             echo 'summary<<SANTRA_RELEASE_SUMMARY'
             echo "$INPUT_SUMMARY"
             echo 'SANTRA_RELEASE_SUMMARY'

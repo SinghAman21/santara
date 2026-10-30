@@ -2,7 +2,7 @@ import { Plus, Trash2 } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 import { clock } from './media';
 type Props = {
-    setFrames: import("/home/aman/Documents/graveyard/santra/node_modules/@types/react/index").Dispatch<import("/home/aman/Documents/graveyard/santra/node_modules/@types/react/index").SetStateAction<number[]>>;
+    setFrames: Dispatch<SetStateAction<number[]>>;
     playhead: number;
     frames: number[];
     seek: (value: number) => void;
