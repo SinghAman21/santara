@@ -1,5 +1,5 @@
 export function Field({ label, value, onChange, min = 0, max = 16384 }: { label: string; value: string; onChange: (value: string) => void; min?: number; max?: number }) {
-  return <label className="image-tool-field"><span>{label}</span><input type="number" min={min} max={max} value={value} onChange={event => onChange(event.target.value)}/></label>;
+  return <label className="image-tool-field"><span>{label}</span><input type="number" step="any" min={min} max={max} value={value} onChange={event => onChange(event.target.value)}/></label>;
 }
 
 export function Slider({ label, value, min, max, step = 0.05, onChange }: { label: string; value: string; min: number; max: number; step?: number; onChange: (value: string) => void }) {

@@ -1,3 +1,5 @@
+import AudioToolWindow, { audioEditorOperations } from '../tools/audio/AudioToolWindow';
+import Modal from '../common/Modal';
 import { useEffect, useRef, useState, type DragEvent, type ReactNode } from 'react';
 import { ArrowDown, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, AudioLines, Check, CheckCheck, ChevronDown, ChevronRight, CircleHelp, Clipboard, Copy, CornerDownLeft, File, FileArchive, FileAudio, FileImage, FileSliders, FileSpreadsheet, FileText, FileVideo, Files, Folder, FolderOpen, History, Image, Info, Keyboard, Layers, Leaf, ListFilter, LoaderCircle, LockKeyhole, Maximize, Monitor, Moon, MoreHorizontal, Music2, Package, PanelLeftClose, Play, Plus, RefreshCw, ScanLine, Search, Settings2, ShieldCheck, SlidersHorizontal, Sparkles, Sun, Terminal, Trash2, Upload, WandSparkles, X, Zap } from 'lucide-react';
 import { api, defaultSettings, isDesktop } from '../common/bridge';
@@ -38,30 +40,8 @@ function dragHints(transfer: DataTransfer): LocalFile[] {
 function formatSize(size: number) { return size < 1024 ? `${size} B` : size < 1048576 ? `${(size / 1024).toFixed(1)} KB` : `${(size / 1048576).toFixed(1)} MB`; }
 function Orange({ className = '', sliced = false }: { className?: string; sliced?: boolean }) { return <img className={`santra-logo ${sliced ? 'santra-logo--illustration' : ''} ${className}`} src="./santra.png" alt="" aria-hidden="true"/>; }
 function FileIcon({ file }: { file: LocalFile }) { const family = families.find(item => item.id === file.category); const Icon = file.isDirectory ? Folder : family?.icon || File; return <span className={`file-icon ${family?.color || 'sand'}`}><Icon size={23}/></span>; }
-function Modal({ title, children, onClose, wide = false }: { title: string; children: ReactNode; onClose: () => void; wide?: boolean }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const closeRef = useRef(onClose);
-  closeRef.current = onClose;
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement;
-    const element = ref.current;
-    (element?.querySelector<HTMLElement>('[role=menuitem]') || element?.querySelector<HTMLElement>('.operation-choice') || element?.querySelector<HTMLElement>('button,input,select'))?.focus({ preventScroll: true });
-    const handle = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') closeRef.current();
-      if (event.key !== 'Tab') return;
-      const targets = element?.querySelectorAll<HTMLElement>('button:not(:disabled),input,select,textarea,[tabindex="0"]');
-      if (!targets?.length) return;
-      const first = targets[0], last = targets[targets.length - 1];
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-    };
-    document.addEventListener('keydown', handle);
-    return () => { document.removeEventListener('keydown', handle); previous?.focus(); };
-  }, []);
-  return <div className="modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}><div ref={ref} role="dialog" aria-modal="true" aria-label={title} className={`modal ${wide ? 'wide' : ''}`}><header className="modal-header"><h2>{title}</h2><button className="icon-button" aria-label={t.close} onClick={onClose}><X size={20}/></button></header>{children}</div></div>;
-}
-
 export default function App() {
+  const [audioEditor, setAudioEditor] = useState<{capability:Capability;files:LocalFile[];format:string;options:Record<string,string>}|null>(null);
   const [data, setData] = useState<Snapshot>({ files: [], jobs: [], capabilities: [], backends: {}, settings: defaultSettings, platform: 'browser' });
   const [page, setPage] = useState<Page>('converter');
   const [files, setFiles] = useState<LocalFile[]>([]);
@@ -174,7 +154,8 @@ export default function App() {
     const skipped = source.filter(file => !compatible(cap, file)).length;
     const normalized = { ...cap, id, operation: id, warning: skipped ? `${skipped} selected ${skipped === 1 ? 'file does' : 'files do'} not support this operation and will be recorded as skipped. ${cap.warning || ''}` : cap.warning };
     setOperation(normalized); setOutputFormat(target); setPicker(null); setOptions(nextOptions); setPage('converter');
-    if (cap.category === 'pdf') setPdfEditor({ capability: normalized, files: source, format: target, options: nextOptions });
+    if (cap.category === 'audio' && audioEditorOperations.includes(id)) setAudioEditor({capability:normalized,files:source.filter(file=>compatible(cap,file)),format:target,options:nextOptions});
+    else if (cap.category === 'pdf') setPdfEditor({ capability: normalized, files: source, format: target, options: nextOptions });
     else if (cap.category === 'image' && ['edit-image', 'background', 'crop', 'resize', 'rotate', 'flip', 'compress', 'metadata', 'strip-metadata'].includes(id)) {
       const compatibleFiles = source.filter(file => compatible(cap, file));
       if (isDesktop && api.openImageTool) void runSafe(() => api.openImageTool!({ capabilityId: cap.id, files: compatibleFiles.map(file => file.path), format: target, options: nextOptions }));
@@ -320,6 +301,7 @@ export default function App() {
       }}>{picker === 'actions' ? actionItems.map(item => <button className="operation-choice" key={item.id} onClick={() => void fileAction(item.id)}><span className="tool-icon sand"><item.icon size={21}/></span><span><strong>{item.label}</strong><small>{item.id === 'preview' ? 'Always-on-top local preview' : 'Local file action'}</small></span><ChevronRight size={17}/></button>) : validRoutes(picker).length ? validRoutes(picker).flatMap(cap => (picker === 'convert' ? cap.outputs : ['']).map(format => <button className="operation-choice" key={`${cap.id}-${cap.backend}-${format}-${cap.category}`} onClick={() => pickRoute(cap, format || undefined)}><span className="tool-icon peach">{picker === 'convert' ? <File size={21}/> : <WandSparkles size={21}/>}</span><span><strong>{picker === 'convert' ? `${cap.label} · ${format.toUpperCase()}` : cap.label}</strong><small>{selectedFiles.filter(file => compatible(cap, file)).length} of {selectedFiles.length} files · {cap.backend}{cap.warning ? ' · Review fidelity warning' : ' · Processed locally'}</small></span><ChevronRight size={17}/></button>)) : <div className="picker-empty"><Package size={32}/><h3>{t.noRoutes}</h3><p>{!isDesktop ? t.previewNotice : t.noRoutesHint}</p><button className="button" onClick={() => { setPicker(null); setPage('settings'); setSettingsTab('engines'); }}>{t.viewSettings}<ArrowRight size={15}/></button></div>}</div>
       <footer className="picker-footer"><span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span><span><kbd>Enter</kbd> Choose</span><span><kbd>Esc</kbd> Close</span></footer>
     </Modal>}
+    {audioEditor && <AudioToolWindow {...audioEditor} initialOptions={audioEditor.options} onClose={()=>setAudioEditor(null)} onApply={(format,values)=>queueOperation(audioEditor.capability,format,values,audioEditor.files)}/>}
     {pdfEditor && <PdfWorkspace files={pdfEditor.files.filter(file => compatible(pdfEditor.capability, file))} capability={pdfEditor.capability} format={pdfEditor.format} initialOptions={pdfEditor.options} onClose={() => setPdfEditor(null)} loadPreview={file => api.preview ? api.preview(file.path) : Promise.reject(new Error('PDF preview needs the desktop app and Poppler.'))} onApply={async (format, values) => { await queueOperation(pdfEditor.capability, format, values, pdfEditor.files); setPdfEditor(null); }}/ >}
     {imageEditor && imageEditor.files[0] && <ImageToolWindow capability={imageEditor.capability} file={imageEditor.files[0]} format={imageEditor.format} initialOptions={imageEditor.options} onClose={() => setImageEditor(null)} onApply={async values => { await runSafe(async () => { await queueOperation(imageEditor.capability, imageEditor.format, values, imageEditor.files); setImageEditor(null); }); }}/ >}
     {guide && <Modal title={t.guide} onClose={() => setGuide(false)}><div className="guide-content"><Orange sliced/><p>{t.guideIntro}</p><div className="guide-keys">{([{ key: 'convert', label: t.convertKey }, { key: 'tools', label: t.toolsKey }, { key: 'actions', label: t.actionsKey }] as const).map(item => <div key={item.key}><kbd>{settings.shortcuts[item.key]}</kbd><span>{item.label}</span></div>)}</div><p>{t.keyboardHelp}</p><div className="privacy-callout"><ShieldCheck size={21}/><span>{t.noUploads}</span></div>{!isDesktop && <p className="inline-warning">{t.previewNotice}</p>}<button className="button primary full" onClick={() => setGuide(false)}>Let’s make something fresh<ArrowRight size={16}/></button></div></Modal>}
