@@ -4,7 +4,7 @@ import type { Mask } from './media';
 type Props = {
     masks: Mask[];
     duration: number;
-    setMasks: import("/home/aman/Documents/graveyard/santra/node_modules/@types/react/index").Dispatch<import("/home/aman/Documents/graveyard/santra/node_modules/@types/react/index").SetStateAction<Mask[]>>;
+    setMasks: Dispatch<SetStateAction<Mask[]>>;
     values: Record<string, string>;
     set: (key: string, value: string) => void;
 };

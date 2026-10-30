@@ -58,10 +58,10 @@ jobs:
             package_kind: windows-cross
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ github.sha }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -92,7 +92,7 @@ jobs:
       - run: npm run check:release
       - name: Build release packages
         run: ${{ matrix.package_command }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: Santra-${{ matrix.package_kind }}-v${{ needs.validate.outputs.version }}
           if-no-files-found: error
@@ -106,7 +106,7 @@ jobs:
     needs: [validate, build]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
@@ -121,7 +121,7 @@ jobs:
           fi
           git tag -a "$RELEASE_TAG" "$GITHUB_SHA" -m "Santra $RELEASE_TAG"
           git push origin "$RELEASE_TAG"
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           pattern: Santra-*-v${{ needs.validate.outputs.version }}
           path: release-assets
