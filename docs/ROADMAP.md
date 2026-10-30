@@ -26,3 +26,11 @@ The reverse-scroll handoff is now stateless: scene channels and docking are func
 ## White UI and feature-source migration
 
 Penpot frames 01–10 now map to feature modules under `tools/`, `convert/`, and `action/`, with reusable UI under `common/`. Image/video controls are split by operation; audio adds a local playback/waveform editor; archive and document-family conversions have compact reviews. Theme switching is removed: desktop surfaces are white, and orange accents use `#ff5a00`. See [UI structure](UI_STRUCTURE.md) for frame-specific limits. Existing backend gates and Phase 8 native verification requirements remain unchanged.
+
+Image-only follow-up: match the Penpot wheel geometry and compact editor layout, isolate those styles from other media families, and correct legacy GNOME launch configuration when it still invokes `santara`. Rounded slices, source/selection center, icon labels, preview toolbar, notice row, and compact footer now have browser coverage. Native image/wheel sizes are updated; real Windows/GNOME drag verification remains open.
+
+## Remaining wheel frames and MKV detection
+
+Penpot frames 02–10 now share the rounded white wheel, family-specific icons/order, primary `#ff5a00` selection, and explicit unsupported/no-tools states. Supported media editors, PDF and conversion/archive reviews follow the compact reference layout. Native drag-enter detection replaces the former provisional-image assumption; MKV and bounded EBML signatures select video before drop. Browser extension/MIME hints and source selection use one classifier. Native directory inspection does not recurse during a drag, and per-window generations reject stale inspection results.
+
+Office conversion and proposal-only tools remain disabled. Phase 8 real Explorer/GNOME drag, focus, and packaging verification requirements remain open.

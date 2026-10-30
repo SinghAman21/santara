@@ -174,10 +174,10 @@ export default function PdfWorkspace({ files, capability, format, initialOptions
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
   }}>
     <header className="pdf-workspace__header">
-      <div className="pdf-workspace__identity"><span className="pdf-workspace__mark"><FileText size={23} aria-hidden="true"/></span><div><p className="pdf-workspace__eyebrow">A LITTLE LESS PAPERWORK</p><h1 id={`${identifier}-title`}>{details.title}</h1></div></div>
+      <div className="pdf-workspace__identity"><span className="pdf-workspace__mark"><FileText size={23} aria-hidden="true"/></span><div><p className="pdf-workspace__eyebrow">A LITTLE LESS PAPERWORK</p><h1 id={`${identifier}-title`}>{details.title}</h1><p className="pdf-workspace__subtitle">{files[0]?.name} · Local preview</p></div></div>
       <div className="pdf-workspace__header-actions"><span className="pdf-workspace__local"><ShieldCheck size={15} aria-hidden="true"/>On your device</span><button ref={closeButtonRef} type="button" className="pdf-workspace__close" aria-label="Close PDF workspace" onClick={onClose}><X size={21} aria-hidden="true"/></button></div>
     </header>
-    <div className="pdf-workspace__body">
+    <form className="pdf-workspace__form" noValidate onSubmit={event=>void apply(event)}><div className="pdf-workspace__body">
       <section className="pdf-workspace__preview" aria-labelledby={`${identifier}-preview-title`}>
         <div className="pdf-workspace__preview-toolbar"><div><span className="pdf-workspace__eyebrow">YOUR DOCUMENT</span><h2 id={`${identifier}-preview-title`}>First page preview</h2></div><span className="pdf-workspace__source-badge">Source · page 1</span></div>
         {files.length > 1 && <label className="pdf-workspace__document-picker" htmlFor={`${identifier}-document`}>Preview document<select id={`${identifier}-document`} value={file?.id || ''} onChange={event => setActiveFileId(event.target.value)}>{files.map((item, index) => <option key={item.id} value={item.id}>{index + 1}. {item.name}</option>)}</select></label>}
@@ -191,9 +191,9 @@ export default function PdfWorkspace({ files, capability, format, initialOptions
           <figcaption id={previewCaptionId}><strong title={file?.name}>{file?.name || 'No document selected'}</strong><span>The preview shows the original first page. Settings are applied to the saved output.</span></figcaption>
         </figure>
       </section>
-      <form className="pdf-workspace__settings" noValidate onSubmit={event => void apply(event)} aria-label="PDF output settings" aria-busy={submitting}>
+      <section className="pdf-workspace__settings" aria-label="PDF output settings" aria-busy={submitting}>
         <div className="pdf-workspace__settings-content">
-          <div className="pdf-workspace__settings-heading"><span className="pdf-workspace__eyebrow">MAKE IT YOURS</span><h2>Output settings</h2><p id={`${identifier}-description`}>{details.description}</p></div>
+          <div className="pdf-workspace__settings-heading"><span className="pdf-workspace__eyebrow">MAKE IT YOURS</span><h2>Output settings</h2><p className="pdf-workspace__sr-only" id={`${identifier}-description`}>{details.description}</p></div>
           {blockingError && <div className="pdf-workspace__error" role="alert">{blockingError}</div>}
           {operation === 'pdf-merge' && <section className="pdf-workspace__merge" aria-labelledby={`${identifier}-merge-title`}><h3 id={`${identifier}-merge-title`}><Files size={17} aria-hidden="true"/>Selection order <span>{files.length} PDFs</span></h3><ol>{files.map(item => <li key={item.id}><FileText size={16} aria-hidden="true"/><span title={item.name}>{item.name}</span></li>)}</ol><p>All pages are merged in the order shown. Document-level metadata is discarded.</p></section>}
           <fieldset className="pdf-workspace__fields" disabled={submitting}>
@@ -214,8 +214,9 @@ export default function PdfWorkspace({ files, capability, format, initialOptions
           {applyError && <div className="pdf-workspace__error" ref={errorRef} role="alert" tabIndex={-1}><strong>Could not apply these settings</strong><p>{applyError}</p></div>}
           {Object.keys(errors).length > 0 && <p className="pdf-workspace__field-error" role="alert">Check the highlighted settings before continuing.</p>}
         </div>
-        <footer className="pdf-workspace__footer"><p><span className="pdf-workspace__citrus-dot" aria-hidden="true"/>{operation === 'pdf-merge' ? 'One merged PDF' : `${files.length} ${files.length === 1 ? 'document' : 'documents'}`}<span>· Originals kept</span></p><button type="submit" className="pdf-workspace__apply" disabled={Boolean(blockingError) || submitting}>{submitting ? <><LoaderCircle size={17} className="pdf-workspace__spinner" aria-hidden="true"/>Applying…</> : <>{details.action}<ArrowRight size={17} aria-hidden="true"/></>}</button><button type="button" className="pdf-workspace__cancel" onClick={onClose}>Cancel <kbd>Esc</kbd></button></footer>
-      </form>
-    </div>
+      </section></div>
+      <div className="pdf-workspace__notice" role="status">{capabilityWarning || details.description}</div>
+      <footer className="pdf-workspace__footer"><p>New {outputFormat.toUpperCase()} copy · {files[0]?.name}<span>Configured destination · Originals kept</span></p><div><button type="button" className="pdf-workspace__cancel" disabled={submitting} onClick={()=>{setValues(initialValues(schema,initialOptions));setOutputFormat(format);setErrors({});setApplyError('')}}>Reset</button><button type="button" className="pdf-workspace__cancel" disabled={submitting} onClick={onClose}>Cancel</button><button type="submit" aria-label={details.action} className="pdf-workspace__apply" disabled={Boolean(blockingError) || submitting}>{submitting?'Queueing…':'Save new copy'}</button></div></footer>
+    </form>
   </dialog>;
 }

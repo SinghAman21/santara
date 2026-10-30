@@ -1,3 +1,6 @@
+import { operationIcons, operationLabels } from './wheel-profiles';
+import { hintedFiles, wheelFamily } from './file-kind';
+import { Copy, FolderInput, Link, TerminalSquare, ScanEye, Palette, Paintbrush } from 'lucide-react';
 import { performFileAction } from '../action';
 import { useEffect, useRef, useState, type DragEvent } from 'react';
 import { Camera, Crop, EyeOff, Film, FlipHorizontal2, Gauge, Layers, Minimize2, Music2, RotateCw, Scaling, Scissors, Split, Tag, VolumeX, type LucideIcon } from 'lucide-react';
@@ -7,64 +10,26 @@ import type { Capability, LocalFile, Snapshot } from './types';
 import './global-wheel-window.css';
 
 type WheelMode = 'convert' | 'tools' | 'actions';
+const actionIcons: Record<string,LucideIcon> = {copy:Copy,move:FolderInput,'copy-path':Link,terminal:TerminalSquare,preview:ScanEye};
+const imageToolIcons: Record<string,LucideIcon> = {compress:Minimize2,crop:Crop,resize:Scaling,rotate:RotateCw,flip:FlipHorizontal2,background:Palette,'edit-image':Paintbrush,metadata:Tag};
 const actions = [
   { id: 'copy', label: 'Copy' }, { id: 'move', label: 'Move' },
   { id: 'copy-path', label: 'Copy Path' }, { id: 'terminal', label: 'Open Terminal' },
   { id: 'preview', label: 'Quick Preview' },
 ];
-const mimeFormats: Record<string, string> = {
-  'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/avif': 'avif',
-  'image/tiff': 'tiff', 'image/bmp': 'bmp', 'image/svg+xml': 'svg',
-  'audio/mpeg': 'mp3', 'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/flac': 'flac',
-  'audio/ogg': 'ogg', 'audio/aac': 'm4a', 'video/mp4': 'mp4', 'video/webm': 'webm',
-  'video/quicktime': 'mov', 'application/pdf': 'pdf', 'application/zip': 'zip', 'text/vtt': 'vtt',
-};
 const operationName = (capability: Capability) => capability.operation || capability.id.split(':').pop()!;
 const noticeText = (value: string) => value.replace(/[\x00-\x1f\x7f]/g, ' ').slice(0, 256);
-const supports = (capability: Capability, file: LocalFile) => capability.inputs.includes('*') || (file.ext ? capability.inputs.includes(file.isDirectory ? 'directory' : file.ext.toLowerCase()) : capability.category === file.category);
+const supports = (capability: Capability, file: LocalFile) => capability.inputs.includes('*') || ((file.category === 'other' || capability.category === file.category) && (file.ext ? capability.inputs.includes(file.isDirectory ? 'directory' : file.ext.toLowerCase()) : capability.category === file.category));
 const knownCategory = (file: LocalFile) => file.category !== 'other' ? file.category : '';
-const provisionalImageCapabilities: Capability[] = (() => {
-  const inputs = ['jpg', 'jpeg', 'png', 'webp', 'tif', 'tiff', 'bmp', 'gif', 'avif'];
-  const outputs = [...inputs];
-  return ['convert', 'edit-image', 'background', 'compress', 'crop', 'resize', 'rotate', 'flip'].map(operation => ({
-    id: `image:${operation}`,
-    operation,
-    label: operation,
-    category: 'image',
-    inputs,
-    outputs,
-    backend: 'rust-image',
-    available: true,
-    batch: true,
-    preservesMetadata: false,
-  }));
-})();
 const imageToolLabels: Record<string, string> = {
   'edit-image': 'Edit photo', background: 'Add background', compress: 'Compress',
-  crop: 'Crop', resize: 'Resize', rotate: 'Rotate', flip: 'Flip',
+  crop: 'Crop', resize: 'Resize', rotate: 'Rotate & flip', flip: 'Flip', metadata: 'Metadata',
 };
 const videoToolLabels: Record<string, string> = {
   compress: 'Compress', trim: 'Trim', split: 'Split', merge: 'Merge', crop: 'Crop', speed: 'Speed',
   snapshot: 'Frames', mute: 'Mute', redact: 'Redact', 'strip-metadata': 'Delete metadata', resize: 'Resize',
   rotate: 'Rotate', flip: 'Flip', gif: 'GIF', 'extract-audio': 'Extract audio',
 };
-const videoToolIcons: Record<string, LucideIcon> = {
-  compress: Minimize2, trim: Scissors, split: Split, merge: Layers, crop: Crop, speed: Gauge,
-  snapshot: Camera, mute: VolumeX, redact: EyeOff, 'strip-metadata': Tag, resize: Scaling,
-  rotate: RotateCw, flip: FlipHorizontal2, gif: Film, 'extract-audio': Music2,
-};
-
-function hintedFiles(transfer: DataTransfer): LocalFile[] {
-  const dropped = Array.from(transfer.items).filter(item => item.kind === 'file').map(item => item.getAsFile()).filter((file): file is File => file !== null);
-  const candidates = dropped.length ? dropped : Array.from(transfer.files);
-  return candidates.map((file, index) => {
-    const extension = file.name.includes('.') ? file.name.split('.').pop()?.toLowerCase() || '' : '';
-    const ext = extension || mimeFormats[file.type] || '';
-    const category: LocalFile['category'] = 'jpg jpeg png webp heic tiff tif avif bmp svg'.split(' ').includes(ext) ? 'image' : 'mp3 m4a wav flac ogg opus aiff wma'.split(' ').includes(ext) ? 'audio' : 'mp4 mov mkv webm avi wmv gif'.split(' ').includes(ext) ? 'video' : ext === 'pdf' ? 'pdf' : 'zip tar gz rar'.split(' ').includes(ext) ? 'archive' : 'srt vtt'.split(' ').includes(ext) ? 'subtitle' : file.type.startsWith('image/') ? 'image' : file.type.startsWith('audio/') ? 'audio' : file.type.startsWith('video/') ? 'video' : 'other';
-    return { id: `external-${index}`, name: 'Dragged file', path: '', size: 0, ext, category };
-  });
-}
-
 export default function GlobalWheelWindow() {
   const [snapshot, setSnapshot] = useState<Snapshot>({ files: [], jobs: [], capabilities: [], backends: {}, settings: defaultSettings, platform: 'unknown' });
   const [mode, setMode] = useState<WheelMode>(() => {
@@ -79,9 +44,8 @@ export default function GlobalWheelWindow() {
   const nativeDropHandler = useRef<(files: LocalFile[], position?: { x: number; y: number }) => void>(() => {});
   const nativeOverHandler = useRef<(position: { x: number; y: number }) => void>(() => {});
   const seenDrag = useRef(false);
-  const externalFiles = hints.length
-    ? hints.map(file => file.ext || knownCategory(file) ? file : { ...file, name: 'Dragged image', category: 'image' as const })
-    : [{ id: 'provisional-image', name: 'Dragged image', path: '', size: 0, ext: '', category: 'image' as const }];
+  const externalFiles = hints;
+  const family = wheelFamily(externalFiles);
 
   useEffect(() => {
     let active = true;
@@ -90,6 +54,8 @@ export default function GlobalWheelWindow() {
     });
     return () => { active = false; };
   }, []);
+
+  useEffect(() => api.onUpdate(update => setSnapshot(previous=>({...previous,...update}))), []);
 
   useEffect(() => {
     document.documentElement.dataset.theme = 'light';
@@ -126,30 +92,32 @@ export default function GlobalWheelWindow() {
     return () => window.removeEventListener('keydown', cancel);
   }, []);
 
-  // Keep the built-in raster wheel populated even if the window is shown
-  // before bootstrap finishes; the live registry replaces matching entries.
-  const capabilities = [...new Map([...provisionalImageCapabilities, ...snapshot.capabilities].map(capability => [capability.id, capability])).values()];
+  // Runtime capabilities and inspected drag files are authoritative; unknown drags stay neutral.
+  const capabilities = snapshot.capabilities;
   const selectedCategories: Set<string> = new Set(externalFiles.map(knownCategory).filter(Boolean));
   const items: WheelItem[] = mode === 'actions'
-    ? actions.map(action => ({ ...action, detail: 'Local file action' }))
+    ? actions.map(action => {const Icon=actionIcons[action.id];return {...action,icon:<Icon size={22} aria-hidden="true"/>,detail:'Local file action'}})
     : [...new Map(capabilities
       .filter(capability => capability.available && capability.outputs.length)
       .filter(capability => mode !== 'tools' || operationName(capability) !== 'create-archive')
       .filter(capability => mode !== 'tools' || !(capability.category === 'image' && operationName(capability) === 'strip-metadata'))
-      .filter(capability => mode !== 'tools' || !selectedCategories.size || selectedCategories.has(capability.category))
+      .filter(capability => !selectedCategories.size || selectedCategories.has(capability.category))
       .filter(capability => mode === 'convert'
-        ? ['convert', 'render'].includes(operationName(capability))
-        : !['convert', 'render'].includes(operationName(capability)))
+        ? ['convert', 'render', 'create-archive'].includes(operationName(capability))
+        : !['convert', 'render', 'create-archive'].includes(operationName(capability)))
       .filter(capability => externalFiles.some(file => supports(capability, file)))
       .filter(capability => !['merge', 'pdf-merge'].includes(operationName(capability)) || externalFiles.filter(file => supports(capability, file)).length > 1)
       .flatMap(capability => (mode === 'convert' ? capability.outputs : ['']).map(format => {
         const coverage = externalFiles.filter(file => supports(capability, file)).length;
         const operation = operationName(capability);
-        const label = mode === 'convert' ? format.toUpperCase() : capability.category === 'video' ? videoToolLabels[operation] || capability.label : capability.category === 'image' ? imageToolLabels[operation] || capability.label : capability.label;
-        const Icon = capability.category === 'video' ? videoToolIcons[operation] : undefined;
+        const label = mode === 'convert' ? format.toUpperCase() : capability.category === 'video' ? videoToolLabels[operation] || capability.label : capability.category === 'image' ? imageToolLabels[operation] || capability.label : operationLabels[operation] || capability.label;
+        const Icon = capability.category === 'image' ? imageToolIcons[operation] : operationIcons[operation];
         return [{ id: `${capability.id}|${format}`, label, icon: Icon ? <Icon size={17} aria-hidden="true"/> : undefined, detail: coverage === externalFiles.length ? `${coverage} ${coverage === 1 ? 'file' : 'files'} · Local` : `${coverage} of ${externalFiles.length} files · Others will be skipped` }];
       }))
       .flat().map(item => [item.id, item])).values()];
+
+  const isImage = family === 'image';
+  const shortcut = snapshot.settings.shortcuts[mode];
 
   function highlight(id: string) {
     choiceRef.current = id;
@@ -186,7 +154,7 @@ export default function GlobalWheelWindow() {
         await api.handoffGlobalFiles?.({ files: incoming, mode });
         return;
       }
-      if (['convert', 'render'].includes(operationName(capability))) {
+      if (['convert', 'render', 'create-archive'].includes(operationName(capability))) {
         const settings = snapshot.settings;
         await api.enqueue({
           files: incoming,
@@ -231,15 +199,19 @@ export default function GlobalWheelWindow() {
     void api.finishGlobalWheel?.('converter', noticeText(`Could not inspect dropped files: ${message}`));
   }), []);
   nativeOverHandler.current = position => {
+    const pager=document.elementFromPoint(position.x,position.y)?.closest<HTMLButtonElement>('button[data-wheel-page]');
+    if(pager && !pager.disabled){pager.click();highlight('');return;}
     const id = itemAt(position.x, position.y);
     if (id !== choiceRef.current) highlight(id);
   };
+  useEffect(() => api.onNativeDragEnter?.(files => {
+    setHints(files); seenDrag.current = true; setChoice(''); choiceRef.current = ''; setFailure('');
+  }), []);
   useEffect(() => api.onNativeDragOver?.(position => nativeOverHandler.current(position)), []);
 
-  return <main className="global-wheel-shell" aria-label="Santra global drop wheel" onDragEnter={event => {
+  return <main className={`global-wheel-shell reference-wheel-shell ${isImage ? 'image-wheel-shell' : ''}`} aria-label="Santra global drop wheel" onDragEnter={event => {
     event.preventDefault();
-    if (!seenDrag.current) setHints(hintedFiles(event.dataTransfer));
-    seenDrag.current = true;
+    if (!seenDrag.current) { const files = hintedFiles(event.dataTransfer); if (files.length) { setHints(files); seenDrag.current = true; } }
   }} onDragOver={event => {
     event.preventDefault();
     const target = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-wheel-item]') : null;
@@ -248,11 +220,15 @@ export default function GlobalWheelWindow() {
     event.dataTransfer.dropEffect = 'copy';
   }} onDrop={event => void onDrop(event)}>
     <div className="global-wheel-card">
+      {<header className="image-wheel-heading"><h1>{shortcut} — {mode==='convert'?'Convert':mode==='tools'?'Tools':'File actions'}</h1><p>Double-tap {shortcut} during drag</p></header>}
       {failure && <p role="alert" className="global-wheel-error">{failure}</p>}
       <RadialWheel
+        family={family}
+        sourceFile={hints[0]}
+        sourceName={hints[0]?.name !== 'Dragged file' ? hints[0]?.name : undefined}
         label={mode === 'convert' ? 'Convert' : mode === 'tools' ? 'Tools' : 'File actions'}
         subtitle={externalFiles.some(file => !file.ext) ? 'Image routes are shown provisionally · drop to verify' : 'Hold the drag · hover a slice · release to apply'}
-        items={items.length ? items : [{ id: 'unknown', label: 'Inspect on drop', detail: 'We will show supported choices after inspection' }]}
+        items={items}
         selected={choice}
         onHighlight={highlight}
         onChoose={highlight}

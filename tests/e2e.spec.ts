@@ -6,6 +6,7 @@ interface MockControl {
   calls: { method: string; value: unknown }[];
   emit(update: Partial<Snapshot>): void;
   emitWheelMode(mode: string, newDrag?: boolean): void;
+  emitNativeDragEnter(files: Snapshot['files']): void;
   emitNativeDragOver(position: { x: number; y: number }): void;
   emitNativeDrop(files: Snapshot['files'], position: { x: number; y: number }): void;
   emitGlobalFiles(files: Snapshot['files'], mode: 'convert' | 'tools' | 'actions'): void;
@@ -16,6 +17,7 @@ interface MockControl {
 declare global { interface Window { __santraTest: MockControl } }
 
 test.beforeEach(async ({ page }) => {
+  await page.route('**/fixtures/preview.webm',route=>route.fulfill({path:new URL('./fixtures/preview.webm',import.meta.url).pathname,contentType:'video/webm'}));
   await page.addInitScript(() => {
     const incoming: Snapshot['files'] = [
       { id: 'image', path: '/fixtures/pixel.png', name: 'pixel.png', ext: 'png', size: 120, category: 'image' },
@@ -23,6 +25,7 @@ test.beforeEach(async ({ page }) => {
       { id: 'subtitle', path: '/fixtures/captions.srt', name: 'captions.srt', ext: 'srt', size: 64, category: 'subtitle' },
     ];
     const droppedVideo: Snapshot['files'] = [{ id: 'video', path: '/fixtures/clip.mp4', name: 'clip.mp4', ext: 'mp4', size: 4096, category: 'video' }];
+    const nativeDragEnterListeners = new Set<(files:Snapshot['files'])=>void>();
     const nativeDragOverListeners = new Set<(position: { x: number; y: number }) => void>();
     const nativeDropListeners = new Set<(files: Snapshot['files'], position?: { x: number; y: number }) => void>();
     const mergeVideos: Snapshot['files'] = [...droppedVideo, { id: 'video-2', path: '/fixtures/clip-2.mp4', name: 'clip-2.mp4', ext: 'mp4', size: 2048, category: 'video' }];
@@ -36,9 +39,10 @@ test.beforeEach(async ({ page }) => {
       },
       backends: { imagemagick: { available: true }, ffmpeg: { available: true } },
       capabilities: [
-        { id: 'image:convert', label: 'Convert image', category: 'image', inputs: ['png'], outputs: ['jpg', 'webp'], backend: 'rust-image', available: true, batch: true, preservesMetadata: false },
+        { id: 'image:convert', label: 'Convert image', category: 'image', inputs: ['png','jpg','jpeg'], outputs: ['jpg', 'webp'], backend: 'rust-image', available: true, batch: true, preservesMetadata: false },
         { id: 'audio:convert', label: 'Convert audio', category: 'audio', inputs: ['wav'], outputs: ['mp3'], backend: 'ffmpeg', available: true, batch: true, preservesMetadata: false },
         { id: 'subtitle:convert', label: 'Convert subtitles', category: 'subtitle', inputs: ['srt'], outputs: ['vtt'], backend: 'rust-subtitles', available: true, batch: true, preservesMetadata: false },
+        ...['crop','resize','rotate','flip'].map(operation=>({id:`image:${operation}`,operation,label:operation,category:'image',inputs:['png','jpg'],outputs:['png'],backend:'rust-image',available:true,batch:true,preservesMetadata:false})),
         { id: 'image:edit-image', operation: 'edit-image', label: 'Edit photo', category: 'image', inputs: ['png'], outputs: ['png', 'jpg'], backend: 'rust-image', available: true, batch: true, preservesMetadata: false },
         { id: 'image:background', operation: 'background', label: 'Add background', category: 'image', inputs: ['png'], outputs: ['png', 'jpg'], backend: 'rust-image', available: true, batch: true, preservesMetadata: false },
         { id: 'image:compress', operation: 'compress', label: 'Compress', category: 'image', inputs: ['png'], outputs: ['png'], backend: 'rust-image', available: true, batch: true, preservesMetadata: false },
@@ -88,7 +92,8 @@ test.beforeEach(async ({ page }) => {
       handoffGlobalFiles: async request => { record('handoffGlobalFiles', request); },
       preview: async filename => {
         record('preview', filename);
-        const waveform = undefined;
+        const waveform = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="800" height="120"><path d="'+Array.from({length:100},(_,i)=>{const h=Math.abs(Math.sin(i*.7))*48+8;return `M${i*8+4} ${60-h}v${h*2}`}).join(' ')+'" fill="none" stroke="#ff5a00" stroke-width="3"/></svg>')}`;
+        if(/\.(mp4|mkv|webm)$/i.test(filename))return {url:'/fixtures/preview.webm',width:320,height:180,duration:4};
         if (filename.endsWith('.wav')) {
           const bytes = new Uint8Array(44 + 32000 * 2), view = new DataView(bytes.buffer);
           const text = (offset: number, value: string) => bytes.set(new TextEncoder().encode(value), offset);
@@ -99,7 +104,8 @@ test.beforeEach(async ({ page }) => {
         const artwork = '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="800" height="600" fill="#e8e1c8"/><circle cx="520" cy="170" r="90" fill="#f29659"/><path d="M0 600L280 220L540 600Z" fill="#7d9271"/><path d="M220 600L610 300L800 600Z" fill="#465c43"/></svg>';
         return { url: `data:image/svg+xml,${encodeURIComponent(artwork)}`, width: 800, height: 600, duration: 4, waveform };
       },
-      imagePreview: async () => ({ url: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="800" height="600" fill="#ee8844"/></svg>')}`, width: 800, height: 600, sourceWidth: 800, sourceHeight: 600 }),
+      imagePreview: async () => ({ url: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><rect width="800" height="600" fill="#dce7de"/><circle cx="610" cy="130" r="75" fill="#f4c67a"/><path d="M0 600L280 220L570 600Z" fill="#859b7d"/><path d="M220 600L610 300L800 600Z" fill="#526e5d"/></svg>')}`, width: 800, height: 600, sourceWidth: 800, sourceHeight: 600 }),
+      applyImageTool: async request => { record('applyImageTool',request); return []; },
       imageToolContext: async () => { if (!imageContext) throw new Error('Image editor is no longer available'); return structuredClone(imageContext); },
       onImageToolContext: callback => { imageContextListeners.add(callback); return () => { imageContextListeners.delete(callback); }; },
       videoToolContext: async () => {
@@ -111,12 +117,13 @@ test.beforeEach(async ({ page }) => {
       applyVideoTool: async request => { record('applyVideoTool', request); return { queued: true }; },
       closeVideoTool: async () => { record('closeVideoTool', null); },
       onWheelMode: callback => { wheelModeListeners.add(callback); return () => { wheelModeListeners.delete(callback); }; },
+      onNativeDragEnter: callback => { nativeDragEnterListeners.add(callback); return ()=>{nativeDragEnterListeners.delete(callback)}; },
       onNativeDragOver: callback => { nativeDragOverListeners.add(callback); return () => { nativeDragOverListeners.delete(callback); }; },
       onNativeDrop: callback => { nativeDropListeners.add(callback); return () => { nativeDropListeners.delete(callback); }; },
       onGlobalFiles: callback => { globalFilesListeners.add(callback); return () => { globalFilesListeners.delete(callback); }; },
       onUpdate: callback => { listeners.add(callback); return () => { listeners.delete(callback); }; },
     };
-    window.__santraTest = { state, calls, emit, emitWheelMode: (mode, newDrag) => { for (const listener of wheelModeListeners) listener(mode, newDrag); }, emitNativeDragOver: position => { for (const listener of nativeDragOverListeners) listener(position); }, emitNativeDrop: (files, position) => { for (const listener of nativeDropListeners) listener(files, position); }, emitGlobalFiles: (files, mode) => { for (const listener of globalFilesListeners) listener({ files, mode }); }, emitImageContext: context => { imageContext = structuredClone(context); for (const listener of imageContextListeners) listener(structuredClone(context)); }, emitVideoContext: context => { videoContext = structuredClone(context); for (const listener of videoContextListeners) listener(structuredClone(context)); } };
+    window.__santraTest = { state, calls, emit, emitWheelMode: (mode, newDrag) => { for (const listener of wheelModeListeners) listener(mode, newDrag); }, emitNativeDragEnter: files => { for(const listener of nativeDragEnterListeners) listener(structuredClone(files)); }, emitNativeDragOver: position => { for (const listener of nativeDragOverListeners) listener(position); }, emitNativeDrop: (files, position) => { for (const listener of nativeDropListeners) listener(files, position); }, emitGlobalFiles: (files, mode) => { for (const listener of globalFilesListeners) listener({ files, mode }); }, emitImageContext: context => { imageContext = structuredClone(context); for (const listener of imageContextListeners) listener(structuredClone(context)); }, emitVideoContext: context => { videoContext = structuredClone(context); for (const listener of videoContextListeners) listener(structuredClone(context)); } };
     Object.defineProperty(window, 'santra', { configurable: true, value: api });
   });
 });
@@ -124,6 +131,11 @@ test.beforeEach(async ({ page }) => {
 async function addFiles(page: Page) {
   await page.getByRole('button', { name: /add files/i }).first().click();
   await expect(page.getByRole('checkbox', { name: 'Select pixel.png' })).toBeChecked();
+}
+
+async function hintNativeImage(page:Page) {
+ await page.evaluate(()=>window.__santraTest.emitNativeDragEnter([{id:'image',name:'pixel.png',path:'/fixtures/pixel.png',ext:'png',category:'image',size:120}]));
+ await expect(page.locator('.reference-wheel')).toHaveAttribute('data-family','image');
 }
 
 async function doubleTap(page: Page, key: 'Shift' | 'Alt' | 'Control') {
@@ -261,6 +273,7 @@ test('citrus wheel persists after modifier release and dropping a slice queues i
 
 test('global citrus overlay accepts and queues a drop directly on a wheel slice', async ({ page }) => {
   await page.goto('/?santra-wheel=1&mode=convert');
+  await hintNativeImage(page);
   const transfer = await page.evaluateHandle(() => {
     const value = new DataTransfer();
     value.items.add(new File(['synthetic image fixture'], 'pixel.png', { type: 'image/png' }));
@@ -296,6 +309,7 @@ test('global citrus overlay accepts and queues a drop directly on a wheel slice'
 
 test('native wheel drop converts at the pointer and keeps the workspace closed', async ({ page }) => {
   await page.goto('/?santra-wheel=1&mode=convert');
+  await hintNativeImage(page);
   const slice = page.locator('.citrus-label[data-wheel-item="image:convert|jpg"]');
   await expect(slice).toBeVisible();
   const bounds = await slice.boundingBox();
@@ -313,6 +327,7 @@ test('native wheel drop converts at the pointer and keeps the workspace closed',
 
 test('native drop outside a slice does not reuse a previously hovered conversion', async ({ page }) => {
   await page.goto('/?santra-wheel=1&mode=convert');
+  await hintNativeImage(page);
   const slice = page.locator('.citrus-label[data-wheel-item="image:convert|jpg"]');
   await expect(slice).toBeVisible();
   const sliceBounds = await slice.boundingBox();
@@ -332,6 +347,7 @@ test('native drop outside a slice does not reuse a previously hovered conversion
 
 test('global wheel hands off files when no slice was selected', async ({ page }) => {
   await page.goto('/?santra-wheel=1&mode=convert');
+  await hintNativeImage(page);
   const transfer = await page.evaluateHandle(() => {
     const value = new DataTransfer();
     value.items.add(new File(['synthetic image fixture'], 'pixel.png', { type: 'image/png' }));
@@ -346,6 +362,7 @@ test('global wheel hands off files when no slice was selected', async ({ page })
 
 test('global wheel keeps files available when a selected route fails', async ({ page }) => {
   await page.goto('/?santra-wheel=1&mode=convert');
+  await hintNativeImage(page);
   await page.evaluate(() => { window.santra!.enqueue = async () => { throw new Error('Local encoder unavailable'); }; });
   const transfer = await page.evaluateHandle(() => {
     const value = new DataTransfer();
@@ -379,8 +396,8 @@ test('global image tools wheel shows image tools and hides generic archive creat
     await expect(page.getByRole('menuitem', { name: /^Edit photo/ })).toBeVisible();
     await expect(page.getByRole('menuitem', { name: /^Add background/ })).toBeVisible();
     await expect(page.getByRole('menuitem', { name: /^Create archive/ })).toHaveCount(0);
-    await expect(shell.locator('.citrus-core .santra-mark')).toBeVisible();
-    await expect(shell.locator('.citrus-core')).toHaveText('');
+    await expect(shell.locator('.citrus-core .image-wheel-thumbnail')).toBeVisible();
+    await expect(shell.locator('.citrus-core .santra-mark')).toHaveCount(0);
     await expect(shell.getByText('Drop on a slice')).toHaveCount(0);
     await expect(shell.locator('.wheel-description')).toHaveCount(0);
   } finally { await transfer.dispose(); }
@@ -413,8 +430,10 @@ test('compact video editor provides exact trim values and submits a non-destruct
   await page.goto('/?santra-video-tool=1');
   const editor = page.getByRole('dialog', { name: 'Trim video' });
   await expect(editor).toBeVisible();
-  await expect(editor.getByText('clip.mp4')).toBeVisible();
+  await expect(editor.locator('.modal-header')).toContainText('clip.mp4');
   await expect(editor.getByRole('slider', { name: 'Video preview timeline' })).toBeVisible();
+  await editor.getByRole('button', {name:'Set start to playhead',exact:true}).click();
+  expect(await page.evaluate(()=>window.__santraTest.calls.filter(call=>call.method==='applyVideoTool'))).toHaveLength(0);
   await editor.getByLabel('Start time (seconds)').fill('0.5');
   await editor.getByLabel('End time (seconds)').fill('2.5');
   await expect(editor.getByRole('button', {name:'Cancel', exact:true})).toHaveCount(1);
@@ -463,10 +482,10 @@ test('video merge editor sends the selected clip order to the local job queue', 
   });
 });
 
-test('global wheel shows provisional image routes without extra helper captions', async ({ page }) => {
+test('unknown native drags do not assume image routes', async ({ page }) => {
   await page.goto('/?santra-wheel=1&mode=tools');
-  await expect(page.getByRole('menuitem', { name: /^Edit photo/ })).toBeVisible();
-  await expect(page.getByRole('menuitem', { name: /^Add background/ })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: /^Edit photo/ })).toHaveCount(0);
+  await expect(page.getByText('Detecting file type',{exact:true})).toBeVisible();
   await expect(page.locator('.wheel-description')).toHaveCount(0);
   await expect(page.getByText('Drop on a slice')).toHaveCount(0);
 });
@@ -526,6 +545,7 @@ test('image editor exposes a real padded background canvas and directional zoom 
   await doubleTap(page, 'Alt');
   await page.getByRole('menuitem', { name: /^Edit photo/ }).click();
   const photoEditor = page.getByRole('dialog', { name: 'Edit photo' });
+  await photoEditor.locator('summary').click();
   await expect(photoEditor.getByRole('button', { name: 'Move image up' })).toBeEnabled();
   await photoEditor.getByRole('button', { name: 'Move image up' }).click();
   await expect(photoEditor.locator('.image-tool-preview')).toHaveAttribute('style', /--image-pan-y: -48px/);
@@ -655,4 +675,183 @@ test('document conversion review preserves its warning and recovers from a queue
   await expect(editor.getByRole('button',{name:'Save new copy'})).toBeEnabled();
   await editor.getByRole('button',{name:'Cancel',exact:true}).click();
   await expect(editor).toHaveCount(0);
+});
+
+test('image wheel matches the white Penpot geometry and uses one orange selection', async ({ page }, testInfo) => {
+  await page.setViewportSize({width:520,height:620});
+  await page.goto('/?santra-wheel=1&mode=convert');
+  await hintNativeImage(page);
+  const wheel=page.locator('.image-wheel');
+  await expect(wheel).toBeVisible();
+  await expect(page.locator('.global-wheel-card')).toHaveCSS('background-color','rgba(0, 0, 0, 0)');
+  await expect(page.getByRole('heading',{name:'Shift — Convert'})).toBeVisible();
+  await page.getByRole('menuitem',{name:/^JPG/}).hover();
+  await expect(wheel.locator('.citrus-segments path.chosen')).toHaveCSS('fill','rgb(255, 90, 0)');
+  await expect(wheel.locator('.citrus-core')).toHaveCSS('background-color','rgb(255, 255, 255)');
+  await expect(wheel.locator('.image-wheel-selection')).toHaveText('JPG');
+  await expect(wheel.locator('.santra-mark')).toHaveCount(0);
+  await expect(wheel.locator('.citrus-segments path').first()).toHaveAttribute('d',/Q /);
+  await page.screenshot({animations:'disabled',path:testInfo.outputPath('image-convert-penpot.png')});
+  await page.evaluate(()=>window.__santraTest.emitWheelMode('tools'));
+  await page.getByRole('menuitem',{name:/^Crop/}).hover();
+  await expect(wheel.locator('.image-wheel-selection')).toHaveText('Crop');
+  await expect(page.getByRole('menuitem',{name:/^Crop/}).locator('svg')).toBeVisible();
+  await page.screenshot({animations:'disabled',path:testInfo.outputPath('image-tools-penpot.png')});
+  await page.evaluate(()=>window.__santraTest.emitWheelMode('actions'));
+  await page.getByRole('menuitem',{name:/^Copy ·/}).hover();
+  await page.screenshot({animations:'disabled',path:testInfo.outputPath('image-actions-penpot.png')});
+});
+
+test('image crop editor fits the 800 by 560 Penpot layout and queues its crop recipe', async ({page},testInfo)=>{
+  await page.setViewportSize({width:824,height:584});
+  await page.goto('/?santra-image-tool=1');
+  await page.evaluate(()=>window.__santraTest.emitImageContext({id:'crop-test',capability:{id:'image:crop',operation:'crop',label:'Crop',category:'image',inputs:['png'],outputs:['png'],backend:'rust-image',available:true,batch:true,preservesMetadata:false},files:[{id:'image',name:'alpine.png',path:'/fixtures/alpine.png',size:4800000,ext:'png',category:'image'}],format:'png',options:{}}));
+  const editor=page.getByRole('dialog',{name:'Crop',exact:true});
+  await expect(editor.locator('.image-tool-preview')).toBeVisible();
+  const bounds=await editor.boundingBox();
+  expect(bounds?.width).toBe(800);
+  expect(bounds?.height).toBe(560);
+  await editor.getByRole('button',{name:'16:9',exact:true}).click();
+  await expect(editor.locator('.image-tool-notice')).toContainText('Metadata is removed');
+  await expect(editor.getByRole('button',{name:'Save new copy'})).toBeInViewport();
+  await page.screenshot({animations:'disabled',path:testInfo.outputPath('image-crop-penpot.png')});
+  await editor.getByRole('button',{name:'Save new copy'}).click();
+  await expect.poll(()=>page.evaluate(()=>window.__santraTest.calls.find(c=>c.method==='applyImageTool')?.value)).toMatchObject({options:{width:'800',height:'450',x:'0',y:'75'}});
+});
+
+test('supported image editors retain the compact reference layout',async({page},testInfo)=>{
+  await page.setViewportSize({width:824,height:584});
+  await page.goto('/?santra-image-tool=1');
+  for(const [operation,title] of [['compress','Compress'],['resize','Resize'],['rotate','Rotate & flip'],['flip','Flip'],['background','Add background'],['edit-image','Edit photo'],['metadata','Edit metadata']] as const) {
+    await page.evaluate(({operation,title})=>window.__santraTest.emitImageContext({id:operation,capability:{id:`image:${operation}`,operation,label:title,category:'image',inputs:[operation==='metadata'?'jpg':'png'],outputs:[operation==='metadata'?'jpg':'png'],backend:operation==='metadata'?'exiftool':'rust-image',available:true,batch:true,preservesMetadata:operation==='metadata'},files:[{id:'image',name:operation==='metadata'?'alpine.jpg':'alpine.png',path:'/fixtures/alpine.png',size:4800000,ext:operation==='metadata'?'jpg':'png',category:'image'}],format:operation==='metadata'?'jpg':'png',options:{}}),{operation,title});
+    const editor=page.getByRole('dialog',{name:title,exact:true});
+    await expect(editor.locator('.image-tool-preview')).toBeVisible();
+    await expect(editor.getByRole('button',{name:'Save new copy'})).toBeInViewport();
+    await expect(editor.getByRole('button',{name:'Fit image'})).toBeVisible();
+    await editor.screenshot({animations:'disabled',path:testInfo.outputPath(`image-${operation}-penpot.png`)});
+    if(operation==='resize') {
+      await editor.getByRole('spinbutton',{name:'Width (px)'}).fill('400');
+      await expect(editor.getByRole('spinbutton',{name:'Height (px)'})).toHaveValue('300');
+    }
+    if(operation==='rotate') {
+      await editor.getByRole('checkbox',{name:'Flip horizontal'}).check();
+      await expect(editor.getByRole('checkbox',{name:'Flip horizontal'})).toBeChecked();
+    }
+    await editor.getByRole('button',{name:'Close editor'}).click();
+  }
+});
+
+test('native MKV drag switches from unknown to video before the drop',async({page},testInfo)=>{
+ await page.setViewportSize({width:520,height:620});
+ await page.goto('/?santra-wheel=1&mode=tools');
+ await expect(page.getByText('Detecting file type',{exact:true})).toBeVisible();
+ await page.evaluate(()=>{
+   const capabilities=window.__santraTest.state.capabilities.map(cap=>cap.category==='video'?{...cap,inputs:[...cap.inputs,'mkv']}:cap);
+   window.__santraTest.emit({capabilities});
+   window.__santraTest.emitNativeDragEnter([{id:'mkv',path:'/fixtures/sample.MKV',name:'sample.MKV',ext:'mkv',category:'video',size:1000}]);
+ });
+ const wheel=page.locator('.reference-wheel');
+ await expect(wheel).toHaveAttribute('data-family','video');
+ await expect(page.getByRole('menuitem',{name:/^Trim/})).toBeVisible();
+ await expect(page.getByRole('menuitem',{name:/^Edit photo/})).toHaveCount(0);
+ await page.getByRole('menuitem',{name:/^Trim/}).hover();
+ await page.screenshot({animations:'disabled',path:testInfo.outputPath('02-mkv-tools.png')});
+ const box=await page.getByRole('menuitem',{name:/^Trim/}).boundingBox();
+ await page.evaluate(position=>window.__santraTest.emitNativeDrop([{id:'mkv',path:'/fixtures/sample.MKV',name:'sample.MKV',ext:'mkv',category:'video',size:1000}],position),{x:box!.x+box!.width/2,y:box!.y+box!.height/2});
+ await expect.poll(()=>page.evaluate(()=>window.__santraTest.calls.find(c=>c.method==='selectGlobalOperation')?.value)).toMatchObject({capabilityId:'video:trim',files:[{ext:'mkv',category:'video'}]});
+});
+
+test('every remaining Penpot family has the correct wheels and honest empty states',async({page},testInfo)=>{
+ await page.setViewportSize({width:520,height:620});
+ await page.goto('/?santra-wheel=1&mode=tools');
+ await expect(page.getByText('Detecting file type',{exact:true})).toBeVisible();
+ const cases=[
+  ['02','video','mkv','convert','trim','mp4',true],['03','audio','wav','convert','normalize','flac',true],['04','pdf','pdf','render','pdf-extract','png',true],['05','archive','zip','create-archive','extract','tar',true],['06','document','docx','convert','','md',true],['07','epub','epub','convert','','docx',true],['08','presentation','pptx','convert','','pdf',false],['09','spreadsheet','xlsx','convert','','csv',false],['10','subtitle','srt','convert','','vtt',true],
+ ] as const;
+ for(const [frame,family,ext,conversion,tool,output,available] of cases){
+  await page.evaluate(({family,ext,conversion,tool,output,available})=>{
+   const category=(family==='epub'?'document':family) as Snapshot['files'][number]['category'];
+   const base={category,inputs:[ext],outputs:[output],backend:'verified-test-boundary',available,batch:true,preservesMetadata:false};
+   window.__santraTest.emit({capabilities:[{...base,id:`${category}:${conversion}`,operation:conversion,label:`Convert ${family}`},...(tool?[{...base,id:`${category}:${tool}`,operation:tool,label:tool}]:[])]});
+   window.__santraTest.emitNativeDragEnter([{id:family,path:`/fixtures/sample.${ext}`,name:`sample.${ext}`,ext,size:1000,category}]);
+  },{family,ext,conversion,tool,output,available});
+  await expect(page.locator('.reference-wheel')).toHaveAttribute('data-family',family);
+  for(const mode of ['convert','tools','actions'] as const){
+   await page.evaluate(mode=>window.__santraTest.emitWheelMode(mode),mode);
+   if(mode==='actions')await expect(page.getByRole('menuitem',{name:/^Copy ·/})).toBeVisible();
+   else if(mode==='tools'&&!tool)await expect(page.getByText('No tools available for this file',{exact:true})).toBeVisible();
+   else if(mode==='convert'&&!available)await expect(page.getByText('Conversion is not enabled',{exact:true})).toBeVisible();
+   else await expect(page.getByRole('menuitem').first()).toBeVisible();
+   if(mode==='actions'||(mode==='convert'&&available)||(mode==='tools'&&tool))await expect(page.getByRole('menu',{name:mode==='actions'?'File actions':mode==='tools'?'Tools':'Convert',exact:true})).toBeVisible();
+   const first=page.getByRole('menuitem').first();if(await first.count()){await first.focus();await expect(first).toHaveClass(/chosen/);}
+   await page.screenshot({animations:'disabled',path:testInfo.outputPath(`${frame}-${family}-${mode}.png`)});
+  }
+ }
+});
+
+test('MKV filename hints work with generic MIME and replace a previous image drag',async({page})=>{
+ await page.goto('/?santra-wheel=1&mode=tools');
+ await hintNativeImage(page);
+ await expect(page.getByRole('menuitem',{name:/^Edit photo/})).toBeVisible();
+ await page.evaluate(()=>{window.__santraTest.emit({capabilities:window.__santraTest.state.capabilities.map(cap=>cap.category==='video'?{...cap,inputs:['mkv']}:cap)});window.__santraTest.emitWheelMode('tools',true)});
+ await expect(page.getByText('Detecting file type',{exact:true})).toBeVisible();
+ const transfer=await page.evaluateHandle(()=>{const data=new DataTransfer();data.items.add(new File(['bounded fixture boundary'],'SAMPLE.MKV',{type:'application/octet-stream'}));return data});
+ try {await page.locator('.global-wheel-shell').dispatchEvent('dragenter',{dataTransfer:transfer});await expect(page.locator('.reference-wheel')).toHaveAttribute('data-family','video');await expect(page.getByRole('menuitem',{name:/^Trim/})).toBeVisible();await expect(page.getByRole('menuitem',{name:/^Edit photo/})).toHaveCount(0)}finally{await transfer.dispose()}
+});
+
+test('remaining video editors fit the reference surface with playable local previews',async({page},testInfo)=>{
+ await page.setViewportSize({width:824,height:584});
+ await page.goto('/?santra-video-tool=1');
+ for(const operation of ['compress','trim','split','crop','resize','rotate','flip','speed','snapshot','mute','redact','strip-metadata','merge','gif','extract-audio']){
+  await page.evaluate(operation=>{
+    const file:Snapshot['files'][number]={id:'video',name:'clip.mp4',path:'/fixtures/clip.mp4',size:4000,ext:'mp4',category:'video'};
+    window.__santraTest.emitVideoContext({id:operation,capability:{id:`video:${operation}`,operation,label:operation,category:'video',inputs:['mp4'],outputs:[operation==='gif'?'gif':operation==='snapshot'?'png':operation==='extract-audio'?'wav':'mp4'],backend:'ffmpeg',available:true,batch:operation!=='merge',preservesMetadata:true},files:operation==='merge'?[file,{...file,id:'video-2',name:'clip-2.mp4',path:'/fixtures/clip-2.mp4'}]:[file],format:operation==='gif'?'gif':operation==='snapshot'?'png':operation==='extract-audio'?'wav':'mp4',options:{start:'0',end:'3',quality:'75'}});
+  },operation);
+  const editor=page.getByRole('dialog');
+  await expect(editor).toBeVisible();
+  await expect(editor.getByRole('button',{name:'Save new copy'})).toBeInViewport();
+  await expect.poll(()=>editor.locator('video').evaluate(el=>el.readyState)).toBeGreaterThanOrEqual(2);
+  const box=await editor.boundingBox();expect(box!.width).toBe(800);expect(box!.height).toBe(560);
+  await editor.screenshot({animations:'disabled',path:testInfo.outputPath(`02-video-${operation}.png`)});
+ }
+});
+
+test('audio, archive, EPUB and subtitle reviews use the compact reference shell',async({page},testInfo)=>{
+ await page.setViewportSize({width:900,height:700});
+ await page.goto('/');
+ const cases=[['03','audio','wav','normalize','flac'],['03','audio','wav','trim','wav'],['03','audio','wav','channels','wav'],['03','audio','wav','visualize','mp4'],['03','audio','wav','compress','mp3'],['03','audio','wav','strip-metadata','wav'],['05','archive','zip','extract','directory'],['05','archive','zip','create-archive','tar'],['06','document','docx','convert','md'],['07','document','epub','convert','docx'],['10','subtitle','srt','convert','vtt']] as const;
+ for(const [frame,category,ext,operation,format] of cases){
+  const label=`${operation} ${ext}`;
+  await page.evaluate(({category,ext,operation,format,label})=>{
+   window.__santraTest.emit({capabilities:[{id:`${category}:${operation}`,operation,label,category,inputs:[ext],outputs:[format],backend:'verified-fixture',available:true,batch:true,preservesMetadata:false}]});
+   window.__santraTest.emitGlobalFiles([{id:ext,path:`/fixtures/sample.${ext}`,name:`sample.${ext}`,ext,category,size:2000}],operation==='convert'?'convert':'tools');
+  },{category,ext,operation,format,label});
+  await page.getByRole('button',{name:operation==='convert'?`${label} · ${format.toUpperCase()}`:new RegExp(`^${label}`)}).click();
+  const editor=page.getByRole('dialog',{name:label,exact:true});
+  await expect(editor).toBeVisible();
+  await expect(editor.getByRole('button',{name:'Save new copy'})).toBeInViewport();
+  const box=await editor.boundingBox();expect(box!.width).toBe(800);expect(box!.height).toBe(560);
+  if(category==='audio')await expect(editor.getByRole('img',{name:/Waveform/})).toBeVisible();
+  await editor.screenshot({animations:'disabled',path:testInfo.outputPath(`${frame}-${ext}-${operation}.png`)});
+  await editor.getByRole('button',{name:'Cancel',exact:true}).click();
+ }
+});
+
+test('archive destination and collision choices affect only the submitted local job',async({page})=>{
+ await page.goto('/');
+ await page.evaluate(()=>{
+  window.santra!.pickOutput=async()=>'/fixtures/output';
+  window.__santraTest.emit({capabilities:[{id:'archive:extract',operation:'extract',label:'Extract archive',category:'archive',inputs:['zip'],outputs:['directory'],backend:'rust-archive',available:true,batch:true,preservesMetadata:false}]});
+  window.__santraTest.emitGlobalFiles([{id:'archive',path:'/fixtures/sample.zip',name:'sample.zip',ext:'zip',category:'archive',size:1000}],'tools');
+ });
+ await page.getByRole('button',{name:/^Extract archive/}).click();
+ const editor=page.getByRole('dialog',{name:'Extract archive',exact:true});
+ await editor.getByLabel('If output exists').selectOption('skip');
+ await editor.getByRole('button',{name:'Change',exact:true}).click();
+ await expect(editor.getByRole('textbox',{name:'Archive destination'})).toHaveValue('/fixtures/output');
+ expect(await page.evaluate(()=>window.__santraTest.calls.filter(c=>c.method==='enqueue'))).toHaveLength(0);
+ await editor.getByRole('button',{name:'Save new copy'}).click();
+ await expect.poll(()=>page.evaluate(()=>window.__santraTest.calls.find(c=>c.method==='enqueue')?.value)).toMatchObject({operation:'extract',format:'directory',options:{outputFolder:'/fixtures/output',collision:'skip'}});
+ expect(await page.evaluate(()=>window.__santraTest.state.settings.collision)).toBe('rename');
+ expect(await page.evaluate(()=>window.__santraTest.state.settings.outputFolder)).toBe('');
 });

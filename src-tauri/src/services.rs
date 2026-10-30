@@ -428,17 +428,55 @@ fn check_no_symlink(path: &Path) -> Result<fs::Metadata, String> {
 
 fn category(ext: &str) -> &'static str {
     match ext {
-        "jpg" | "jpeg" | "png" | "webp" | "heic" | "tiff" | "tif" | "avif" | "bmp" | "svg" | "gif" => "image",
-        "mp3" | "m4a" | "wav" | "flac" | "ogg" | "opus" | "aiff" | "wma" => "audio",
-        "mp4" | "mov" | "mkv" | "webm" | "avi" | "wmv" => "video",
+        "jpg" | "jpeg" | "png" | "webp" | "heic" | "heif" | "tiff" | "tif" | "avif" | "bmp" | "svg" | "gif" => "image",
+        "mp3" | "m4a" | "wav" | "flac" | "ogg" | "opus" | "aiff" | "aif" | "wma" | "aac" => "audio",
+        "mp4" | "mov" | "mkv" | "webm" | "avi" | "wmv" | "m4v" => "video",
         "pdf" => "pdf",
-        "srt" | "vtt" => "subtitle",
+        "srt" | "vtt" | "ass" | "ssa" => "subtitle",
         "zip" | "tar" | "gz" | "rar" => "archive",
         "xlsx" | "ods" | "csv" | "tsv" | "xls" => "spreadsheet",
-        "ppt" | "pptx" => "presentation",
-        "docx" | "md" | "txt" | "epub" | "rtf" | "html" => "document",
+        "ppt" | "pptx" | "odp" => "presentation",
+        "docx" | "doc" | "odt" | "md" | "markdown" | "txt" | "epub" | "rtf" | "html" | "htm" => "document",
         _ => "other",
     }
+}
+
+// Bounded signature sniffing selects a UI family, never grants a processing route.
+fn detected_category(path: &Path, ext: &str) -> Result<&'static str, String> {
+    let mut header = [0u8; 512];
+    let read = File::open(path).and_then(|mut file| file.read(&mut header)).map_err(|error| error.to_string())?;
+    let bytes = &header[..read];
+    if bytes.starts_with(&[0x1a, 0x45, 0xdf, 0xa3]) { return Ok("video"); }
+    if bytes.starts_with(b"%PDF-") { return Ok("pdf"); }
+    if image::guess_format(bytes).is_ok() { return Ok("image"); }
+    if bytes.starts_with(b"ID3") || bytes.starts_with(b"fLaC") || bytes.starts_with(b"OggS")
+        || (bytes.starts_with(b"RIFF") && bytes.get(8..12) == Some(b"WAVE"))
+        || (bytes.starts_with(b"FORM") && matches!(bytes.get(8..12), Some(b"AIFF") | Some(b"AIFC"))) { return Ok("audio"); }
+    if bytes.starts_with(b"RIFF") && bytes.get(8..12) == Some(b"AVI ") { return Ok("video"); }
+    if bytes.get(4..8) == Some(b"ftyp") {
+        if matches!(ext, "heic" | "heif" | "avif") { return Ok("image"); }
+        return Ok(if matches!(ext, "m4a" | "aac") { "audio" } else { "video" });
+    }
+    // ZIP signatures also contain office/EPUB documents; their extension is advisory here.
+    if bytes.starts_with(b"PK\x03\x04") && !matches!(ext, "docx" | "xlsx" | "pptx" | "epub" | "ods" | "odt" | "odp") { return Ok("archive"); }
+    if bytes.starts_with(&[0x1f,0x8b]) || bytes.get(257..262)==Some(b"ustar") { return Ok("archive"); }
+    Ok(category(ext))
+}
+
+pub fn inspect_drag_paths(paths: Vec<PathBuf>) -> Result<Vec<LocalFile>, String> {
+    if paths.len() > 1_000 { return Err("At most 1,000 paths may be inspected at once".into()); }
+    let mut files = Vec::new();
+    for input in paths {
+        let path = checked_path(&input.to_string_lossy())?;
+        let metadata = check_no_symlink(&path)?;
+        // No recursive folder walks while a drag is still in progress.
+        let ext = path.extension().map(|value| value.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+        files.push(LocalFile { id: Uuid::new_v4().to_string(), path: path.to_string_lossy().into(),
+            name: path.file_name().ok_or("Invalid filename")?.to_string_lossy().into(), size: if metadata.is_file() { metadata.len() } else { 0 },
+            category: if metadata.is_file() { detected_category(&path, &ext)? } else { "other" }.into(),
+            ext, is_directory: metadata.is_dir().then_some(true) });
+    }
+    Ok(files)
 }
 
 fn inspect_one(path: &Path, result: &mut Vec<LocalFile>, recursive: bool) -> Result<(), String> {
@@ -454,7 +492,7 @@ fn inspect_one(path: &Path, result: &mut Vec<LocalFile>, recursive: bool) -> Res
         name,
         size: if metadata.is_file() { metadata.len() } else { 0 },
         ext: ext.clone(),
-        category: if metadata.is_dir() { "other" } else { category(&ext) }.into(),
+        category: if metadata.is_dir() { "other" } else { detected_category(path, &ext)? }.into(),
         is_directory: metadata.is_dir().then_some(true),
     });
     if metadata.is_dir() {
@@ -1536,6 +1574,31 @@ fn remove_source_tree(path: &Path) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn drag_inspection_recognizes_mkv_and_never_walks_directories() {
+        let directory = std::env::temp_dir().join(format!("santra-drag-kind-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let video = directory.join("SAMPLE.MKV");
+        std::fs::write(&video, [0x1a,0x45,0xdf,0xa3,0x93,0x42,0x82,0x88]).unwrap();
+        let files = super::inspect_drag_paths(vec![video.clone(), directory.clone()]).unwrap();
+        assert_eq!(files.len(), 2);
+        assert_eq!(files[0].category, "video");
+        assert_eq!(files[0].ext, "mkv");
+        assert_eq!(files[1].is_directory, Some(true));
+        let disguised = directory.join("renamed.png");
+        std::fs::write(&disguised, [0x1a,0x45,0xdf,0xa3]).unwrap();
+        assert_eq!(super::inspect_drag_paths(vec![disguised]).unwrap()[0].category, "video");
+        assert!(super::inspect_drag_paths(vec![std::path::PathBuf::from("../relative.mkv")]).is_err());
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn classified_extensions_cover_all_reference_families() {
+        for (extension, expected) in [("mkv","video"),("wav","audio"),("pdf","pdf"),("zip","archive"),("docx","document"),("epub","document"),("pptx","presentation"),("xlsx","spreadsheet"),("srt","subtitle")] {
+            assert_eq!(super::category(extension), expected);
+        }
+    }
 
     #[test]
     fn reselected_files_keep_their_ids_and_refresh_metadata() {

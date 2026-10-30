@@ -142,7 +142,7 @@ impl MediaBackend {
         let ffmpeg = self.ffmpeg.as_ref().ok_or("FFmpeg is unavailable")?;
         let mut command = Command::new(ffmpeg);
         command.args(["-hide_banner", "-nostdin", "-v", "error", "-n", "-protocol_whitelist", "file", "-f", demuxer(&extension), "-t", "300", "-i"])
-            .arg(input).args(["-filter_complex", "showwavespic=s=800x120:colors=0xf7943d", "-frames:v", "1", "-f", "image2", "-vcodec", "png"])
+            .arg(input).args(["-filter_complex", "showwavespic=s=800x120:colors=0xff5a00", "-frames:v", "1", "-f", "image2", "-vcodec", "png"])
             .arg(output);
         captured(command, Duration::from_secs(20), cancelled).map_err(safe_media_error)?;
         let mut bytes = Vec::new();
@@ -282,7 +282,7 @@ impl MediaBackend {
             let style = options.get("style").and_then(Value::as_str).unwrap_or("line");
             if !["point", "line", "p2p", "cline"].contains(&style) { return Err("Invalid waveform style".into()); }
             let background = color(options, "backgroundColor", "#111827")?;
-            let wave = color(options, "waveColor", "#ff8a3d")?;
+            let wave = color(options, "waveColor", "#ff5a00")?;
             let graph = format!("color=c={background}:s={width}x{height}:r={fps}[background];[0:a:0]showwaves=s={width}x{height}:r={fps}:mode={style}:colors={wave}:draw=full,format=rgba[wave];[background][wave]overlay=shortest=1:format=auto,format=yuv420p[video]");
             let quality = numeric("quality", 75.0, 1.0, 100.0)?;
             command.args(["-filter_complex", &graph, "-map", "[video]", "-map", "0:a:0", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", &((51.0 - quality * 0.5).round() as u32).to_string(), "-c:a", "aac", "-shortest"]);

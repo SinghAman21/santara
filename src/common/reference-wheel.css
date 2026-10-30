@@ -1,0 +1,37 @@
+.reference-wheel { width: 440px; max-width: 100%; color: #151b19; }
+.reference-wheel .citrus-rind { background: #ffffff; border: 1px solid #d6dfe0; box-shadow: 0 4px 14px #14282324; }
+.reference-wheel .citrus-segments { filter: none; }
+.reference-wheel .citrus-segments path,.reference-wheel .citrus-segments path:nth-child(even) { fill: #ffffff; stroke: #d4dddf; stroke-width: 1.2; filter: none; }
+.reference-wheel .citrus-segments path.chosen { fill: #ff5a00; stroke: #ff5a00; }
+.reference-wheel .citrus-label { width: 90px; max-width: 22%; min-height: 52px; padding: 4px; font-size: 12px; font-weight: 650; text-transform: uppercase; line-height: 1.3; gap: 7px; color: #151b19; text-shadow: none; }
+.reference-wheel .image-format-label { font-size: 17px; }
+.reference-wheel .citrus-label svg { width: 22px; height: 22px; stroke-width: 1.7; }
+.reference-wheel .citrus-label.chosen { color: #ffffff; }
+.reference-wheel .citrus-core { width: 32%; height: 32%; padding: 16px 12px; gap: 10px; border: 0; background: #ffffff; box-shadow: 0 2px 12px #25332a0c; pointer-events: none; }
+.image-wheel-thumbnail { width: 72px; height: 48px; display: grid; place-items: center; overflow: hidden; border-radius: 7px; color: #6f7c74; }
+.image-wheel-thumbnail>svg { width: 42px; height: 42px; }
+.image-wheel-thumbnail img { width: 100%; height: 100%; object-fit: cover; border-radius: 7px; }
+.reference-wheel .image-wheel-selection { display: block; flex-shrink: 0; max-width: 100%; min-width: 78px; padding: 7px 10px; border-radius: 20px; box-shadow: 0 3px 12px #24342c10; font-size: 11px; line-height: 14px; text-align: center; text-transform: uppercase; }
+.image-wheel-source { text-align: center; margin-top: 12px; font-size: 12px; line-height: 18px; color: #65716a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.global-wheel-shell.reference-wheel-shell { display: flex; align-items: center; justify-content: center; color: #33372e; }
+.reference-wheel-shell .global-wheel-card { width: 100%; padding: 28px 32px 24px; border: 0; border-radius: 0; background: transparent; backdrop-filter: none; box-shadow: none; }
+.image-wheel-heading { margin-bottom: 22px; padding-left: 8px; }
+.image-wheel-heading h1 { margin: 0 0 6px; font-size: 22px; font-weight: 600; line-height: 28px; }
+.image-wheel-heading p { margin: 0; font-size: 13px; line-height: 18px; color: #6f7368; }
+.reference-wheel-shell .global-wheel-card .reference-wheel { width: 440px; }
+.reference-wheel-shell .global-wheel-cancel { top: 14px; right: 14px; border-color: #d4dddf; color: #33372e; }
+
+.image-wheel-thumbnail video { width: 100%; height: 100%; object-fit: cover; border-radius: 7px; }
+.reference-wheel-empty { width:100%; min-height:360px; padding:48px 32px; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:16px; text-align:center; background:#fff; border:1px solid #d6dfe0; border-radius:24px; }
+.reference-wheel-empty h2 { font-size:20px; line-height:28px; margin:0; font-weight:600; }
+.reference-wheel-empty p { font-size:13px; line-height:20px; color:#6f7368; margin:0; }
+.reference-wheel[data-family=video] .citrus-label { font-size:11px; width:80px; }
+.reference-wheel .wheel-pagination { margin-top:8px; }
+
+.reference-wheel-shell .global-wheel-card { height:100%; display:flex; flex-direction:column; }
+.reference-wheel-shell .reference-wheel { margin:0 auto; }
+.reference-wheel.has-empty .reference-wheel-empty { margin-top:54px; min-height:220px; align-items:flex-start; padding:28px 24px; border-radius:16px; text-align:left; gap:20px; }
+.reference-wheel.has-empty .image-wheel-source { display:none; }
+
+.reference-wheel-shell .global-wheel-card .reference-wheel { margin:0 auto; }
+.reference-wheel.has-empty .reference-wheel-empty { justify-content:flex-start; }

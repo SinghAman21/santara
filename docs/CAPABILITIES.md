@@ -71,3 +71,11 @@ The reverse-scroll handoff is now stateless: scene channels and docking are func
 ## UI organization and availability
 
 The [feature UI structure](UI_STRUCTURE.md) separates tools, conversion reviews, and file actions. The white Penpot-based UI does not expand the registry: annotation/collage, secure PDF redaction, archive inspection, EPUB certification, and office conversion remain unavailable where not implemented/verified. Audio preview plays the original; normalization/channel/visualizer settings affect the queued output only.
+
+Image rotate recipes additionally accept `flipHorizontal` and `flipVertical` booleans (or explicit `"true"`/`"false"` recipe strings). Flips apply after rotation and affect the new output only. Invalid flag values are rejected. No annotation, collage, or image-redaction route is enabled by this layout update.
+
+## File family detection and remaining Penpot frames
+
+Native drag-enter inspects bounded headers (up to 512 bytes per regular file), without recursively reading folders, to choose the correct wheel before drop. EBML/Matroska/WebM headers select video; extension fallback is case-insensitive and covers all ten reference families. EPUB remains document-backed with a separate EPUB UI profile. Classification does not grant processing support: inputs and executable routes still pass the live capability registry and backend validation. Unknown inputs are never assumed to be images.
+
+All family wheels use the shared white reference geometry. Video/audio, PDF, archive, document/EPUB and subtitle reviews use the compact reference layout. No archive inspection, EPUB certification, office conversion, or proposal-only audio/PDF tool is enabled by these UI changes. Waveform accents use `#ff5a00`.

@@ -1,3 +1,4 @@
+import ReferenceEditor from '../../common/ReferenceEditor';
 import { decimal, clock, type Mask, type Preview } from './media';
 import './video-tool-window.css';
 import CompressControls from './CompressControls';
@@ -182,23 +183,19 @@ export default function VideoToolWindow({ capability, files: originalFiles, form
     height: rectangle.height / (videoHeight || 1) * bounds.height,
   });
 
-  return <main className="video-tool-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
-    <section className="video-tool-window" role="dialog" aria-modal="true" aria-label={title}>
-      <header className="video-tool-header"><button className="video-tool-close" aria-label="Close editor" onClick={onClose}><X size={17}/></button><div><span>VIDEO TOOL</span><h2>{title}</h2><p title={files.map(item => item.name).join(', ')}>{files.length > 1 ? `${files.length} clips · ${files[0]?.name || ''}` : file?.name}</p></div><span className="video-tool-format">{format.toUpperCase()}</span></header>
-      <div className="video-tool-body">
-        <div className="video-tool-main">
+  return <ReferenceEditor title={title.replace(/ video$/i,'')} ariaLabel={title} subtitle={<>{file?.name}{videoWidth && videoHeight ? ` · ${videoWidth} × ${videoHeight}` : ''}{duration ? ` · ${clock(duration)}` : ''}</>} preview={<><span>Local preview · original</span>        <div className="video-tool-main">
           <div className="video-tool-stage" ref={stageRef} onPointerDown={beginMask} onPointerUp={finishMask} onPointerCancel={() => { pointerRef.current = null; }}>
             {preview?.url ? <video ref={videoRef} src={preview.url} playsInline preload="metadata" aria-label={`Local video preview of ${file?.name}`} onLoadedMetadata={event => { const current = event.currentTarget; if (Number.isFinite(current.duration) && !preview.duration) setDuration(current.duration); setPlayhead(current.currentTime); }} onTimeUpdate={event => setPlayhead(event.currentTarget.currentTime)}/> : <div className="video-tool-preview-empty">{previewError || 'Preparing local preview…'}</div>}
             {operation === 'crop' && videoWidth && videoHeight && bounds.width > 0 && <div className="video-tool-box video-tool-crop" style={selectionStyle({ x: cropX, y: cropY, width: cropWidth, height: cropHeight })} aria-label="Crop area"/>}
             {operation === 'redact' && masks.map((mask, index) => <div className="video-tool-box video-tool-mask" key={`${index}-${mask.x}-${mask.y}`} style={{ ...selectionStyle(mask), backgroundColor: mask.color }} aria-label={`Redaction mask ${index + 1}`}>{index + 1}</div>)}
             {preview?.width && preview.height && <span className="video-tool-dimensions">{preview.width} × {preview.height} px</span>}
           </div>
-          <div className="video-tool-transport"><button aria-label="Seek backward one second" onClick={() => seek(playhead - 1)}><RotateCcw size={15}/></button><button aria-label="Play video" onClick={() => void videoRef.current?.play()}><Play size={15}/></button><button aria-label="Pause video" onClick={() => videoRef.current?.pause()}><Pause size={15}/></button><span>{clock(playhead)} / {clock(duration)}</span></div>
+          <div className="video-tool-transport"><button type="button" aria-label="Seek backward one second" onClick={() => seek(playhead - 1)}><RotateCcw size={15}/></button><button type="button" aria-label="Play video" onClick={() => void videoRef.current?.play()}><Play size={15}/></button><button type="button" aria-label="Pause video" onClick={() => videoRef.current?.pause()}><Pause size={15}/></button><span>{clock(playhead)} / {clock(duration)}</span></div>
           <input className="video-tool-seek" aria-label="Video preview timeline" type="range" min="0" max={Math.max(Math.min(duration, preview?.previewDuration || duration), 0.01)} step="0.01" value={Math.min(playhead, preview?.previewDuration || duration || playhead)} onChange={event => seek(Number(event.target.value))} disabled={!duration}/>
           {preview?.previewDuration && <p className="video-tool-fileinfo">Playback previews the first 30 seconds. Time fields can target the full source.</p>}
           <p className="video-tool-fileinfo">{file?.size ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : ''}{preview?.width && preview.height ? ` · ${preview.width} × ${preview.height}` : ''}{duration ? ` · ${clock(duration)}` : ''}</p>
         </div>
-        <div className="video-tool-controls"><div className="editor-section-label">Output settings</div>
+</>} settings={<div className="video-tool-controls">
 
           {outputFormats.length > 1 && <label className="video-tool-field">Output format<select aria-label="Output format" value={format} onChange={event => setFormat(event.target.value)}>{outputFormats.map(output => <option key={output} value={output}>{output.toUpperCase()}</option>)}</select></label>}
           {operation === 'compress' && <CompressControls values={values} set={set}/ >}
@@ -217,10 +214,6 @@ export default function VideoToolWindow({ capability, files: originalFiles, form
           {operation === 'redact' && <RedactControls masks={masks} duration={duration} setMasks={setMasks} values={values} set={set}/ >}
           {operation === 'strip-metadata' && <StripMetadataControls preview={preview} previewError={previewError}/ >}
           {operation === 'compress' && <label className="video-tool-check"><input type="checkbox" checked={values.stripMetadata === 'true'} onChange={event => set('stripMetadata', String(event.target.checked))}/> Remove copied metadata</label>}
-          {capability.warning && <p className="video-tool-warning">{capability.warning}</p>}
-        </div>
-      </div>
-      <footer className="video-tool-footer"><span>{validation || error || 'The original is kept. Output is processed locally.'}</span><div><button className="video-tool-cancel" onClick={onClose}>Cancel</button><button className="video-tool-apply" disabled={busy || Boolean(validation)} onClick={() => void apply()}>{busy ? 'Queueing…' : <><Scissors size={14}/> Save new copy</>}</button></div></footer>
-    </section>
-  </main>;
+
+        </div>} notice={validation || error || capability.warning || 'The original is kept. Output is processed locally.'} error={Boolean(error)} output={`New ${format.toUpperCase()} copy · ${file?.name || 'selection'}`} busy={busy} disabled={Boolean(validation)} onClose={onClose} onReset={()=>{setValues(Object.fromEntries(Object.entries(initialOptions).map(([key,value])=>[key,String(value)])));setFiles(originalFiles);setFormat(initialFormat);setFrames([]);setMasks(Array.isArray(initialOptions.masks)?initialOptions.masks as Mask[]:[]);setError('');seek(0)}} onSubmit={apply}/>;
 }

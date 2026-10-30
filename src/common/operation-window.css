@@ -12,3 +12,6 @@
 .operation-notice { margin:24px 0 0; padding:16px 0 0; border-top:1px solid var(--line); font-size:12px; line-height:18px; color:var(--muted); }
 .operation-footer { display:flex; justify-content:flex-end; gap:8px; padding-top:20px; }
 @media(max-width:760px) { .operation-window-body { grid-template-columns:1fr; } }
+.reference-editor .operation-source { flex:1; min-height:0; padding:20px; display:flex; flex-direction:column; align-items:center; justify-content:center; overflow:auto; }
+.reference-editor .operation-source ul { width:100%; margin:12px 0; }
+.operation-source-image { max-width:100%; max-height:100%; min-height:0; object-fit:contain; }

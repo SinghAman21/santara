@@ -245,3 +245,13 @@ The reverse-scroll handoff is now stateless: scene channels and docking are func
 ## UI source migration (Penpot frame 01)
 
 Frontend ownership now follows `src/tools/<family>`, `src/convert/<family>`, `src/action`, and `src/common`. See [UI structure](UI_STRUCTURE.md) for exact files and implemented/deferred frame coverage. Editors use white surfaces and `#ff5a00` accents; shortcuts remain configurable. This UI migration does not enable any additional backend route or certify proposed features above.
+
+## Image-only Penpot alignment
+
+The image wheel now uses `src/tools/image/ImageWheel.tsx` and `common/reference-wheel.css`: rounded annular slices, white surfaces, a single `#ff5a00` hover/keyboard selection, icons, a center thumbnail when the inspected source is available, and the active operation label. It has no enclosing rectangular card. JPEG/JPG and TIF/TIFF aliases share one displayed slice; unavailable routes are not fabricated. The remaining file families now share this reference geometry through `common/ReferenceWheel.tsx`; the image wrapper preserves image-specific format alias handling.
+
+Image editor layout is owned by `image-reference.css`: an 800×560 surface, 72px title header, preview/settings columns, below-preview Fit and expandable zoom/pan controls, separate notice row, and output/footer actions. Resize has an aspect lock; rotation can combine horizontal/vertical flips in one local recipe. The native image host is 824×584 with 12px padding and no OS title bar. The wheel host is enlarged to accommodate the 440px image wheel. Global real-file-manager drag and platform focus behavior still need manual verification.
+
+If GNOME still shows the old brown wheel after installing Santra, inspect its saved command template: the legacy `santara` binary and flags launch a separate application. The current command is `santra --santra-wheel-action={action} --santra-global-wheel={mode} --santra-wheel-x={x} --santra-wheel-y={y}`.
+
+The global wheel no longer assumes an image when the OS has not exposed file details. Native drag-enter inspection and shared extension/MIME hints select the family. A known MKV opens the video wheel; an unknown drag stays neutral until inspected.

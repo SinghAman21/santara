@@ -236,6 +236,15 @@ fn transform(mut image: DynamicImage, operation: &str, options: &Value) -> Resul
                 0.0 => image, 90.0 | -270.0 => image.rotate90(), 180.0 | -180.0 => image.rotate180(), -90.0 | 270.0 => image.rotate270(),
                 degrees => rotate_any(image, degrees)?,
             };
+            for key in ["flipHorizontal", "flipVertical"] {
+                let enabled = match options.get(key) {
+                    None | Some(Value::Null) => false,
+                    Some(Value::Bool(value)) => *value,
+                    Some(Value::String(value)) if value == "true" || value == "false" => value == "true",
+                    _ => return Err(format!("Invalid {key}")),
+                };
+                if enabled { image = if key == "flipHorizontal" { image.fliph() } else { image.flipv() }; }
+            }
         }
         "flip" => {
             image = match option(options, "direction", "horizontal")? {
@@ -295,6 +304,17 @@ pub fn image_preview(input: &Path, operation: &str, options: &Value) -> Result<V
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rotation_recipe_applies_flips_and_rejects_invalid_flags() {
+        let mut pixels = RgbaImage::new(2, 1);
+        pixels.put_pixel(0, 0, Rgba([255, 0, 0, 255]));
+        pixels.put_pixel(1, 0, Rgba([0, 0, 255, 255]));
+        let source = DynamicImage::ImageRgba8(pixels);
+        let output = transform(source.clone(), "rotate", &json!({"angle":0,"flipHorizontal":"true"})).unwrap();
+        assert_eq!(output.to_rgba8().get_pixel(0, 0).0, [0, 0, 255, 255]);
+        assert!(transform(source, "rotate", &json!({"angle":0,"flipVertical":"maybe"})).is_err());
+    }
 
     #[test]
     fn converts_and_rotates_a_local_image_after_signature_check() {

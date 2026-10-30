@@ -20,12 +20,12 @@ type Props = {
   format: string;
   initialOptions: Record<string, string>;
   onClose: () => void;
-  onApply: (options: Record<string, string>) => void;
+  onApply: (options: Record<string, string>) => void | Promise<void>;
 };
 
 const labels: Record<string, string> = {
-  'edit-image': 'Edit photo', background: 'Add background', crop: 'Crop image', resize: 'Resize image',
-  rotate: 'Rotate image', flip: 'Flip image', compress: 'Compress', metadata: 'Edit metadata', 'strip-metadata': 'Edit metadata',
+  'edit-image': 'Edit photo', background: 'Add background', crop: 'Crop', resize: 'Resize',
+  rotate: 'Rotate & flip', flip: 'Flip', compress: 'Compress', metadata: 'Edit metadata', 'strip-metadata': 'Edit metadata',
 };
 const ratios: Record<string, number> = { '1:1': 1, '4:3': 4 / 3, '16:9': 16 / 9, '3:2': 3 / 2 };
 
@@ -37,7 +37,7 @@ export default function ImageToolWindow({ capability, file, format, initialOptio
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   const operation = capability.operation || capability.id.split(':').pop() || '';
-  const [values, setValues] = useState<Record<string, string>>(() => ({ quality: '85', brightness: '1', saturation: '1', contrast: '1', width: '', height: '', x: '0', y: '0', angle: operation === 'rotate' ? '90' : '0', direction: 'horizontal', backgroundType: 'solid', backgroundColor: '#fff4e8', backgroundColor2: '#ff5a00', padding: operation === 'background' ? '32' : '0', fit: operation === 'background' ? 'contain' : 'inside', stripMetadata: 'false', title: '', artist: '', copyright: '', description: '', dateTime: '', ...initialOptions }));
+  const [values, setValues] = useState<Record<string, string>>(() => ({ quality: '85', brightness: '1', saturation: '1', contrast: '1', width: '', height: '', x: '0', y: '0', angle: operation === 'rotate' ? '90' : '0', direction: 'horizontal', backgroundType: 'solid', backgroundColor: '#ffffff', backgroundColor2: '#ff5a00', padding: operation === 'background' ? '32' : '0', fit: operation === 'background' ? 'contain' : 'inside', stripMetadata: 'false', flipHorizontal: 'false', flipVertical: 'false', title: '', artist: '', copyright: '', description: '', dateTime: '', ...initialOptions }));
   const [preview, setPreview] = useState<{ url: string; width?: number; height?: number; sourceWidth?: number; sourceHeight?: number } | null>(null);
   const originalDimensions = useRef<{ width: number; height: number } | null>(null);
   const [previewError, setPreviewError] = useState('');
@@ -51,7 +51,7 @@ export default function ImageToolWindow({ capability, file, format, initialOptio
   const title = labels[operation] || capability.label;
   const set = (key: string, value: string) => setValues(previous => ({ ...previous, [key]: value }));
   const recipe = useMemo(() => Object.fromEntries(Object.entries(values).filter(([, value]) => value !== '')), [values]);
-  const previewRecipe: Record<string, string> = operation === 'metadata' ? {} : recipe;
+  const previewRecipe = useMemo<Record<string, string>>(() => operation === 'metadata' ? {} : recipe, [operation, recipe]);
 
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
@@ -83,8 +83,9 @@ export default function ImageToolWindow({ capability, file, format, initialOptio
           const sourceWidth = result.sourceWidth || result.width;
           const sourceHeight = result.sourceHeight || result.height;
           if (sourceWidth && sourceHeight) originalDimensions.current = { width: sourceWidth, height: sourceHeight };
-          if (operation === 'resize') setValues(previous => ({ ...previous, width: previous.width || String(sourceWidth || ''), height: previous.height || String(sourceHeight || '') }));
+          if (operation === 'resize') setValues(previous => previous.width && previous.height ? previous : ({ ...previous, width: previous.width || String(sourceWidth || ''), height: previous.height || String(sourceHeight || '') }));
           if (operation === 'background') setValues(previous => {
+            if (previous.width && previous.height) return previous;
             const padding = Number(previous.padding) || 0;
             return { ...previous, width: previous.width || String((sourceWidth || 0) + padding * 2), height: previous.height || String((sourceHeight || 0) + padding * 2) };
           });
@@ -188,14 +189,17 @@ export default function ImageToolWindow({ capability, file, format, initialOptio
 
   const controls = { values, set, preview, originalDimensions, ratio, setRatio, setCropRatio, file, format };
 
+  const sourceDimensions = originalDimensions.current;
+  const outputName = `New ${format.toUpperCase()} copy · ${file.name}`;
+  const notice = applyError || capability.warning || (!capability.preservesMetadata ? 'Metadata is removed by the current raster processor.' : operation === 'metadata' ? 'Only supported EXIF fields are written. Technical tags may be regenerated.' : 'Your original image is preserved.');
+
   return <div className="image-tool-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
     <section ref={windowRef} className="image-tool-window" role="dialog" aria-modal="true" aria-label={title}>
-      <header className="image-tool-header"><button className="image-tool-close" aria-label="Close editor" onClick={onClose}><X size={17}/></button><div><span>IMAGE TOOL</span><h2>{title}</h2><p title={file.name}>{file.name}</p></div><span className="image-tool-format">{format.toUpperCase()}</span></header>
+      <header className="image-tool-header"><div><h2>{title}</h2><p title={file.name}>{file.name}{sourceDimensions ? ` · ${sourceDimensions.width} × ${sourceDimensions.height}` : ''} · {(file.size / 1024 / 1024).toFixed(2)} MB</p></div><button className="image-tool-close" aria-label="Close editor" disabled={applying} onClick={onClose}><X size={17}/></button></header>
       <div className="image-tool-body">
+        <div className="image-tool-preview-column"><span className="image-tool-preview-label">Local preview</span>
         <div className="image-tool-preview-wrap" ref={previewWrapRef} style={operation === 'background' && values.backgroundType === 'solid' ? { backgroundImage: 'none', backgroundColor: values.backgroundColor } : operation === 'background' && values.backgroundType === 'gradient' ? { backgroundImage: `linear-gradient(135deg, ${values.backgroundColor}, ${values.backgroundColor2})` } : undefined}>
           {preview?.url ? <img ref={previewImageRef} className="image-tool-preview" style={{ '--image-zoom': zoom, '--image-pan-x': `${pan.x}px`, '--image-pan-y': `${pan.y}px` } as CSSProperties} src={preview.url} alt={`Local preview of ${file.name}`}/> : <div className="image-tool-preview-empty"><span>{busy ? 'Updating preview…' : 'Local preview'}</span>{previewError && <small>{previewError}</small>}</div>}
-          <div className="image-tool-zoom" role="group" aria-label="Preview controls"><button aria-label="Zoom out" title="Zoom out" disabled={zoom <= 0.5} onClick={() => { setZoom(current => Math.max(0.5, Number((current - 0.25).toFixed(2)))); setPan({ x: 0, y: 0 }); }}><Minus size={15}/></button><span>{Math.round(zoom * 100)}%</span><button aria-label="Zoom in" title="Zoom in" disabled={zoom >= 3} onClick={() => setZoom(current => Math.min(3, Number((current + 0.25).toFixed(2))))}><Plus size={15}/></button><button aria-label="Fit image" title="Fit image" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}><Maximize size={14}/></button></div>
-          <div className="image-tool-pan" role="group" aria-label="Move image preview"><button aria-label="Move image up" disabled={!preview?.url} onClick={() => panBy(0, -48)}><ArrowUp size={15}/></button><button aria-label="Move image left" disabled={!preview?.url} onClick={() => panBy(-48, 0)}><ArrowLeft size={15}/></button><button aria-label="Move image right" disabled={!preview?.url} onClick={() => panBy(48, 0)}><ArrowRight size={15}/></button><button aria-label="Move image down" disabled={!preview?.url} onClick={() => panBy(0, 48)}><ArrowDown size={15}/></button></div>
           {operation === 'crop' && preview?.url && originalDimensions.current && previewBounds.width > 0 && <div className="image-tool-crop-overlay" role="group" aria-label="Crop selection" style={{ left: previewBounds.left, top: previewBounds.top, width: previewBounds.width, height: previewBounds.height }} onPointerDown={beginCrop} onPointerMove={moveCrop} onPointerUp={() => { cropDragRef.current = null; }} onPointerCancel={() => { cropDragRef.current = null; }}>
             <div className="image-tool-crop-selection" style={{ left: `${(Number(values.x) || 0) / originalDimensions.current.width * 100}%`, top: `${(Number(values.y) || 0) / originalDimensions.current.height * 100}%`, width: `${(Number(values.width) || originalDimensions.current.width) / originalDimensions.current.width * 100}%`, height: `${(Number(values.height) || originalDimensions.current.height) / originalDimensions.current.height * 100}%` }}>
               {['nw', 'ne', 'sw', 'se'].map(handle => <span key={handle} data-crop-handle={handle} className={`crop-handle ${handle}`} aria-hidden="true"/>)}
@@ -203,6 +207,9 @@ export default function ImageToolWindow({ capability, file, format, initialOptio
           </div>}
           {preview?.sourceWidth && preview.sourceHeight && <span className="image-tool-dimensions">{preview.sourceWidth} × {preview.sourceHeight} px</span>}
         </div>
+        <div className="image-tool-preview-toolbar"><span>Before / current</span><div><details className="image-tool-navigation"><summary>Zoom &amp; pan</summary>          <div className="image-tool-zoom" role="group" aria-label="Preview controls"><button aria-label="Zoom out" title="Zoom out" disabled={zoom <= 0.5} onClick={() => { setZoom(current => Math.max(0.5, Number((current - 0.25).toFixed(2)))); setPan({ x: 0, y: 0 }); }}><Minus size={15}/></button><span>{Math.round(zoom * 100)}%</span><button aria-label="Zoom in" title="Zoom in" disabled={zoom >= 3} onClick={() => setZoom(current => Math.min(3, Number((current + 0.25).toFixed(2))))}><Plus size={15}/></button><button aria-label="Reset zoom" title="Reset zoom" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}><Maximize size={14}/></button></div>
+          <div className="image-tool-pan" role="group" aria-label="Move image preview"><button aria-label="Move image up" disabled={!preview?.url} onClick={() => panBy(0, -48)}><ArrowUp size={15}/></button><button aria-label="Move image left" disabled={!preview?.url} onClick={() => panBy(-48, 0)}><ArrowLeft size={15}/></button><button aria-label="Move image right" disabled={!preview?.url} onClick={() => panBy(48, 0)}><ArrowRight size={15}/></button><button aria-label="Move image down" disabled={!preview?.url} onClick={() => panBy(0, 48)}><ArrowDown size={15}/></button></div>
+</details><button className="image-tool-fit" aria-label="Fit image" onClick={() => { setZoom(1); setPan({x:0,y:0}); }}>Fit</button></div></div></div>
         <div className="image-tool-controls"><div className="editor-section-label">Output settings</div>
           {operation === 'crop' && <Crop {...controls}/>}
           {operation === 'resize' && <Resize {...controls}/>}
@@ -213,10 +220,11 @@ export default function ImageToolWindow({ capability, file, format, initialOptio
           {operation === 'compress' && <Compress {...controls}/>}
           {operation === 'metadata' && <Metadata {...controls}/>}
           {operation === 'strip-metadata' && <StripMetadata {...controls}/>}
-          <label className="image-tool-check"><input type="checkbox" checked={!capability.preservesMetadata || values.stripMetadata === 'true'} disabled={!capability.preservesMetadata} onChange={event => set('stripMetadata', String(event.target.checked))}/> {capability.preservesMetadata ? 'Remove metadata from the copy' : 'This local image backend removes metadata from the copy'}</label>
+          {capability.preservesMetadata && operation !== 'metadata' && <label className="image-tool-check"><input type="checkbox" checked={values.stripMetadata === 'true'} onChange={event => set('stripMetadata', String(event.target.checked))}/> {capability.preservesMetadata ? 'Remove metadata from the copy' : 'This local image backend removes metadata from the copy'}</label>}
         </div>
       </div>
-      <footer className="image-tool-footer"><span>{applyError || capability.warning || 'Your source image will not be changed.'}</span><div><button className="image-tool-reset" disabled={applying} onClick={() => { setRatio('Free'); setZoom(1); setPan({ x: 0, y: 0 }); setApplyError(''); const padding = operation === 'background' ? 32 : 0; setValues({ quality: '85', brightness: '1', saturation: '1', contrast: '1', width: operation === 'background' ? String((originalDimensions.current?.width || 0) + padding * 2) : '', height: operation === 'background' ? String((originalDimensions.current?.height || 0) + padding * 2) : '', x: '0', y: '0', angle: operation === 'rotate' ? '90' : '0', direction: 'horizontal', backgroundType: 'solid', backgroundColor: '#fff4e8', backgroundColor2: '#ff5a00', padding: String(padding), fit: operation === 'background' ? 'contain' : 'inside', stripMetadata: 'false', title: '', artist: '', copyright: '', description: '', dateTime: '' }); }}><RotateCcw size={15}/> Reset</button>{operation === 'metadata' && <button className="image-tool-delete" disabled={applying} onClick={async () => { setApplying(true); setApplyError(''); try { await onApply({ ...values, stripMetadata: 'true' }); } catch (error) { setApplyError(error instanceof Error ? error.message : String(error)); } finally { setApplying(false); } }}><X size={15}/> Delete metadata</button>}<button className="editor-cancel" disabled={applying} onClick={onClose}>Cancel</button><button className="image-tool-apply" disabled={applying} onClick={async () => { setApplying(true); setApplyError(''); try { await onApply(values); } catch (error) { setApplyError(error instanceof Error ? error.message : String(error)); } finally { setApplying(false); } }}>{applying ? <RotateCw className="spin" size={16}/> : <Check size={16}/>} {applying ? 'Queueing…' : operation === 'metadata' ? 'Save metadata copy' : 'Save copy'}</button></div></footer>
+      <div className={`image-tool-notice ${applyError ? 'has-error' : ''}`} role={applyError ? 'alert' : 'status'}>{notice}</div>
+      <footer className="image-tool-footer"><div className="image-tool-output"><strong>{outputName}</strong><span>New copy · configured destination · collision-safe</span></div><div className="image-tool-footer-actions"><button className="image-tool-reset" disabled={applying} onClick={() => { setRatio('Free'); setZoom(1); setPan({ x: 0, y: 0 }); setApplyError(''); const padding = operation === 'background' ? 32 : 0; setValues({ quality: '85', brightness: '1', saturation: '1', contrast: '1', width: operation === 'background' ? String((originalDimensions.current?.width || 0) + padding * 2) : '', height: operation === 'background' ? String((originalDimensions.current?.height || 0) + padding * 2) : '', x: '0', y: '0', angle: operation === 'rotate' ? '90' : '0', direction: 'horizontal', backgroundType: 'solid', backgroundColor: '#ffffff', backgroundColor2: '#ff5a00', padding: String(padding), fit: operation === 'background' ? 'contain' : 'inside', stripMetadata: 'false', flipHorizontal: 'false', flipVertical: 'false', title: '', artist: '', copyright: '', description: '', dateTime: '' }); }}>Reset</button><button className="editor-cancel" disabled={applying} onClick={onClose}>Cancel</button><button className="image-tool-apply" disabled={applying} onClick={async () => { setApplying(true); setApplyError(''); try { await onApply(values); } catch (error) { setApplyError(error instanceof Error ? error.message : String(error)); } finally { setApplying(false); } }}>{applying ? <RotateCw className="spin" size={16}/> : <Check size={16}/>} {applying ? 'Queueing…' : 'Save new copy'}</button></div></footer>
     </section>
   </div>;
 }

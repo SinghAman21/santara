@@ -53,6 +53,12 @@ fn shell_wheel_mode(state: tauri::State<'_, services::AppState>) -> Result<Strin
     state.wheel_mode.lock().map(|mode| mode.clone()).map_err(|_| "Wheel state is unavailable".into())
 }
 
+static WHEEL_DRAG_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static WORKSPACE_DRAG_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+fn native_drag_generation(label: &str) -> &'static std::sync::atomic::AtomicU64 {
+    if label == "wheel" { &WHEEL_DRAG_GENERATION } else { &WORKSPACE_DRAG_GENERATION }
+}
+
 fn place_wheel(window: &WebviewWindow, requested: Option<(i32, i32)>) -> Result<(), String> {
     let size = window.outer_size().map_err(|error| error.to_string())?;
     let cursor = window.cursor_position().ok();
@@ -245,7 +251,20 @@ fn main() {
                     window.app_handle().state::<services::AppState>().forget_window(window.label());
                 }
                 WindowEvent::DragDrop(DragDropEvent::Enter { paths, .. }) => {
-                    eprintln!("Santra drag entered {} ({} entries)", window.label(), paths.len());
+                    if ["wheel", "workspace"].contains(&window.label()) {
+                        let generation_counter = native_drag_generation(window.label());
+                        let generation = generation_counter.fetch_add(1, Ordering::SeqCst) + 1;
+                        let window = window.clone();
+                        let paths = paths.clone();
+                        tauri::async_runtime::spawn(async move {
+                            let files = tauri::async_runtime::spawn_blocking(move || services::inspect_drag_paths(paths)).await;
+                            if generation != generation_counter.load(Ordering::SeqCst) { return; }
+                            match files {
+                                Ok(Ok(files)) => { let _ = window.emit("santra:native-drag-enter", files); }
+                                _ => { let _ = window.emit("santra:native-drag-enter", Vec::<services::LocalFile>::new()); }
+                            }
+                        });
+                    }
                 }
                 WindowEvent::DragDrop(DragDropEvent::Over { position }) => {
                     if window.label() == "wheel" {
@@ -254,6 +273,7 @@ fn main() {
                     }
                 }
                 WindowEvent::DragDrop(DragDropEvent::Drop { paths, position }) => {
+                    native_drag_generation(window.label()).fetch_add(1, Ordering::SeqCst);
                     let app = window.app_handle();
                     let state = app.state::<services::AppState>();
                     if let Err(error) = state.record_drop(window.label(), paths) {
@@ -265,7 +285,7 @@ fn main() {
                     }
                 }
                 WindowEvent::DragDrop(DragDropEvent::Leave) => {
-                    eprintln!("Santra drag left {}", window.label());
+                    native_drag_generation(window.label()).fetch_add(1, Ordering::SeqCst);
                 }
                 _ => {}
             }

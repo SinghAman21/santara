@@ -22,8 +22,8 @@ const reviews: Record<string,ComponentType> = {
  spreadsheet: SpreadsheetReview,
  subtitle: SubtitleReview,
 };
-export default function ConversionDetails({capability,files}: {capability:Capability;files:LocalFile[]}) {
+export default function ConversionDetails({capability,files,format}: {capability:Capability;files:LocalFile[];format?:string}) {
  const category = files.some(file=>file.ext==='epub') ? 'epub' : capability.category;
  const Review=reviews[category];
- return Review ? <Review/> : null;
+ return Review ? <>{format&&<dl className="conversion-facts"><div><dt>Route</dt><dd>{files[0]?.ext.toUpperCase()} → {format.toUpperCase()}</dd></div>{category==='subtitle'&&<div><dt>Timing</dt><dd>{format==='txt'?'Omitted in text export':'Preserved for valid SRT/VTT cues'}</dd></div>}{category==='epub'&&<div><dt>Navigation &amp; layout</dt><dd>May reflow · review the saved copy</dd></div>}</dl>}<Review/></> : null;
 }

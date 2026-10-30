@@ -61,5 +61,6 @@ export const tauriBridge: Bridge = {
     const stopError = subscription<string>('santra:native-drop-error', message => onError?.(message));
     return () => { stopDrop(); stopError(); };
   },
+  onNativeDragEnter: callback => subscription<LocalFile[]>('santra:native-drag-enter', callback),
   onNativeDragOver: callback => subscription<{ x: number; y: number }>('santra:native-drag-over', callback),
 };

@@ -1,6 +1,14 @@
 # Santra migration handoff
 
-Branch: `d2c`. Tauri 2 is the sole runtime. Do not add macOS support, touch the untracked user-owned `design/` directory, or install sudo packages on the user's behalf. The previous Electron implementation remains in Git history.
+Branch: `d2c`.
+
+Current image and remaining-frame follow-ups are **uncommitted at the user's request**. Frames 01–10 now share white rounded wheel geometry in `common/ReferenceWheel.tsx` and family icons/order in `wheel-profiles.ts`. Supported video/audio, archive and conversion reviews use `ReferenceEditor.tsx` at 800×560; PDF retains its validated dialog with matching layout. Proposal-only office conversion, archive inspection, EPUB certification, and other unimplemented tools remain disabled.
+
+MKV routing is fixed end to end: `file-kind.ts` shares extension/MIME hints; unknown native drags stay neutral. Rust reads bounded signatures on drag-enter without recursing directories, then sends the inspected family to the owning renderer. Per-window generation counters discard stale inspection results. Category checks prevent a recognized signature from exposing a mismatched extension's routes. Tests cover uppercase MKV, generic MIME, an image-to-video drag transition, and selecting a video operation before drop. Native drag events still require manual GNOME/Explorer validation.
+
+Latest validation: `npm run typecheck`, `npm run build`, 38 Chromium tests, 16 Rust tests, and 5 Windows protocol tests pass. The Linux `.deb` was rebuilt and is at `src-tauri/target/release/bundle/deb/Santra_0.1.0_amd64.deb`; use `apt install --reinstall` because the version remains 0.1.0. No Windows package or real native file-manager drag is newly certified. Browser screenshot coverage includes every family/mode and supported media editors. The 39 KB WebM fixture under `tests/fixtures/` is used only for playable browser preview tests.
+
+GNOME's legacy `santara-wheel@santara.local` command-template on this machine was previously corrected from `/usr/bin/santara` and old flags to `/usr/bin/santra` with `--santra-*` flags. The prior native X11 wheel smoke required a second show command on cold startup; do not claim cold-start drag validation. Do not commit either follow-up without a new user instruction.
 
 The frontend migration is recorded in local `type(scope): description` commits, with no pushes. See [UI structure](docs/UI_STRUCTURE.md) for the Penpot 01–10 mapping, `tools/`, `convert/`, `action/`, and `common/` ownership, and deferred capabilities. White surfaces and `#ff5a00` orange replace theme switching. New audio controls play the original locally and queue output recipes; document-family conversions have recoverable review dialogs. Do not interpret planned Penpot screens as implemented backend capabilities.
 

@@ -1,3 +1,4 @@
+import { hintedFiles as dragHints, wheelFamily } from '../common/file-kind';
 import { performFileAction } from '../action';
 import { enqueueLocalOperation } from '../convert/common/queue';
 import ConversionWindow from '../convert/ConversionWindow';
@@ -31,17 +32,9 @@ const families = [
 ];
 const actionItems = [ { id: 'copy', label: t.copy, icon: Copy }, { id: 'move', label: t.move, icon: FolderOpen }, { id: 'copy-path', label: t.copyPath, icon: Clipboard }, { id: 'terminal', label: t.terminal, icon: Terminal }, { id: 'preview', label: t.quickPreview, icon: ScanLine } ];
 const operationName = (cap: Capability) => cap.operation || cap.id.split(':').pop()!;
-const compatible = (cap: Capability, file: LocalFile) => cap.inputs.includes('*') || cap.inputs.includes(file.isDirectory ? 'directory' : file.ext.toLowerCase());
+const compatible = (cap: Capability, file: LocalFile) => cap.inputs.includes('*') || ((file.category === 'other' || cap.category === file.category) && cap.inputs.includes(file.isDirectory ? 'directory' : file.ext.toLowerCase()));
 const toolLabels: Record<string, string> = { 'edit-image': 'Edit photo', background: 'Add background', compress: 'Compress', crop: 'Crop', resize: 'Resize', rotate: 'Rotate', flip: 'Flip', metadata: 'Edit metadata', 'strip-metadata': 'Delete metadata', trim: 'Trim', visualize: 'Visualize', normalize: 'Normalize', channels: 'Channels', speed: 'Speed', mute: 'Mute', snapshot: 'Snapshot', gif: 'Create GIF', 'extract-audio': 'Extract audio', 'pdf-extract': 'Extract pages', 'pdf-merge': 'Merge PDFs', 'pdf-rotate': 'Rotate pages', render: 'Render pages', extract: 'Extract archive', 'create-archive': 'Create archive' };
 const toolIcons: Record<string, LucideIcon> = { 'edit-image': Paintbrush, background: Palette, compress: Package, crop: Crop, resize: Maximize, rotate: RotateCw, flip: FlipHorizontal, metadata: Info, 'strip-metadata': Info, trim: Scissors, visualize: AudioLines, normalize: SlidersHorizontal, channels: AudioLines, speed: Gauge, mute: VolumeX, snapshot: Camera, gif: FileVideo, 'extract-audio': Music2, 'pdf-extract': Files, 'pdf-merge': Merge, 'pdf-rotate': RotateCw, render: FileImage, extract: FileArchive, 'create-archive': Package, merge: Merge, split: Split };
-const dragMime: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/avif': 'avif', 'image/tiff': 'tiff', 'image/bmp': 'bmp', 'audio/mpeg': 'mp3', 'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/flac': 'flac', 'audio/ogg': 'ogg', 'video/mp4': 'mp4', 'video/webm': 'webm', 'video/quicktime': 'mov', 'application/pdf': 'pdf', 'application/zip': 'zip', 'text/vtt': 'vtt' };
-function dragHints(transfer: DataTransfer): LocalFile[] {
-  return Array.from(transfer.items).filter(item => item.kind === 'file').map((item, index) => {
-    const ext = dragMime[item.type] || '';
-    const category = item.type.startsWith('image/') ? 'image' : item.type.startsWith('audio/') ? 'audio' : item.type.startsWith('video/') ? 'video' : ext === 'pdf' ? 'pdf' : ext === 'zip' ? 'archive' : ext === 'vtt' ? 'subtitle' : 'other';
-    return { id: `drag-${index}`, name: 'Dragged file', path: '', size: 0, ext, category };
-  });
-}
 function formatSize(size: number) { return size < 1024 ? `${size} B` : size < 1048576 ? `${(size / 1024).toFixed(1)} KB` : `${(size / 1048576).toFixed(1)} MB`; }
 function Orange({ className = '', sliced = false }: { className?: string; sliced?: boolean }) { return <img className={`santra-logo ${sliced ? 'santra-logo--illustration' : ''} ${className}`} src="./santra.png" alt="" aria-hidden="true"/>; }
 function FileIcon({ file }: { file: LocalFile }) { const family = families.find(item => item.id === file.category); const Icon = file.isDirectory ? Folder : family?.icon || File; return <span className={`file-icon ${family?.color || 'sand'}`}><Icon size={23}/></span>; }
@@ -97,6 +90,7 @@ export default function App() {
     setSelected(incoming.map(file => file.id));
     setPicker(mode);
   }, message => setNotice(`Could not inspect dropped files: ${message}`)), []);
+  useEffect(() => api.onNativeDragEnter?.(incoming=>{setDragSource(incoming);highlightWheel('');}), []);
   useEffect(() => { document.documentElement.dataset.theme = 'light'; }, []);
   useEffect(() => { if (!notice) return; const timer = setTimeout(() => setNotice(''), 7000); return () => clearTimeout(timer); }, [notice]);
   useEffect(() => {
@@ -294,7 +288,7 @@ export default function App() {
     {picker && <Modal title={t.quickPick} onClose={() => setPicker(null)} wide>
       <div className="picker-file-summary"><Files size={19}/>{selectedFiles.length} {t.fileCount}<span>{selectedFiles.slice(0,2).map(file => file.name).join(', ')}{selectedFiles.length > 2 ? '…' : ''}</span></div>
       <div className="picker-tabs" role="tablist" aria-label="Operation groups">{(['convert','tools','actions'] as const).map(tab => <button key={tab} role="tab" aria-selected={picker === tab} className={picker === tab ? 'active' : ''} onClick={() => setPicker(tab)}>{tab === 'convert' ? <ArrowDownToLine size={17}/> : tab === 'tools' ? <WandSparkles size={17}/> : <Folder size={17}/>} {t[tab]}<kbd>{settings.shortcuts[tab]}</kbd></button>)}</div>
-      {!!wheelItems(picker).length && <div className="picker-visual"><RadialWheel label={picker === 'convert' ? 'Convert' : picker === 'tools' ? 'Tools' : 'File actions'} items={wheelItems(picker)} onChoose={id => chooseWheel(id, picker)}/></div>}
+      {!!wheelItems(picker).length && <div className="picker-visual"><RadialWheel family={wheelFamily(selectedFiles)} sourceName={selectedFiles[0]?.name} sourceFile={selectedFiles[0]} label={picker === 'convert' ? 'Convert' : picker === 'tools' ? 'Tools' : 'File actions'} items={wheelItems(picker)} onChoose={id => chooseWheel(id, picker)}/></div>}
       {selectedFiles.length > 1 && <p className="wheel-context-note">Each operation shows its compatible files. Other selected files are explicitly skipped.</p>}
       <div className="picker-list-heading">All available operations</div>
       <div className="picker-options" onKeyDown={event => {
@@ -316,7 +310,7 @@ export default function App() {
     {dragging && dragMode && <div className="drag-overlay wheel-overlay" aria-label="File drop target">
       {dragMode ? <div className="floating-wheel" style={{ left: wheelAnchor.x, top: wheelAnchor.y - 40 }}>
         <div className="wheel-mode-bar">{(['convert', 'tools', 'actions'] as const).map(mode => <button key={mode} className={mode === dragMode ? 'active' : ''} onDragEnter={() => activateWheel(mode)} onClick={() => activateWheel(mode)}><kbd>{settings.shortcuts[mode]}</kbd>{t[mode]}</button>)}</div>
-        <RadialWheel label={dragMode === 'convert' ? 'Convert' : dragMode === 'tools' ? 'Tools' : 'File actions'} subtitle={dragSource.some(file => !file.ext) ? 'Drop to inspect files and choose a supported operation' : 'Hover a slice, then drop'} dragging selected={wheelChoice} onHighlight={highlightWheel} onChoose={id => highlightWheel(id)} items={wheelItems(dragMode, dragSource).length ? wheelItems(dragMode, dragSource) : [{ id: 'choose', label: 'Choose after drop', detail: 'File types are protected until dropped' }]}/>
+        <RadialWheel family={wheelFamily(dragSource)} sourceName={dragSource[0]?.name} sourceFile={dragSource[0]} label={dragMode === 'convert' ? 'Convert' : dragMode === 'tools' ? 'Tools' : 'File actions'} subtitle={dragSource.some(file => !file.ext) ? 'Drop to inspect files and choose a supported operation' : 'Hover a slice, then drop'} dragging selected={wheelChoice} onHighlight={highlightWheel} onChoose={id => highlightWheel(id)} items={wheelItems(dragMode, dragSource)}/>
       </div> : <div className="drag-welcome"><Orange/><h2>Drop a little possibility.</h2><p>{t.dropHint}</p><div className="drag-shortcuts"><span><kbd>{settings.shortcuts.convert}</kbd>{t.convert}</span><span><kbd>{settings.shortcuts.tools}</kbd>{t.tools}</span><span><kbd>{settings.shortcuts.actions}</kbd>{t.actions}</span></div></div>}
       <div className="wheel-drag-hint">Release the key and keep dragging · Drop on a slice to choose · Esc to cancel</div>
     </div>}
